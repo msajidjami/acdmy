@@ -26,11 +26,11 @@ function getTokenFromRequest(request: NextRequest): string | null {
   
   // 2. مختلف ممکنہ cookie names سے
   const possibleCookieNames = [
-    'token',           // آپ کا اصل token
-    'auth_token',      // login API میں استعمال ہوا
-    'auth-token',      // ممکنہ variation
-    'session',         // دوسرا ممکنہ نام
-    'jwt',             // تیسرا ممکنہ نام
+    'token',           
+    'auth_token',      
+    'auth-token',      
+    'session',         
+    'jwt',             
     'next-auth.session-token',
     '__Secure-next-auth.session-token'
   ];
@@ -46,6 +46,7 @@ function getTokenFromRequest(request: NextRequest): string | null {
   return null;
 }
 
+// ✅ **API Route Handlers (موجودہ code وہی رہے)**
 export async function GET(request: NextRequest) {
   try {
     console.log('🔄 Session API called - GET method');
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ✅ **OPTIONS method for CORS (اگر ضرورت ہو)**
+// ✅ **OPTIONS method for CORS**
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 200,
@@ -345,4 +346,36 @@ export async function OPTIONS(request: NextRequest) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
+}
+
+// ✅ **🚀 MISSING EXPORT FUNCTION - یہ add کریں!**
+export async function getSession(request?: NextRequest) {
+  // اگر request نہیں دیا تو null return کریں
+  if (!request) {
+    console.warn('⚠️ getSession called without request object');
+    return { 
+      user: null, 
+      success: false,
+      error: 'Request object required'
+    };
+  }
+
+  try {
+    // GET handler کو reuse کریں (جو پہلے سے کام کر رہا ہے)
+    const response = await GET(request);
+    const data = await response.json();
+    
+    return {
+      user: data.success ? data.user : null,
+      success: data.success,
+      tokenInfo: data.tokenInfo || null
+    };
+  } catch (error) {
+    console.error('❌ getSession error:', error);
+    return { 
+      user: null, 
+      success: false,
+      error: 'Session check failed'
+    };
+  }
 }
