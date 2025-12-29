@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
+// ✅ **SessionData interface - TypeScript error fix**
+export interface SessionData {
+  userId: string;
+  email: string;
+  role: string;
+  isVerified: boolean;
+  name: string;
+}
+
 // ✅ **JWT_SECRET کی تصدیق کے لیے helper function**
 function validateJwtSecret(): string {
   const JWT_SECRET = process.env.JWT_SECRET;
@@ -46,12 +55,39 @@ function getTokenFromRequest(request: NextRequest): string | null {
   return null;
 }
 
-// ✅ **API Route Handlers (موجودہ code وہی رہے)**
+// ✅ **getSession function - TypeScript compatible**
+export async function getSession(request?: NextRequest): Promise<SessionData | null> {
+  if (!request) {
+    console.warn('⚠️ getSession called without request object');
+    return null;
+  }
+
+  try {
+    const response = await GET(request);
+    const data = await response.json();
+    
+    if (data.success && data.user) {
+      return {
+        userId: data.user.userId,
+        email: data.user.email,
+        role: data.user.role,
+        isVerified: data.user.isVerified,
+        name: data.user.name
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ getSession error:', error);
+    return null;
+  }
+}
+
+// ✅ **API Route Handlers**
 export async function GET(request: NextRequest) {
   try {
     console.log('🔄 Session API called - GET method');
     
-    // ✅ **JWT_SECRET کی تصدیق**
     let JWT_SECRET: string;
     try {
       JWT_SECRET = validateJwtSecret();
@@ -69,7 +105,6 @@ export async function GET(request: NextRequest) {
     
     console.log('🔐 JWT_SECRET configured:', `[Length: ${JWT_SECRET.length} chars]`);
     
-    // ✅ **Token حاصل کریں**
     const token = getTokenFromRequest(request);
     
     if (!token) {
@@ -92,9 +127,7 @@ export async function GET(request: NextRequest) {
       last10Chars: '...' + token.substring(token.length - 10)
     });
     
-    // ✅ **Token کی تصدیق (verification)**
     try {
-      // پہلے decode کر کے دیکھیں (بغیر verify کے)
       const decodedWithoutVerify = jwt.decode(token, { complete: true });
       
       if (!decodedWithoutVerify) {
@@ -109,7 +142,6 @@ export async function GET(request: NextRequest) {
       console.log('🔍 Token header:', decodedWithoutVerify.header);
       console.log('🔍 Token payload (without verify):', decodedWithoutVerify.payload);
       
-      // اب verify کریں
       console.log('🔐 Attempting to verify token...');
       const decoded = jwt.verify(token, JWT_SECRET) as {
         userId: string;
@@ -124,7 +156,6 @@ export async function GET(request: NextRequest) {
       
       console.log('✅ Token verified successfully!');
       
-      // ✅ **Token expiration چیک کریں**
       const currentTime = Math.floor(Date.now() / 1000);
       const expiresInSeconds = decoded.exp - currentTime;
       
@@ -141,7 +172,6 @@ export async function GET(request: NextRequest) {
         }, { status: 401 });
       }
       
-      // ✅ **User data تیار کریں**
       const userData = {
         userId: decoded.userId || decoded.id || decoded.sub,
         email: decoded.email,
@@ -156,7 +186,6 @@ export async function GET(request: NextRequest) {
         userId: userData.userId?.substring(0, 8) + '...'
       });
       
-      // ✅ **کامیاب response**
       return NextResponse.json({
         success: true,
         user: userData,
@@ -181,7 +210,6 @@ export async function GET(request: NextRequest) {
       console.error('❌ JWT Verification Failed:', verifyError.name);
       console.error('❌ Error message:', verifyError.message);
       
-      // ✅ **تفصیلی debug information (development mode میں)**
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Development Debug Information:');
         console.log('🔧 JWT_SECRET (first 5 chars):', JWT_SECRET.substring(0, 5) + '...');
@@ -212,12 +240,7 @@ export async function GET(request: NextRequest) {
                   name: verifyError.name,
                   message: verifyError.message,
                   stack: verifyError.stack
-                },
-                recommendation: [
-                  '1. Check that JWT_SECRET is the same in .env.local file',
-                  '2. Restart the development server after changing .env.local',
-                  '3. Clear browser cookies and login again'
-                ].join('\n')
+                }
               }
             });
           }
@@ -226,7 +249,6 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      // ✅ **صارف کے لیے مناسب error message**
       let errorMessage = 'Authentication failed';
       let statusCode = 401;
       
@@ -346,36 +368,4 @@ export async function OPTIONS(request: NextRequest) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
-}
-
-// ✅ **🚀 MISSING EXPORT FUNCTION - یہ add کریں!**
-export async function getSession(request?: NextRequest) {
-  // اگر request نہیں دیا تو null return کریں
-  if (!request) {
-    console.warn('⚠️ getSession called without request object');
-    return { 
-      user: null, 
-      success: false,
-      error: 'Request object required'
-    };
-  }
-
-  try {
-    // GET handler کو reuse کریں (جو پہلے سے کام کر رہا ہے)
-    const response = await GET(request);
-    const data = await response.json();
-    
-    return {
-      user: data.success ? data.user : null,
-      success: data.success,
-      tokenInfo: data.tokenInfo || null
-    };
-  } catch (error) {
-    console.error('❌ getSession error:', error);
-    return { 
-      user: null, 
-      success: false,
-      error: 'Session check failed'
-    };
-  }
 }
