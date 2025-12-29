@@ -1,16 +1,16 @@
-// app/api/submit-review/route.js
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';  // ✅ NextRequest add
 import connectDB from '@/app/lib/dbConnect';
 import Review from '@/app/models/Review';
 
-export async function POST(request) {
+export async function POST(request: NextRequest) {  // ✅ Type ٹھیک
   try {
     await connectDB();
     
     const formData = await request.formData();
-    const name = formData.get('name');
-    const text = formData.get('text');
-    const rating = parseInt(formData.get('rating'));
+    const name = formData.get('name') as string;
+    const text = formData.get('text') as string;
+    const ratingStr = formData.get('rating') as string;
+    const rating = parseInt(ratingStr || '0');
     
     // Validation
     if (!name || !text || !rating) {
@@ -29,10 +29,10 @@ export async function POST(request) {
     
     // Create review
     const review = await Review.create({
-      name,
-      text,
+      name: name.trim(),
+      text: text.trim(),
       rating,
-      status: 'approved' // You might want to moderate reviews first
+      status: 'approved'
     });
     
     return NextResponse.json({
@@ -41,7 +41,7 @@ export async function POST(request) {
       data: review
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Review submission error:', error);
     return NextResponse.json(
       { error: 'Failed to submit review' },
@@ -50,7 +50,7 @@ export async function POST(request) {
   }
 }
 
-export async function GET() {
+export async function GET() {  // ✅ GET ٹھیک ہے
   try {
     await connectDB();
     
@@ -60,7 +60,7 @@ export async function GET() {
     
     return NextResponse.json(reviews);
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Fetch reviews error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch reviews' },
