@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    console.log('📩 Received admission form data:', body); // ← یہ دیکھیں کہ کیا آ رہا ہے
+    console.log('📩 Received admission form data:', body);
 
     // لازمی فیلڈز کی فہرست
     const requiredFields = [
@@ -156,7 +156,8 @@ export async function POST(request: NextRequest) {
         to: body.email,
         name: body.name,
         course: body.selectedCourse,
-        applicationId: admission._id.toString()
+        applicationId: admission._id.toString(),
+        phone: phone // یہاں phone پراپرٹی شامل کی ہے
       });
       console.log('📧 کنفرمیشن ای میل بھیج دی گئی');
     } catch (emailError) {
