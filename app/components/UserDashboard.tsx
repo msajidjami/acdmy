@@ -14,11 +14,22 @@ interface UserDashboardProps {
 }
 
 export default function UserDashboard({ user = {} }: UserDashboardProps) {
-  const { logout } = useAuth();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // ✅ TypeScript safe - Manual logout function (useAuth سے ہٹا دیا)
+  const handleLogout = () => {
+    // Clear all possible auth cookies
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    
+    // Redirect to login
+    window.location.href = '/login';
+  };
+
   // Safe extraction with defaults
-  const userName = user?.name?.trim() || 'User';
+  const userName = (user?.name || 'User').trim();
   const userEmail = user?.email || '';
   const userRole = user?.role || 'user';
   const isVerified = user?.isVerified || false;
@@ -101,7 +112,7 @@ export default function UserDashboard({ user = {} }: UserDashboardProps) {
                 Cancel
               </button>
               <button
-                onClick={logout}
+                onClick={handleLogout}  // ✅ Manual function استعمال
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-xl font-medium hover:shadow-lg transition"
               >
                 Yes, Logout
