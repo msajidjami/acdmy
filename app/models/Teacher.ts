@@ -1,4 +1,6 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+// app/models/Teacher.ts
+
+import mongoose, { Schema, Document } from 'mongoose';
 
 export interface ITeacher extends Document {
   name: string;
@@ -9,47 +11,68 @@ export interface ITeacher extends Document {
   updatedAt: Date;
 }
 
-const TeacherSchema: Schema<ITeacher> = new Schema({
-  name: { type: String, required: true, trim: true },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    lowercase: true,
-    trim: true 
+const TeacherSchema: Schema<ITeacher> = new Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Teacher name is required'],
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
+    },
+    contactNumber: {
+      type: String,
+      required: [true, 'Contact number is required'],
+      trim: true,
+    },
+    referralCode: {
+      type: String,
+      required: [true, 'Referral code is required'],
+      unique: true,
+      uppercase: true,
+      trim: true,
+    },
   },
-  contactNumber: { type: String, required: true, trim: true },
-  referralCode: { 
-    type: String, 
-    unique: true, 
-    required: true 
-  },
-}, { 
-  timestamps: true 
-});
+  {
+    timestamps: true,
+  }
+);
 
-let TeacherModel: Model<ITeacher>;
-
+// Auto-generate referralCode - بغیر next parameter کے آسان حل
 TeacherSchema.pre('save', async function () {
-  if (!this.referralCode) {
-    if (!TeacherModel) {
-      TeacherModel = mongoose.model<ITeacher>('Teacher');
-    }
-
-    let uniqueCode = '';
+  const teacher = this as ITeacher;
+  
+  // صرف نئے teacher کے لیے یا اگر referralCode موجود نہیں ہے
+  if (teacher.isNew || !teacher.referralCode) {
+    let uniqueCode: string;
     let isUnique = false;
 
-    while (!isUnique) {
+    do {
+      // 8 characters کا random code بنائیں
       uniqueCode = 'TEACHER-' + Math.random().toString(36).substring(2, 10).toUpperCase();
       
-      const existing = await TeacherModel.findOne({ referralCode: uniqueCode });
-      if (!existing) {
-        isUnique = true;
-      }
-    }
+      // چیک کریں کہ یہ code پہلے سے موجود نہ ہو
+      const existing = await mongoose.model('Teacher').findOne({ referralCode: uniqueCode });
+      isUnique = !existing;
+    } while (!isUnique);
 
-    this.referralCode = uniqueCode;
+    teacher.referralCode = uniqueCode;
   }
 });
 
-export default (mongoose.models.Teacher as Model<ITeacher>) || mongoose.model<ITeacher>('Teacher', TeacherSchema);
+// Indexes for better performance
+TeacherSchema.index({ email: 1 });
+TeacherSchema.index({ referralCode: 1 });
+
+// Export model
+const TeacherModel =
+  (mongoose.models.Teacher as mongoose.Model<ITeacher>) ||
+  mongoose.model<ITeacher>('Teacher', TeacherSchema);
+
+export default TeacherModel;
