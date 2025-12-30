@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
+// یہ لائن شامل کریں - یہ build error کو ختم کر دے گی
+export const dynamic = 'force-dynamic';
+
 export default function AdmissionForm() {
   const searchParams = useSearchParams();
   const initialRef = searchParams.get('ref') || '';
@@ -34,9 +37,6 @@ export default function AdmissionForm() {
       referralCode: referralCode || undefined,
     };
 
-    // Debug (you can remove later)
-    console.log('Sending data to API:', data);
-
     try {
       const res = await fetch('/api/admission/public', {
         method: 'POST',
@@ -58,7 +58,6 @@ export default function AdmissionForm() {
     }
   };
 
-  // Success message
   if (success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-teal-50 to-green-50 flex items-center justify-center p-4">
@@ -103,7 +102,7 @@ export default function AdmissionForm() {
           )}
 
           <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-6">
-            {/* Name and Father's Name */}
+            {/* باقی فارم وہی رہے گا - کوئی تبدیلی نہیں */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Student Name *</label>
               <input
@@ -126,7 +125,6 @@ export default function AdmissionForm() {
               />
             </div>
 
-            {/* Gender and Country */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Gender *</label>
               <select
@@ -152,7 +150,6 @@ export default function AdmissionForm() {
               />
             </div>
 
-            {/* Email and WhatsApp */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
               <input
@@ -176,7 +173,6 @@ export default function AdmissionForm() {
               />
             </div>
 
-            {/* Date of Birth and Course */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth *</label>
               <input
@@ -203,7 +199,6 @@ export default function AdmissionForm() {
               </select>
             </div>
 
-            {/* Fee Amount and Currency */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Fee (in PKR) *</label>
               <input
@@ -230,7 +225,6 @@ export default function AdmissionForm() {
               </select>
             </div>
 
-            {/* Preferred Timing */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Class Timing *</label>
               <select
@@ -246,7 +240,6 @@ export default function AdmissionForm() {
               </select>
             </div>
 
-            {/* Referral Code (Manual Entry if not from link) */}
             {!initialRef && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Referral Code (Optional)</label>
@@ -260,7 +253,6 @@ export default function AdmissionForm() {
               </div>
             )}
 
-            {/* Submit Button */}
             <div className="md:col-span-2 text-center mt-8">
               <button
                 type="submit"
