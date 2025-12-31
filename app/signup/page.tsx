@@ -1,7 +1,6 @@
-// app/signup/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, Variants } from 'framer-motion';
 import Link from 'next/link';
@@ -35,7 +34,6 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // ایڈمن پاس ورڈ (بیک اینڈ سے میچ)
   const ADMIN_PASSWORD = "Adm!nP@ssw0rd313";
 
   const [formData, setFormData] = useState({
@@ -46,7 +44,6 @@ export default function SignupPage() {
     secretCode: '',
   });
 
-  // ایڈمن موڈ چیک
   const isAdminMode = formData.password === ADMIN_PASSWORD;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,30 +56,28 @@ export default function SignupPage() {
     setError('');
     setSuccess(false);
 
-    // بنیادی ویلیڈیشن
     if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
-      setError('تمام فیلڈز درکار ہیں');
+      setError('All fields are required');
       return;
     }
 
     if (!formData.email.endsWith('@gmail.com')) {
-      setError('صرف Gmail ای میل ایڈریس کی اجازت ہے');
+      setError('Only Gmail addresses are allowed');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('پاس ورڈز مماثل نہیں ہیں');
+      setError('Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('پاس ورڈ کم از کم 6 حروف کا ہونا چاہیے');
+      setError('Password must be at least 6 characters');
       return;
     }
 
-    // اگر ایڈمن موڈ ہے تو سیکرٹ کوڈ چیک کریں
     if (isAdminMode && !formData.secretCode.trim()) {
-      setError('ایڈمن اکاؤنٹ کے لیے سیکرٹ کوڈ درکار ہے');
+      setError('Secret code is required for admin account');
       return;
     }
 
@@ -108,10 +103,10 @@ export default function SignupPage() {
           router.push('/login');
         }, 3000);
       } else {
-        setError(data.message || 'سائن اپ ناکام ہوا');
+        setError(data.message || 'Signup failed');
       }
     } catch (err) {
-      setError('سرور سے رابطہ نہیں ہو سکا، دوبارہ کوشش کریں');
+      setError('Unable to connect to server. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -125,7 +120,6 @@ export default function SignupPage() {
       className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4"
     >
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-10">
           <motion.div
             className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-4"
@@ -133,11 +127,10 @@ export default function SignupPage() {
           >
             <UserIcon className="h-8 w-8 text-white" />
           </motion.div>
-          <h2 className="text-3xl font-bold text-gray-900">اکاؤنٹ بنائیں</h2>
-          <p className="mt-2 text-sm text-gray-600">Quran Academy میں خوش آمدید</p>
+          <h2 className="text-3xl font-bold text-gray-900">Create Account</h2>
+          <p className="mt-2 text-sm text-gray-600">Welcome to Quran Academy</p>
         </div>
 
-        {/* Error / Success Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
             {error}
@@ -147,15 +140,13 @@ export default function SignupPage() {
         {success && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm text-center">
             <CheckCircleIcon className="h-6 w-6 mx-auto mb-2" />
-            اکاؤنٹ کامیابی سے بن گیا! لاگ ان صفحہ پر جا رہے ہیں...
+            Account created successfully! Redirecting to login...
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200 space-y-6">
-          {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">مکمل نام</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
             <div className="relative">
               <UserIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
@@ -165,14 +156,13 @@ export default function SignupPage() {
                 onChange={handleChange}
                 required
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="اپنا مکمل نام درج کریں"
+                placeholder="Enter your full name"
               />
             </div>
           </div>
 
-          {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ای میل</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <div className="relative">
               <EnvelopeIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
@@ -185,12 +175,11 @@ export default function SignupPage() {
                 placeholder="example@gmail.com"
               />
             </div>
-            <p className="text-xs text-gray-500 mt-1">صرف Gmail ای میلز قبول کی جاتی ہیں</p>
+            <p className="text-xs text-gray-500 mt-1">Only Gmail addresses are allowed</p>
           </div>
 
-          {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">پاس ورڈ</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <div className="relative">
               <LockClosedIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
@@ -201,7 +190,7 @@ export default function SignupPage() {
                 required
                 minLength={6}
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="پاس ورڈ درج کریں"
+                placeholder="Enter password"
               />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3">
                 {showPassword ? <EyeSlashIcon className="h-5 w-5 text-gray-400" /> : <EyeIcon className="h-5 w-5 text-gray-400" />}
@@ -209,9 +198,8 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Confirm Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">پاس ورڈ کی تصدیق</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
             <div className="relative">
               <LockClosedIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
@@ -221,7 +209,7 @@ export default function SignupPage() {
                 onChange={handleChange}
                 required
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="پاس ورڈ دوبارہ درج کریں"
+                placeholder="Confirm password"
               />
               <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-3">
                 {showConfirmPassword ? <EyeSlashIcon className="h-5 w-5 text-gray-400" /> : <EyeIcon className="h-5 w-5 text-gray-400" />}
@@ -229,18 +217,16 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Admin Secret Code – صرف جب ایڈمن پاس ورڈ درج ہو */}
           {isAdminMode && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
               className="space-y-2"
             >
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 text-center font-medium">
-                ایڈمن موڈ فعال ہو گیا! اب سیکرٹ کوڈ درج کریں
+                Admin Mode Activated! Enter the secret code
               </div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ایڈمن سیکرٹ کوڈ</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Secret Code</label>
               <div className="relative">
                 <KeyIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
@@ -250,13 +236,12 @@ export default function SignupPage() {
                   onChange={handleChange}
                   required={isAdminMode}
                   className="w-full pl-10 pr-4 py-3 border-2 border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="سیکرٹ کوڈ درج کریں"
+                  placeholder="Enter secret code"
                 />
               </div>
             </motion.div>
           )}
 
-          {/* Submit Button */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -264,11 +249,11 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 transition"
           >
-            {loading ? 'اکاؤنٹ بنا رہے ہیں...' : isAdminMode ? 'ایڈمن اکاؤنٹ بنائیں' : 'اکاؤنٹ بنائیں'}
+            {loading ? 'Creating account...' : isAdminMode ? 'Create Admin Account' : 'Create Account'}
           </motion.button>
 
           <p className="text-center text-sm text-gray-600">
-            پہلے سے اکاؤنٹ ہے؟ <Link href="/login" className="text-indigo-600 font-medium hover:underline">لاگ ان کریں</Link>
+            Already have an account? <Link href="/login" className="text-indigo-600 font-medium hover:underline">Sign In</Link>
           </p>
         </form>
       </div>

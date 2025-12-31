@@ -1,4 +1,3 @@
-// app/login/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -37,15 +36,14 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    // بنیادی ویلیڈیشن
     if (!formData.email || !formData.password) {
-      setError('ای میل اور پاس ورڈ درکار ہیں');
+      setError('Email and password are required');
       setLoading(false);
       return;
     }
 
     if (!formData.email.endsWith('@gmail.com')) {
-      setError('صرف Gmail ای میل کی اجازت ہے');
+      setError('Only Gmail addresses are allowed');
       setLoading(false);
       return;
     }
@@ -63,13 +61,12 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // کامیابی پر ہوم پیج پر ری ڈائریکٹ
         router.push('/');
       } else {
-        setError(data.message || 'لاگ ان ناکام ہوا – ای میل یا پاس ورڈ غلط ہے');
+        setError(data.message || 'Login failed – Invalid email or password');
       }
     } catch (err) {
-      setError('سرور سے رابطہ نہیں ہو سکا، دوبارہ کوشش کریں');
+      setError('Unable to connect to server. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -83,7 +80,6 @@ export default function LoginPage() {
       className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex items-center justify-center p-4"
     >
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-10">
           <Link href="/" className="inline-block">
             <div className="flex items-center justify-center space-x-3 mb-6">
@@ -99,15 +95,10 @@ export default function LoginPage() {
               </h1>
             </div>
           </Link>
-          <h2 className="text-3xl font-bold text-slate-800 mb-3">
-            خوش آمدید
-          </h2>
-          <p className="text-slate-600">
-            اپنے اکاؤنٹ میں لاگ ان کریں
-          </p>
+          <h2 className="text-3xl font-bold text-slate-800 mb-3">Welcome Back</h2>
+          <p className="text-slate-600">Sign in to your account</p>
         </div>
 
-        {/* Error Message */}
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -118,13 +109,9 @@ export default function LoginPage() {
           </motion.div>
         )}
 
-        {/* Login Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
-          {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              ای میل ایڈریس
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
             <input
               type="email"
               name="email"
@@ -134,26 +121,22 @@ export default function LoginPage() {
               placeholder="example@gmail.com"
               required
             />
-            <p className="text-xs text-slate-500 mt-1">صرف Gmail ای میلز قبول کی جاتی ہیں</p>
+            <p className="text-xs text-slate-500 mt-1">Only Gmail addresses are allowed</p>
           </div>
 
-          {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              پاس ورڈ
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
             <input
               type="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
               className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition outline-none"
-              placeholder="اپنا پاس ورڈ درج کریں"
+              placeholder="Enter your password"
               required
             />
           </div>
 
-          {/* Submit Button */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -161,21 +144,19 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white py-4 rounded-xl font-bold hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {loading ? 'لاگ ان ہو رہا ہے...' : 'لاگ ان کریں'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </motion.button>
 
-          {/* Signup Link */}
           <div className="text-center">
             <p className="text-slate-600">
-              اکاؤنٹ نہیں ہے؟{' '}
+              Don't have an account?{' '}
               <Link href="/signup" className="text-teal-600 hover:text-teal-700 font-medium">
-                سائن اپ کریں
+                Sign Up
               </Link>
             </p>
           </div>
         </form>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-slate-500 text-sm">
           <p>© 2025 Quran Academy. All rights reserved.</p>
         </div>
