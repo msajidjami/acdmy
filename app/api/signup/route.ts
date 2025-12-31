@@ -1,20 +1,43 @@
 // app/api/signup/route.ts
+
 import dbConnect from "@/app/lib/dbConnect";
 import User from "@/app/models/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { NextResponse } from "next/server";
 
-// ایک ہی JWT_SECRET استعمال کریں
-const JWT_SECRET = process.env.JWT_SECRET || "3927092f8d9e384d86a238c415b982eb";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Adm!nP@ssw0rd313";
-// ... باقی سیکرٹ کوڈز
+// ماحولیاتی متغیرات (env variables)
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Adm!nP@ssw0rd313";
+const FULL_ADMIN_SECRET_CODE = process.env.FULL_ADMIN_SECRET_CODE || "";
+const EDUCATION_ADMIN_SECRET_CODE = process.env.EDUCATION_ADMIN_SECRET_CODE || "";
+const DARUL_IFTA_ADMIN_SECRET_CODE = process.env.DARUL_IFTA_ADMIN_SECRET_CODE || "";
+const SECTION_1_ADMIN_SECRET_CODE = process.env.SECTION_1_ADMIN_SECRET_CODE || "";
+const SECTION_2_ADMIN_SECRET_CODE = process.env.SECTION_2_ADMIN_SECRET_CODE || "";
+const JWT_SECRET = process.env.JWT_SECRET || "G3NQE3QHMqYQQ6KwNNlE1dk4MBSSqK3lqtRMyAZPF6JK9YpjSuwD42OpN+PMYZ5W";
+
+// درخواست کا ڈیٹا ٹائپ
+interface SignupRequest {
+  name: string;
+  email: string;
+  password: string;
+  secretCode?: string;
+}
+
+// ممکنہ رولز
+type UserRole =
+  | "user"
+  | "admin"
+  | "education-admin"
+  | "darul-ifta-admin"
+  | "section1-admin"
+  | "section2-admin";
 
 export async function POST(req: Request) {
   try {
     await dbConnect();
 
-    const body = await req.json();
+    const body: SignupRequest = await req.json();
+
     const { name, email, password, secretCode } = body;
 
     // بنیادی ویلیڈیشن
@@ -32,7 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // چیک کریں کہ ای میل پہلے سے موجود تو نہیں
+    // ای میل پہلے سے موجود ہے؟
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return NextResponse.json(
@@ -41,10 +64,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // ڈیفالٹ رول
-    let role = "user";
+    // رول کا تعین
+    let role: UserRole = "user";
 
-    // ایڈمن رول کی جانچ
     if (password === ADMIN_PASSWORD) {
       if (!secretCode) {
         return NextResponse.json(
@@ -53,8 +75,22 @@ export async function POST(req: Request) {
         );
       }
 
-      // سیکرٹ کوڈز چیک کریں
-      // ... آپ کا موجودہ کوڈ
+      if (secretCode === FULL_ADMIN_SECRET_CODE) {
+        role = "admin";
+      } else if (secretCode === EDUCATION_ADMIN_SECRET_CODE) {
+        role = "education-admin";
+      } else if (secretCode === DARUL_IFTA_ADMIN_SECRET_CODE) {
+        role = "darul-ifta-admin";
+      } else if (secretCode === SECTION_1_ADMIN_SECRET_CODE) {
+        role = "section1-admin";
+      } else if (secretCode === SECTION_2_ADMIN_SECRET_CODE) {
+        role = "section2-admin";
+      } else {
+        return NextResponse.json(
+          { message: "غلط سیکرٹ کوڈ" },
+          { status: 400 }
+        );
+      }
     }
 
     // پاس ورڈ ہیش کریں
@@ -62,31 +98,26 @@ export async function POST(req: Request) {
 
     // نیا یوزر بنائیں
     const newUser = new User({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
       role,
-      isVerified: false
     });
 
     await newUser.save();
 
-    // JWT ٹوکن بنائیں - وہی secret استعمال کریں
+    // JWT ٹوکن بنائیں
     const token = jwt.sign(
       {
-        userId: newUser._id.toString(),
+        userId: newUser._id,
         email: newUser.email,
         role: newUser.role,
-        name: newUser.name,
-        isVerified: newUser.isVerified || false
       },
-      JWT_SECRET, // وہی secret
-      { expiresIn: "7d" } // Login API جیسی ہی میعاد
+      JWT_SECRET,
+      { expiresIn: "1h" }
     );
 
-    console.log('✅ Signup - Token created for:', newUser.email);
-
-    // رسپانس بنائیں اور کوکی سیٹ کریں
+    // رسپانس بنائیں
     const response = NextResponse.json(
       {
         message: "سائن اپ کامیاب",
@@ -96,17 +127,17 @@ export async function POST(req: Request) {
       { status: 201 }
     );
 
-    // auth_token نام سے ہی کوڈ سیٹ کریں
-    response.cookies.set("auth_token", token, { // ✅ auth_token نام
+    // کوکی سیٹ کریں
+    response.cookies.set("authToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7, // 7 دن (Login API جیسا)
-      path: "/",
       sameSite: "strict",
+      maxAge: 3600, // 1 گھنٹہ
+      path: "/",
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Signup Error:", error);
     return NextResponse.json(
       { message: "کچھ غلط ہوا، دوبارہ کوشش کریں" },
