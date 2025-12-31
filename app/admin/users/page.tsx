@@ -1,4 +1,4 @@
-// app/admin/users/page.tsx - مکمل فنکشنل (ڈیلیٹ بٹن کے ساتھ)
+// app/admin/users/page.tsx - مکمل درست (Server Actions کے ساتھ)
 
 import dbConnect from '@/app/lib/dbConnect';
 import User from '@/app/models/User';
@@ -27,8 +27,11 @@ async function getCurrentUser() {
   }
 }
 
-async function deleteUser(userId: string) {
-  'use server'; // یہ سرور ایکشن ہے
+// Server Action: یوزر ڈیلیٹ کریں
+async function deleteUserAction(formData: FormData) {
+  'use server';
+
+  const userId = formData.get('userId') as string;
 
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== 'admin') {
@@ -40,6 +43,9 @@ async function deleteUser(userId: string) {
   }
 
   await User.findByIdAndDelete(userId);
+
+  // ری ڈائریکٹ یا ری فریش (اختیاری)
+  // revalidatePath('/admin/users'); // اگر cache ہے تو
 }
 
 export default async function AdminUsersPage() {
@@ -94,22 +100,17 @@ export default async function AdminUsersPage() {
                     })}
                   </td>
                   <td className="border border-gray-300 px-6 py-4 text-center">
-                    {currentUser.userId !== user._id.toString() && (
-                      <form action={deleteUser.bind(null, user._id.toString())}>
+                    {currentUser.userId !== user._id.toString() ? (
+                      <form action={deleteUserAction}>
+                        <input type="hidden" name="userId" value={user._id.toString()} />
                         <button
                           type="submit"
-                          onClick={(e) => {
-                            if (!confirm('کیا آپ واقعی اس یوزر کو ڈیلیٹ کرنا چاہتے ہیں؟ یہ عمل واپس نہیں ہو سکتا۔')) {
-                              e.preventDefault();
-                            }
-                          }}
                           className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-semibold transition-colors"
                         >
                           ڈیلیٹ کریں
                         </button>
                       </form>
-                    )}
-                    {currentUser.userId === user._id.toString() && (
+                    ) : (
                       <span className="text-gray-500 text-sm">خود کو ڈیلیٹ نہیں کر سکتے</span>
                     )}
                   </td>
@@ -119,6 +120,11 @@ export default async function AdminUsersPage() {
           </table>
         </div>
       )}
+
+      {/* ڈیلیٹ کے بعد پیج ریفریش کرنے کے لیے چھوٹا نوٹ */}
+      <p className="text-center text-gray-600 mt-8 text-sm">
+        ڈیلیٹ کرنے کے بعد پیج خود ریفریش نہیں ہوگا — دستی ریفریش کریں یا F5 دبائیں۔
+      </p>
     </div>
   );
 }
