@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build", 
+    "build": "next build",
     "start": "next start",
     "lint": "next lint"
-
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.5.0",
+    "cloudinary": "^2.8.0",
     "framer-motion": "^12.23.26",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.562.0",
