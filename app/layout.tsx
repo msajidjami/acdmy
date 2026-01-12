@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';  // ← یہ لائن شامل کریں
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from './context/AuthContext';
@@ -45,7 +45,6 @@ export const metadata: Metadata = {
       follow: true,
     },
   },
-  viewport: 'width=device-width, initial-scale=1',
   alternates: {
     canonical: 'https://www.quranandislamic.com',
   },
@@ -71,12 +70,20 @@ export const metadata: Metadata = {
     title: 'Quran & Islamic - Online Quran Learning Platform',
     description: 'Professional Quran and Islamic education online. Learn with authentic sources.',
     images: ['https://www.quranandislamic.com/og-image.png'],
-    creator: '@yourtwitterhandle', // اگر ٹوئٹر ہینڈل ہے تو تبدیل کریں
+    creator: '@yourtwitterhandle',
   },
   icons: {
     icon: '/icon.png',
     apple: '/apple-icon.png',
   },
+};
+
+// ← یہ نیا الگ viewport ایکسپورٹ کریں
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // اختیاری: زوم روکنے کے لیے
 };
 
 export default function RootLayout({
