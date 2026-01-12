@@ -1,5 +1,3 @@
-// app/api/users/route.ts
-
 import { NextResponse } from 'next/server';
 import dbConnect from '@/app/lib/dbConnect';
 import User from '@/app/models/User';
@@ -14,10 +12,9 @@ interface AuthTokenPayload {
   role: string;
 }
 
-async function authenticate(req: Request): Promise<AuthTokenPayload | null> {
-  // cookies() async ہے، await ضروری ہے
+async function authenticate() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('authToken')?.value;
+  const token = cookieStore.get('token')?.value; // ← یہاں بھی 'token' درست ہے
 
   if (!token) return null;
 
@@ -29,17 +26,17 @@ async function authenticate(req: Request): Promise<AuthTokenPayload | null> {
   }
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   await dbConnect();
 
-  const user = await authenticate(req);
+  const user = await authenticate();
   if (!user || user.role !== 'admin') {
     return NextResponse.json({ message: 'اجازت نہیں ہے' }, { status: 403 });
   }
 
   try {
     const users = await User.find({})
-      .select('email role name') // name بھی شامل کیا تاکہ ٹیبل میں دکھائی دے
+      .select('name email role createdAt')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -53,20 +50,19 @@ export async function GET(req: Request) {
 export async function DELETE(req: Request) {
   await dbConnect();
 
-  const user = await authenticate(req);
+  const user = await authenticate();
   if (!user || user.role !== 'admin') {
     return NextResponse.json({ message: 'اجازت نہیں ہے' }, { status: 403 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
+  const url = new URL(req.url);
+  const userId = url.searchParams.get('userId');
 
   if (!userId) {
     return NextResponse.json({ message: 'یوزر ID درکار ہے' }, { status: 400 });
   }
 
   try {
-    // خود کو ڈیلیٹ نہ کرنے دیں (سیکیورٹی)
     if (user.userId === userId) {
       return NextResponse.json({ message: 'آپ خود کو ڈیلیٹ نہیں کر سکتے' }, { status: 400 });
     }

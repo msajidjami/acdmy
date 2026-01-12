@@ -1,4 +1,3 @@
-// models/Article.ts
 import mongoose from 'mongoose';
 
 const ArticleSchema = new mongoose.Schema({
@@ -31,14 +30,7 @@ const ArticleSchema = new mongoose.Schema({
   thumbnail: {
     type: String,
     trim: true,
-    default: '', // خالی چھوڑیں اگر کوئی تصویر نہ ہو
-    // آپ validate بھی کر سکتے ہیں کہ یہ URL ہے
-    // validate: {
-    //   validator: function(v: string) {
-    //     return v === '' || /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(v);
-    //   },
-    //   message: 'براہ مہربانی ایک درست تصویر URL دیں'
-    // }
+    default: '',
   },
   views: {
     type: Number,
@@ -49,15 +41,18 @@ const ArticleSchema = new mongoose.Schema({
     default: [],
   },
   links: {
-    type: [String], // URLs کی array
+    type: [String],
     default: [],
   },
 }, {
-  timestamps: true, // createdAt اور updatedAt خود بخود شامل
+  timestamps: true,
 });
 
-// انڈیکسز بنائیں تاکہ سرچ تیز ہو
-ArticleSchema.index({ title: 'text', content: 'text', category: 'text', tags: 'text' });
+// انڈیکس صرف اگر واقعی سرچ کی ضرورت ہو تو رکھیں، ورنہ ہٹا دیں
+ArticleSchema.index(
+  { title: 'text', content: 'text', category: 'text', tags: 'text' },
+  { default_language: 'none' } // ← یہ اردو اور عربی کے لیے ضروری ہے
+);
 
 const Article = mongoose.models.Article || mongoose.model('Article', ArticleSchema);
 

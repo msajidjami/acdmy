@@ -1,5 +1,3 @@
-// app/admin/users/page.tsx - مکمل درست (Server Actions کے ساتھ)
-
 import dbConnect from '@/app/lib/dbConnect';
 import User from '@/app/models/User';
 import jwt from 'jsonwebtoken';
@@ -16,13 +14,14 @@ interface AuthTokenPayload {
 
 async function getCurrentUser() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('authToken')?.value;
+  const token = cookieStore.get('token')?.value; // ← یہاں 'token' درست ہے (authToken نہیں)
 
   if (!token) return null;
 
   try {
     return jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
-  } catch {
+  } catch (error) {
+    console.error('JWT Verify Error:', error);
     return null;
   }
 }
@@ -43,9 +42,6 @@ async function deleteUserAction(formData: FormData) {
   }
 
   await User.findByIdAndDelete(userId);
-
-  // ری ڈائریکٹ یا ری فریش (اختیاری)
-  // revalidatePath('/admin/users'); // اگر cache ہے تو
 }
 
 export default async function AdminUsersPage() {
@@ -74,9 +70,9 @@ export default async function AdminUsersPage() {
             <thead>
               <tr className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
                 <th className="border border-gray-300 px-6 py-4 text-right font-bold">نام</th>
-                <th className="border border-gray-300 px-6 py-4 text-right font-bold">جی میل</th>
+                <th className="border border-gray-300 px-6 py-4 text-right font-bold">ای میل</th>
                 <th className="border border-gray-300 px-6 py-4 text-right font-bold">حیثیت</th>
-                <th className="border border-gray-300 px-6 py-4 text-right font-bold">رجسٹریشن</th>
+                <th className="border border-gray-300 px-6 py-4 text-right font-bold">رجسٹریشن کی تاریخ</th>
                 <th className="border border-gray-300 px-6 py-4 text-right font-bold">عمل</th>
               </tr>
             </thead>
@@ -121,7 +117,6 @@ export default async function AdminUsersPage() {
         </div>
       )}
 
-      {/* ڈیلیٹ کے بعد پیج ریفریش کرنے کے لیے چھوٹا نوٹ */}
       <p className="text-center text-gray-600 mt-8 text-sm">
         ڈیلیٹ کرنے کے بعد پیج خود ریفریش نہیں ہوگا — دستی ریفریش کریں یا F5 دبائیں۔
       </p>
