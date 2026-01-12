@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from './context/AuthContext';
+import Navbar from './components/Navbar';
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 });
@@ -17,9 +18,10 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: {
     default: 'Quran & Islamic - Online Quran Learning Platform',
-    template: '%s | Quran & Islamic', // ہر پیج کے ٹائٹل کے آخر میں یہ شامل ہو جائے گا
+    template: '%s | Quran & Islamic',
   },
-  description: 'Professional online Quran learning and Islamic education platform. Read Quran with translation, listen to recitations, learn Tajweed, and explore authentic Islamic knowledge.',
+  description:
+    'Professional online Quran learning and Islamic education platform. Read Quran with translation, listen to recitations, learn Tajweed, and explore authentic Islamic knowledge.',
   keywords: [
     'online Quran learning',
     'Quran classes',
@@ -30,7 +32,7 @@ export const metadata: Metadata = {
     'Holy Quran',
     'Islamic studies',
     'Quran recitation',
-    'Muslim education platform'
+    'Muslim education platform',
   ],
   authors: [{ name: 'Quran & Islamic Team' }],
   creator: 'Quran & Islamic',
@@ -49,12 +51,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Quran & Islamic - Professional Online Quran Learning',
-    description: 'Learn Quran online with expert teachers. Authentic Islamic education, Tajweed, Tafsir, and more for all ages.',
+    description:
+      'Learn Quran online with expert teachers. Authentic Islamic education, Tajweed, Tafsir, and more for all ages.',
     url: 'https://www.quranandislamic.com',
     siteName: 'Quran & Islamic',
     images: [
       {
-        url: 'https://www.quranandislamic.com/og-image.png', // یہاں اپنا لوگو/OG image کا URL ڈالیں (1200x630 بہترین)
+        url: 'https://www.quranandislamic.com/og-image.png',
         width: 1200,
         height: 630,
         alt: 'Quran & Islamic - Online Quran Education Platform',
@@ -68,19 +71,12 @@ export const metadata: Metadata = {
     title: 'Quran & Islamic - Online Quran Learning Platform',
     description: 'Professional Quran and Islamic education online. Learn with authentic sources.',
     images: ['https://www.quranandislamic.com/og-image.png'],
-    creator: '@yourtwitterhandle', // اگر ٹوئٹر اکاؤنٹ ہے تو ڈالیں
+    creator: '@yourtwitterhandle', // اگر ٹوئٹر ہینڈل ہے تو تبدیل کریں
   },
   icons: {
-    icon: '/icon.png', // یا '/favicon.ico'
+    icon: '/icon.png',
     apple: '/apple-icon.png',
   },
-  // اگر عربی ورژن ہے تو یہ شامل کریں
-  // alternates: {
-  //   languages: {
-  //     'ar': 'https://www.quranandislamic.com/ar',
-  //     'en-US': 'https://www.quranandislamic.com',
-  //   },
-  // },
 };
 
 export default function RootLayout({
@@ -92,6 +88,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} ${poppins.variable} font-sans`}>
         <AuthProvider>
+          <Navbar />
           {children}
         </AuthProvider>
       </body>

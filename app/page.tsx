@@ -20,8 +20,10 @@ interface SessionUser {
 async function getReviews() {
   try {
     await connectDB();
-    const reviews = await Review.find({ status: 'approved' })
-      .sort({ date: -1 })
+    
+    // تمام ریویوز حاصل کریں (کوئی status فلٹر نہیں)
+    const reviews = await Review.find({})
+      .sort({ date: -1 })           // نیا سب سے پہلے
       .limit(6)
       .lean();
 
@@ -36,17 +38,15 @@ async function getReviews() {
   }
 }
 
-// ✅ ریئل ٹائم کاؤنٹرز — Admission سکیمہ سے براہ راست
+// ریئل ٹائم کاؤنٹرز — Admission سکیمہ سے براہ راست
 async function getCounter() {
   try {
     await connectDB();
 
-    // Enrolled Students: جو طلباء کلاسز لے رہے ہیں یا مکمل کر چکے ہیں
     const enrolledCount = await Admission.countDocuments({
       currentStatus: { $in: ['enrolled', 'in-progress', 'completed'] }
     });
 
-    // Classes Completed: صرف مکمل شدہ کورسز والے طلباء
     const completedCount = await Admission.countDocuments({
       currentStatus: ['completed', 'dropped']
     });
@@ -57,7 +57,6 @@ async function getCounter() {
     };
   } catch (error: any) {
     console.error('Error fetching live counters from Admission:', error);
-    // ایرر کی صورت میں ڈیفالٹ نمبرز
     return {
       enrolled: 500,
       completed: 1000,

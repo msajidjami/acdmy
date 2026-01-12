@@ -78,7 +78,7 @@ export default function ArticlePage({
     : 'english-font';
 
   return (
-    <article className={`container mx-auto p-6 md:p-12 max-w-4xl ${fontClass}`}>
+    <article className={`container mx-auto p-6 md:p-12 mt-27 max-w-4xl ${fontClass}`}>
       {/* خوبصورت چھوٹا ٹرانسلیٹ ڈراپ ڈاؤن */}
       <div className="mb-10 not-prose">
         <div className="max-w-xs mx-auto bg-white rounded-2xl shadow-lg overflow-hidden border border-green-200 hover:shadow-xl transition-shadow">
