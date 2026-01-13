@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function AdminArticles() {
+  const router = useRouter();
   const [articles, setArticles] = useState<any[]>([]);
   const [form, setForm] = useState({
     id: '',
@@ -11,21 +13,57 @@ export default function AdminArticles() {
     language: 'en',
     category: '',
     author: '',
-    thumbnail: '', // یہ اب URL ہوگا (اپ لوڈ کے بعد)
+    thumbnail: '',
     tags: '',
     links: '',
   });
-  const [thumbnailPreview, setThumbnailPreview] = useState<string>(''); // پیش نظارہ کے لیے
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null); // اپ لوڈ کے لیے فائل
+  const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ایڈمن چیک کرنے کا function
+  const checkAdminStatus = async () => {
+    try {
+      const res = await fetch('/api/auth/session');
+      if (!res.ok) {
+        router.push('/login');
+        return;
+      }
+      
+      const data = await res.json();
+      if (data.success && data.user) {
+        const adminRoles = ['admin', 'owner', 'super-admin', 'education-admin', 'darul-ifta-admin'];
+        if (adminRoles.includes(data.user.role)) {
+          setIsAdmin(true);
+        } else {
+          router.push('/');
+        }
+      } else {
+        router.push('/login');
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      router.push('/login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchArticles();
+    checkAdminStatus();
   }, []);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchArticles();
+    }
+  }, [isAdmin]);
 
   const fetchArticles = async () => {
     try {
@@ -34,14 +72,11 @@ export default function AdminArticles() {
       
       const response = await res.json();
       
-      // API response کو process کریں - مختلف فارمیٹس کے لیے
       let dataArray: any[] = [];
       
       if (Array.isArray(response)) {
-        // Direct array response
         dataArray = response;
       } else if (response && typeof response === 'object') {
-        // Object with data property
         if (response.success && Array.isArray(response.data)) {
           dataArray = response.data;
         } else if (Array.isArray(response.data)) {
@@ -75,14 +110,19 @@ export default function AdminArticles() {
 
     const formData = new FormData();
 
-    // ٹیکسٹ فیلڈز
-    formData.append('title', form.title);
-    formData.append('content', form.content);
+    // ٹیکسٹ فیلڈز - تمام زبانوں کے لیے encode کریں
+    formData.append('title', encodeURIComponent(form.title));
+    formData.append('content', encodeURIComponent(form.content));
     formData.append('language', form.language);
-    formData.append('category', form.category);
-    formData.append('author', form.author);
-    formData.append('tags', JSON.stringify(form.tags.split(',').map(t => t.trim()).filter(Boolean)));
-    formData.append('links', JSON.stringify(form.links.split(',').map(l => l.trim()).filter(Boolean)));
+    formData.append('category', encodeURIComponent(form.category));
+    formData.append('author', encodeURIComponent(form.author));
+    
+    // Tags اور Links کو array میں convert کریں
+    const tagsArray = form.tags.split(',').map(t => encodeURIComponent(t.trim())).filter(Boolean);
+    const linksArray = form.links.split(',').map(l => encodeURIComponent(l.trim())).filter(Boolean);
+    
+    formData.append('tags', JSON.stringify(tagsArray));
+    formData.append('links', JSON.stringify(linksArray));
 
     // ایڈٹ موڈ میں ID
     if (isEditing && form.id) {
@@ -93,7 +133,6 @@ export default function AdminArticles() {
     if (thumbnailFile) {
       formData.append('thumbnail', thumbnailFile);
     } else if (form.thumbnail && !thumbnailFile) {
-      // اگر کوئی نئی فائل نہیں ہے لیکن existing thumbnail ہے تو اسے بھیجیں
       formData.append('existingThumbnail', form.thumbnail);
     }
 
@@ -101,7 +140,7 @@ export default function AdminArticles() {
       const method = isEditing ? 'PUT' : 'POST';
       const res = await fetch('/api/articles', {
         method,
-        body: formData, // FormData استعمال کریں (multipart)
+        body: formData,
       });
 
       const data = await res.json();
@@ -123,17 +162,17 @@ export default function AdminArticles() {
   const handleEdit = (article: any) => {
     setForm({
       id: article._id || article.id,
-      title: article.title || '',
-      content: article.content || '',
+      title: decodeURIComponent(article.title || ''),
+      content: decodeURIComponent(article.content || ''),
       language: article.language || 'en',
-      category: article.category || '',
-      author: article.author || '',
-      thumbnail: article.thumbnail || '', // موجودہ URL
-      tags: article.tags?.join(', ') || '',
-      links: article.links?.join(', ') || '',
+      category: decodeURIComponent(article.category || ''),
+      author: decodeURIComponent(article.author || ''),
+      thumbnail: article.thumbnail || '',
+      tags: Array.isArray(article.tags) ? article.tags.map((tag: string) => decodeURIComponent(tag)).join(', ') : '',
+      links: Array.isArray(article.links) ? article.links.map((link: string) => decodeURIComponent(link)).join(', ') : '',
     });
-    setThumbnailPreview(article.thumbnail || ''); // موجودہ تھمبنل کا پیش نظارہ
-    setThumbnailFile(null); // نئی فائل ابھی نہیں
+    setThumbnailPreview(article.thumbnail || '');
+    setThumbnailFile(null);
     setIsEditing(true);
   };
 
@@ -170,14 +209,65 @@ export default function AdminArticles() {
     setThumbnailFile(null);
     setIsEditing(false);
     setMessage('');
-    if (fileInputRef.current) fileInputRef.current.value = ''; // فائل ان پٹ صاف
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+          <p className="text-xl text-gray-600">لوڈ ہو رہا ہے...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // اگر ایڈمن نہیں ہے تو access denied
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-red-600 text-5xl mb-4">🚫</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h2>
+          <p className="text-gray-600">آپ کو اس صفحے تک رسائی کی اجازت نہیں ہے۔</p>
+          <button
+            onClick={() => router.push('/')}
+            className="mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
+          >
+            ہوم پیج پر جائیں
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto pt-20 px-4 py-12">
-      <h1 className="text-4xl font-extrabold text-green-800 mb-10 text-center">
-        ایڈمن پینل - آرٹیکلز کا انتظام
-      </h1>
+      {/* Admin Header */}
+      <div className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-2xl p-6 mb-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">ایڈمن پینل - آرٹیکلز کا انتظام</h1>
+            <p className="text-teal-100 mt-2">تمام زبانوں (انگریزی، اردو، عربی) میں آرٹیکلز شامل، اپ ڈیٹ اور ڈیلیٹ کریں</p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={() => router.push('/admin/dashboard')}
+              className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition"
+            >
+              ڈیش بورڈ
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="bg-white text-teal-600 hover:bg-gray-100 px-4 py-2 rounded-lg transition"
+            >
+              ہوم پیج
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Success/Error Message */}
       {message && (
@@ -199,7 +289,7 @@ export default function AdminArticles() {
             <label className="block text-sm font-medium text-gray-700 mb-2">ٹائٹل *</label>
             <input
               type="text"
-              placeholder="آرٹیکل کا ٹائٹل"
+              placeholder="آرٹیکل کا ٹائٹل (کسی بھی زبان میں)"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               required
@@ -211,7 +301,7 @@ export default function AdminArticles() {
             <label className="block text-sm font-medium text-gray-700 mb-2">کیٹگری</label>
             <input
               type="text"
-              placeholder="مثال: قرآن، حدیث، رمضان"
+              placeholder="مثال: قرآن، حدیث، رمضان، فقہ"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
               className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
@@ -227,6 +317,19 @@ export default function AdminArticles() {
               onChange={(e) => setForm({ ...form, author: e.target.value })}
               className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">زبان</label>
+            <select
+              value={form.language}
+              onChange={(e) => setForm({ ...form, language: e.target.value })}
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+            >
+              <option value="en">English (انگریزی)</option>
+              <option value="ur">Urdu (اردو)</option>
+              <option value="ar">Arabic (عربی)</option>
+            </select>
           </div>
 
           <div>
@@ -246,48 +349,38 @@ export default function AdminArticles() {
                   src={thumbnailPreview || form.thumbnail}
                   alt="Thumbnail Preview"
                   className="w-40 h-32 object-cover rounded-lg border border-gray-300 shadow-sm"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = '/images/default-article.jpg';
+                  }}
                 />
               </div>
             )}
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">مواد (HTML سپورٹڈ) *</label>
-          <textarea
-            placeholder="آرٹیکل کا مکمل مواد یہاں لکھیں..."
-            value={form.content}
-            onChange={(e) => setForm({ ...form, content: e.target.value })}
-            required
-            rows={10}
-            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-y"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">زبان</label>
-            <select
-              value={form.language}
-              onChange={(e) => setForm({ ...form, language: e.target.value })}
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-            >
-              <option value="en">English</option>
-              <option value="ur">Urdu</option>
-              <option value="ar">Arabic</option>
-            </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">ٹیگز (کوما سے الگ)</label>
             <input
               type="text"
-              placeholder="مثال: رمضان, قرآن, تجوید"
+              placeholder="مثال: رمضان, قرآن, تجوید, اسلام"
               value={form.tags}
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
               className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
             />
+            <p className="text-xs text-gray-500 mt-1">ہر ٹیگ کو کامے سے الگ کریں</p>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">مواد (HTML سپورٹڈ) *</label>
+          <textarea
+            placeholder="آرٹیکل کا مکمل مواد یہاں لکھیں... (کسی بھی زبان میں)"
+            value={form.content}
+            onChange={(e) => setForm({ ...form, content: e.target.value })}
+            required
+            rows={12}
+            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-y font-mono"
+          />
         </div>
 
         <div className="mt-6">
@@ -335,8 +428,21 @@ export default function AdminArticles() {
       </form>
 
       {/* آرٹیکلز کی لسٹ */}
-      <div>
-        <h2 className="text-2xl font-bold text-green-800 mb-6">موجودہ آرٹیکلز ({articles.length})</h2>
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-green-800">موجودہ آرٹیکلز ({articles.length})</h2>
+          <div className="flex gap-4">
+            <button
+              onClick={fetchArticles}
+              className="bg-teal-100 text-teal-700 hover:bg-teal-200 px-4 py-2 rounded-lg transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              ریفریش
+            </button>
+          </div>
+        </div>
         
         {articles.length === 0 ? (
           <div className="text-center py-10 bg-gray-50 rounded-xl">
@@ -345,66 +451,96 @@ export default function AdminArticles() {
             <p className="text-gray-400 mt-2">پہلا آرٹیکل شامل کرنے کے لیے اوپر فارم استعمال کریں۔</p>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {articles.map((article) => (
-              <div
-                key={article._id || article.id}
-                className="bg-white shadow-lg rounded-xl p-6 flex flex-col justify-between hover:shadow-xl transition-shadow border border-green-100"
-              >
-                <div>
-                  <h3 className="text-xl font-bold text-green-700 mb-2 line-clamp-2">{article.title}</h3>
-                  {article.thumbnail && (
-                    <img
-                      src={article.thumbnail}
-                      alt={article.title}
-                      className="w-full h-48 object-cover rounded-lg mb-3"
-                    />
-                  )}
-                  <div className="space-y-2 mb-4">
-                    <p className="text-gray-600">
-                      <span className="font-medium">کیٹگری:</span> {article.category || 'General'}
-                    </p>
-                    <p className="text-gray-600">
-                      <span className="font-medium">مصنف:</span> {article.author || 'Admin'}
-                    </p>
-                    <p className="text-gray-600">
-                      <span className="font-medium">زبان:</span> {article.language === 'ur' ? 'اردو' : article.language === 'ar' ? 'عربی' : 'انگریزی'}
-                    </p>
-                    <p className="text-gray-500 text-sm">
-                      <span className="font-medium">تاریخ:</span> {new Date(article.createdAt).toLocaleDateString('ur-PK')}
-                    </p>
-                    {article.views && (
-                      <p className="text-gray-500 text-sm">
-                        <span className="font-medium">ویوز:</span> {article.views}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
-                  <button
-                    onClick={() => handleEdit(article)}
-                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                    ایڈٹ
-                  </button>
-                  <button
-                    onClick={() => handleDelete(article._id || article.id)}
-                    className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    ڈیلیٹ
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ٹائٹل
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    کیٹگری
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    زبان
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    تاریخ
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    عمل
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {articles.map((article) => (
+                  <tr key={article._id || article.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        {article.thumbnail && (
+                          <img
+                            className="h-10 w-10 rounded-full object-cover mr-3"
+                            src={article.thumbnail}
+                            alt={article.title}
+                          />
+                        )}
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {decodeURIComponent(article.title || '')}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {decodeURIComponent(article.author || '')}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                        {decodeURIComponent(article.category || 'General')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {article.language === 'ur' ? 'اردو' : article.language === 'ar' ? 'عربی' : 'انگریزی'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(article.createdAt).toLocaleDateString('ur-PK')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(article)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          ایڈٹ
+                        </button>
+                        <button
+                          onClick={() => handleDelete(article._id || article.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          ڈیلیٹ
+                        </button>
+                        <a
+                          href={`/articles/${article._id || article.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          دیکھیں
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
+      </div>
+
+      {/* Footer Note */}
+      <div className="mt-8 text-center text-sm text-gray-500">
+        <p>یہ صفحہ صرف تصدیق شدہ ایڈمنسٹریٹرز کے لیے ہے۔</p>
+        <p className="mt-1">تمام آرٹیکلز کسی بھی زبان (انگریزی، اردو، عربی) میں محفوظ ہو سکتے ہیں۔</p>
       </div>
     </div>
   );
