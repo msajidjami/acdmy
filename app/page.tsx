@@ -38,6 +38,115 @@ async function getReviews() {
   }
 }
 
+// آرٹیکلز fetch کریں
+async function getArticles() {
+  try {
+    await connectDB();
+    
+    // اگر آپ کے پاس Article model ہے تو استعمال کریں
+    try {
+      // dynamic import سے Article model کو چیک کریں
+      const Article = require('@/app/models/Article').default;
+      
+      const articles = await Article.find({})
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .lean();
+
+      return articles.map((article: any) => ({
+        ...article,
+        _id: article._id.toString(),
+        createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
+      }));
+    } catch (modelError) {
+      console.log('Article model not available, using static data');
+      // اگر Article model موجود نہیں ہے تو static data واپس کریں
+      return getStaticArticles();
+    }
+  } catch (error) {
+    console.error('Error fetching articles:', error);
+    return getStaticArticles();
+  }
+}
+
+// Static articles data
+function getStaticArticles() {
+  return [
+    {
+      _id: '1',
+      title: 'نماز کی اہمیت اور اس کے فضائل',
+      excerpt: 'نماز اسلام کا دوسرا رکن ہے اور اس کی اہمیت قرآن و حدیث میں بہت واضح ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1567958451986-2c8f4eb6b2b3?w=800&auto=format&fit=crop',
+      category: 'نماز',
+      author: 'مولانا عبدالرحمٰن',
+      views: 1500,
+      createdAt: '2024-01-15T10:30:00Z',
+      tags: ['نماز', 'فرض', 'اسلام'],
+      content: 'نماز اسلام کا دوسرا رکن ہے...'
+    },
+    {
+      _id: '2',
+      title: 'روزے کے طبی فوائد',
+      excerpt: 'روزہ رکھنے سے جسم کی صفائی ہوتی ہے اور دماغی صحت بہتر ہوتی ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1511910849309-0dffb8785146?w=800&auto=format&fit=crop',
+      category: 'روزہ',
+      author: 'ڈاکٹر عائشہ',
+      views: 1200,
+      createdAt: '2024-01-12T14:20:00Z',
+      tags: ['روزہ', 'صحت', 'فوائد'],
+      content: 'روزہ رکھنے سے جسم کی صفائی ہوتی ہے...'
+    },
+    {
+      _id: '3',
+      title: 'زکوٰۃ کا صحیح طریقہ کار',
+      excerpt: 'زکوٰۃ اسلام کا تیسرا رکن ہے اور اس کے ادا کرنے کا ایک خاص طریقہ ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=800&auto=format&fit=crop',
+      category: 'زکوٰۃ',
+      author: 'حافظ محمد',
+      views: 1800,
+      createdAt: '2024-01-10T09:15:00Z',
+      tags: ['زکوٰۃ', 'مال', 'صدقہ'],
+      content: 'زکوٰۃ اسلام کا تیسرا رکن ہے...'
+    },
+    {
+      _id: '4',
+      title: 'حج کی فضیلت اور طریقہ کار',
+      excerpt: 'حج اسلام کا پانچواں رکن ہے اور ہر صاحب استطاعت مسلمان پر فرض ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1548013146-72479768bada?w=800&auto=format&fit=crop',
+      category: 'حج',
+      author: 'شیخ احمد',
+      views: 2000,
+      createdAt: '2024-01-08T11:45:00Z',
+      tags: ['حج', 'مکہ', 'مناسک'],
+      content: 'حج اسلام کا پانچواں رکن ہے...'
+    },
+    {
+      _id: '5',
+      title: 'قرآن پاک کی تعلیمات',
+      excerpt: 'قرآن پاک اللہ کی آخری کتاب ہے جو انسانیت کے لیے رہنمائی کا ذریعہ ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1591608971362-f08b2a75731a?w=800&auto=format&fit=crop',
+      category: 'قرآن',
+      author: 'مفتی نعیم',
+      views: 2500,
+      createdAt: '2024-01-05T08:30:00Z',
+      tags: ['قرآن', 'وحی', 'رہنمائی'],
+      content: 'قرآن پاک اللہ کی آخری کتاب ہے...'
+    },
+    {
+      _id: '6',
+      title: 'حدیث نبوی کی اہمیت',
+      excerpt: 'حدیث نبویﷺ قرآن پاک کی تشریح اور عملی نمونہ پیش کرتی ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1589998059171-988d887df646?w=800&auto=format&fit=crop',
+      category: 'حدیث',
+      author: 'ڈاکٹر عمر',
+      views: 1700,
+      createdAt: '2024-01-03T13:20:00Z',
+      tags: ['حدیث', 'سنت', 'نبی'],
+      content: 'حدیث نبویﷺ قرآن پاک کی تشریح...'
+    }
+  ];
+}
+
 // ریئل ٹائم کاؤنٹرز — Admission سکیمہ سے براہ راست
 async function getCounter() {
   try {
@@ -54,12 +163,14 @@ async function getCounter() {
     return {
       enrolled: enrolledCount || 0,
       completed: completedCount || 0,
+      teachers: 25 // آپ اسے بھی database سے fetch کر سکتے ہیں
     };
   } catch (error: any) {
     console.error('Error fetching live counters from Admission:', error);
     return {
       enrolled: 500,
       completed: 1000,
+      teachers: 25
     };
   }
 }
@@ -120,9 +231,10 @@ async function getSession(): Promise<SessionUser | null> {
 }
 
 export default async function Home() {
-  const [reviews, counter, session] = await Promise.all([
+  const [reviews, counter, articles, session] = await Promise.all([
     getReviews(),
     getCounter(),
+    getArticles(), // آرٹیکلز شامل کریں
     getSession(),
   ]);
 
@@ -165,6 +277,8 @@ export default async function Home() {
               <div className="font-bold">Live Counters (from DB):</div>
               <div>Enrolled Students: {counter.enrolled}+</div>
               <div>Classes Completed: {counter.completed}+</div>
+              <div>Teachers: {counter.teachers}+</div>
+              <div>Articles: {articles?.length || 0}</div>
             </div>
           </div>
         </div>
@@ -229,7 +343,11 @@ export default async function Home() {
           </div>
         }
       >
-        <HomeContent reviews={reviews} counter={counter} />
+        <HomeContent 
+          reviews={reviews} 
+          counter={counter} 
+          articles={articles} // آرٹیکلز شامل کریں
+        />
       </Suspense>
     </div>
   );

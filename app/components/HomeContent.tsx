@@ -348,35 +348,44 @@ export default function HomeContent({ reviews, counter, articles = [] }: HomeCon
     return () => clearInterval(interval);
   }, [counter]);
   
-  // Fetch articles on client side
-  useEffect(() => {
-    const fetchArticles = async () => {
-      try {
-        setIsLoadingArticles(true);
-        const baseUrl = window.location.origin;
-        const res = await fetch(`${baseUrl}/api/articles`, {
-          cache: 'no-store',
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          setHomeArticles(Array.isArray(data) ? data : []);
-        } else {
-          console.error('Failed to fetch articles');
-          setHomeArticles([]);
-        }
-      } catch (error) {
-        console.error('Error fetching articles:', error);
-        setHomeArticles([]);
-      } finally {
+  // Fetch articles on client side if not provided
+ // Fetch articles on client side - صرف ایک بار
+// Fetch articles on client side if not provided
+// Fetch articles on client side if not provided
+// Fetch articles on client side if not provided
+useEffect(() => {
+  const fetchArticles = async () => {
+    try {
+      setIsLoadingArticles(true);
+      // اگر articles prop میں ہیں اور خالی نہیں ہیں تو fetch نہ کریں
+      if (articles && Array.isArray(articles) && articles.length > 0) {
+        setHomeArticles(articles);
         setIsLoadingArticles(false);
+        return;
       }
-    };
-    
-    fetchArticles();
-  }, []);
-
-  // Reviews setup - درست کیا گیا
+      
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/articles`, {
+        cache: 'no-store',
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setHomeArticles(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to fetch articles');
+        setHomeArticles([]);
+      }
+    } catch (error) {
+      console.error('Error fetching articles:', error);
+      setHomeArticles([]);
+    } finally {
+      setIsLoadingArticles(false);
+    }
+  };
+  
+  fetchArticles();
+}, [JSON.stringify(articles)]); // JSON.stringify سے stable بنائیں
   useEffect(() => {
     // Always show visible reviews to everyone
     const visibleReviews = reviews.filter(review => !review.isHidden);
@@ -565,6 +574,9 @@ export default function HomeContent({ reviews, counter, articles = [] }: HomeCon
       setAdmissionMessage('Network error. Please check your connection.');
     }
   };
+
+  // Decide which articles to display
+  const displayArticles = articles && articles.length > 0 ? articles : homeArticles;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-sans">
@@ -851,7 +863,7 @@ export default function HomeContent({ reviews, counter, articles = [] }: HomeCon
               </div>
               <p className="text-lg text-slate-600 mt-4">آرٹیکلز لوڈ ہو رہے ہیں...</p>
             </div>
-          ) : !homeArticles || homeArticles.length === 0 ? (
+          ) : !displayArticles || displayArticles.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
                 <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
@@ -866,7 +878,7 @@ export default function HomeContent({ reviews, counter, articles = [] }: HomeCon
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                {homeArticles.slice(0, 6).map((article, index) => (
+                {(displayArticles || []).slice(0, 6).map((article: any, index: number) => (
                   <motion.article
                     key={article._id || `article-${index}`}
                     initial={{ opacity: 0, y: 30 }}

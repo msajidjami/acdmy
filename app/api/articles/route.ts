@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { v2 as cloudinary } from 'cloudinary';
-import type { UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
 
 // Cloudinary config
 cloudinary.config({
@@ -28,7 +27,7 @@ async function uploadToCloudinary(file: File): Promise<string> {
           { fetch_format: 'auto' }
         ]
       },
-      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+      (error, result) => {
         if (error) {
           console.error('Cloudinary upload error:', error);
           reject(new Error(`Cloudinary upload failed: ${error.message}`));
@@ -78,12 +77,10 @@ export async function GET(request: NextRequest) {
     }
     
     // Build sort options
-    let sortOptions: any = { createdAt: -1 }; // Default: newest first
+    let sortOptions: any = { createdAt: -1 };
     
-    if (sort === 'popular') {
-      sortOptions = { uniqueViews: -1, views: -1, createdAt: -1 };
-    } else if (sort === 'views') {
-      sortOptions = { views: -1 };
+    if (sort === 'popular' || sort === 'views') {
+      sortOptions = { views: -1, createdAt: -1 };
     } else if (sort === 'latest') {
       sortOptions = { createdAt: -1 };
     }
@@ -111,8 +108,8 @@ export async function GET(request: NextRequest) {
       category: article.category || 'عام',
       language: article.language || 'ur',
       author: article.author || 'ایڈمن',
-      excerpt: article.excerpt,
-      content: article.content,
+      excerpt: article.excerpt || '',
+      content: article.content || '',
       createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: article.updatedAt?.toISOString() || new Date().toISOString(),
       views: article.views || 0,
@@ -148,18 +145,15 @@ export async function GET(request: NextRequest) {
 }
 
 // POST: Create new article
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     await connectDB();
-    console.log('POST request received for creating article');
 
-    const formData = await req.formData();
+    const formData = await request.formData();
 
     // Extract required fields
     const title = formData.get('title') as string;
     const content = formData.get('content') as string;
-
-    console.log('Received title:', title);
 
     // Validate required fields
     if (!title || !title.trim()) {
@@ -196,7 +190,6 @@ export async function POST(req: NextRequest) {
         const parsedTags = JSON.parse(tagsInput);
         tags = Array.isArray(parsedTags) ? parsedTags : [];
       } catch (e) {
-        console.error('Tags parse error:', e);
         tags = tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag);
       }
     }
@@ -208,7 +201,6 @@ export async function POST(req: NextRequest) {
         const parsedLinks = JSON.parse(linksInput);
         links = Array.isArray(parsedLinks) ? parsedLinks : [];
       } catch (e) {
-        console.error('Links parse error:', e);
         links = linksInput.split(',').map(link => link.trim()).filter(link => link);
       }
     }
@@ -218,8 +210,6 @@ export async function POST(req: NextRequest) {
     const thumbnailFile = formData.get('thumbnail') as File | null;
 
     if (thumbnailFile && thumbnailFile.size > 0) {
-      console.log('Uploading thumbnail to Cloudinary... File size:', thumbnailFile.size);
-      
       // Validate file type
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(thumbnailFile.type)) {
@@ -233,7 +223,7 @@ export async function POST(req: NextRequest) {
       }
       
       // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      const maxSize = 5 * 1024 * 1024;
       if (thumbnailFile.size > maxSize) {
         return NextResponse.json(
           { 
@@ -246,7 +236,6 @@ export async function POST(req: NextRequest) {
       
       try {
         thumbnailUrl = await uploadToCloudinary(thumbnailFile);
-        console.log('Upload success! URL:', thumbnailUrl);
       } catch (uploadError: any) {
         console.error('Thumbnail upload failed:', uploadError);
         return NextResponse.json(
@@ -279,8 +268,6 @@ export async function POST(req: NextRequest) {
 
     const article = await Article.create(articleData);
 
-    console.log('Article created successfully:', article._id);
-
     return NextResponse.json(
       { 
         success: true, 
@@ -297,15 +284,14 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    console.error('Full POST error:', error.message, error.stack);
+    console.error('POST error:', error);
     
     // Handle duplicate key error
     if (error.code === 11000) {
       return NextResponse.json(
         { 
           success: false, 
-          error: 'آرٹیکل کا عنوان پہلے سے موجود ہے',
-          details: 'Duplicate title'
+          error: 'آرٹیکل کا عنوان پہلے سے موجود ہے'
         },
         { status: 409 }
       );
@@ -336,11 +322,11 @@ export async function POST(req: NextRequest) {
 }
 
 // PUT: Update article
-export async function PUT(req: NextRequest) {
+export async function PUT(request: NextRequest) {
   try {
     await connectDB();
 
-    const formData = await req.formData();
+    const formData = await request.formData();
 
     const id = formData.get('id') as string;
     if (!id) {
@@ -465,8 +451,7 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json(
           { 
             success: false, 
-            error: 'تھمب نیل اپلوڈ کرنے میں ناکامی',
-            details: uploadError.message 
+            error: 'تھمب نیل اپلوڈ کرنے میں ناکامی'
           }, 
           { status: 500 }
         );
@@ -496,7 +481,7 @@ export async function PUT(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('PUT Error:', error.message, error.stack);
+    console.error('PUT Error:', error);
     
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map((err: any) => err.message);
@@ -513,8 +498,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       { 
         success: false, 
-        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی',
-        details: error.message 
+        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی'
       },
       { status: 500 }
     );
@@ -522,11 +506,11 @@ export async function PUT(req: NextRequest) {
 }
 
 // DELETE: Delete article
-export async function DELETE(req: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     await connectDB();
     
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
@@ -539,7 +523,6 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Check if article exists
     const article = await Article.findById(id);
     if (!article) {
       return NextResponse.json(
@@ -551,8 +534,6 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // If article has thumbnail on Cloudinary, you might want to delete it too
-    // Note: This would require additional Cloudinary setup
     const deletedArticle = await Article.findByIdAndDelete(id);
 
     return NextResponse.json({
@@ -569,8 +550,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(
       { 
         success: false, 
-        error: 'آرٹیکل حذف کرنے میں ناکامی',
-        details: error.message 
+        error: 'آرٹیکل حذف کرنے میں ناکامی'
       }, 
       { status: 500 }
     );
@@ -578,11 +558,11 @@ export async function DELETE(req: NextRequest) {
 }
 
 // PATCH: Update specific fields (like view count)
-export async function PATCH(req: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     await connectDB();
     
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const action = searchParams.get('action');
     
@@ -654,8 +634,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(
       { 
         success: false, 
-        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی',
-        details: error.message 
+        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی'
       }, 
       { status: 500 }
     );
