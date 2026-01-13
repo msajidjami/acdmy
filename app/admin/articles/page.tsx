@@ -13,9 +13,9 @@ export default function AdminArticles() {
     language: 'en',
     category: '',
     author: '',
-    thumbnail: '',
     tags: '',
     links: '',
+    thumbnail: '', // thumbnail property add کی ہے
   });
   const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
@@ -74,16 +74,10 @@ export default function AdminArticles() {
       
       let dataArray: any[] = [];
       
-      if (Array.isArray(response)) {
-        dataArray = response;
-      } else if (response && typeof response === 'object') {
-        if (response.success && Array.isArray(response.data)) {
-          dataArray = response.data;
-        } else if (Array.isArray(response.data)) {
-          dataArray = response.data;
-        } else {
-          console.error('Unexpected response format:', response);
-        }
+      if (response.success && Array.isArray(response.data)) {
+        dataArray = response.data;
+      } else {
+        console.error('Unexpected response format:', response);
       }
       
       setArticles(dataArray || []);
@@ -110,17 +104,19 @@ export default function AdminArticles() {
 
     const formData = new FormData();
 
-    // ٹیکسٹ فیلڈز - تمام زبانوں کے لیے encode کریں
-    formData.append('title', encodeURIComponent(form.title));
-    formData.append('content', encodeURIComponent(form.content));
+    // 🚨 **اہم: encodeURIComponent نہ استعمال کریں** 🚨
+    // FormData خود بخود encoding کرتا ہے
+    formData.append('title', form.title);
+    formData.append('content', form.content);
     formData.append('language', form.language);
-    formData.append('category', encodeURIComponent(form.category));
-    formData.append('author', encodeURIComponent(form.author));
+    formData.append('category', form.category);
+    formData.append('author', form.author);
     
     // Tags اور Links کو array میں convert کریں
-    const tagsArray = form.tags.split(',').map(t => encodeURIComponent(t.trim())).filter(Boolean);
-    const linksArray = form.links.split(',').map(l => encodeURIComponent(l.trim())).filter(Boolean);
+    const tagsArray = form.tags.split(',').map(t => t.trim()).filter(Boolean);
+    const linksArray = form.links.split(',').map(l => l.trim()).filter(Boolean);
     
+    // JSON.stringify کر دیں
     formData.append('tags', JSON.stringify(tagsArray));
     formData.append('links', JSON.stringify(linksArray));
 
@@ -132,7 +128,8 @@ export default function AdminArticles() {
     // تصویر اگر نئی منتخب کی گئی ہو
     if (thumbnailFile) {
       formData.append('thumbnail', thumbnailFile);
-    } else if (form.thumbnail && !thumbnailFile) {
+    } else if (isEditing && form.thumbnail && !thumbnailFile) {
+      // اگر ایڈٹ موڈ میں ہے اور کوئی نیا فائل نہیں ہے، تو existing thumbnail کو بھیجیں
       formData.append('existingThumbnail', form.thumbnail);
     }
 
@@ -141,6 +138,7 @@ export default function AdminArticles() {
       const res = await fetch('/api/articles', {
         method,
         body: formData,
+        // 🚨 **اہم: Content-Type header نہ ڈالیں** 🚨
       });
 
       const data = await res.json();
@@ -153,6 +151,7 @@ export default function AdminArticles() {
       resetForm();
       fetchArticles();
     } catch (err: any) {
+      console.error('Submit error:', err);
       setMessage('غلطی: ' + (err.message || 'آرٹیکل محفوظ کرنے میں ناکامی'));
     } finally {
       setLoading(false);
@@ -162,14 +161,14 @@ export default function AdminArticles() {
   const handleEdit = (article: any) => {
     setForm({
       id: article._id || article.id,
-      title: decodeURIComponent(article.title || ''),
-      content: decodeURIComponent(article.content || ''),
+      title: article.title || '',
+      content: article.content || '',
       language: article.language || 'en',
-      category: decodeURIComponent(article.category || ''),
-      author: decodeURIComponent(article.author || ''),
-      thumbnail: article.thumbnail || '',
-      tags: Array.isArray(article.tags) ? article.tags.map((tag: string) => decodeURIComponent(tag)).join(', ') : '',
-      links: Array.isArray(article.links) ? article.links.map((link: string) => decodeURIComponent(link)).join(', ') : '',
+      category: article.category || '',
+      author: article.author || '',
+      thumbnail: article.thumbnail || '', // thumbnail set کریں
+      tags: Array.isArray(article.tags) ? article.tags.join(', ') : '',
+      links: Array.isArray(article.links) ? article.links.join(', ') : '',
     });
     setThumbnailPreview(article.thumbnail || '');
     setThumbnailFile(null);
@@ -293,7 +292,7 @@ export default function AdminArticles() {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               required
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             />
           </div>
 
@@ -304,7 +303,7 @@ export default function AdminArticles() {
               placeholder="مثال: قرآن، حدیث، رمضان، فقہ"
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             />
           </div>
 
@@ -315,7 +314,7 @@ export default function AdminArticles() {
               placeholder="مصنف کا نام"
               value={form.author}
               onChange={(e) => setForm({ ...form, author: e.target.value })}
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             />
           </div>
 
@@ -324,7 +323,7 @@ export default function AdminArticles() {
             <select
               value={form.language}
               onChange={(e) => setForm({ ...form, language: e.target.value })}
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             >
               <option value="en">English (انگریزی)</option>
               <option value="ur">Urdu (اردو)</option>
@@ -339,7 +338,7 @@ export default function AdminArticles() {
               accept="image/*"
               ref={fileInputRef}
               onChange={handleThumbnailChange}
-              className="border border-gray-300 rounded-lg p-3 w-full file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+              className="border border-gray-300 rounded-lg p-3 w-full file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
             />
             {/* پیش نظارہ */}
             {(thumbnailPreview || form.thumbnail) && (
@@ -365,7 +364,7 @@ export default function AdminArticles() {
               placeholder="مثال: رمضان, قرآن, تجوید, اسلام"
               value={form.tags}
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
-              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             />
             <p className="text-xs text-gray-500 mt-1">ہر ٹیگ کو کامے سے الگ کریں</p>
           </div>
@@ -379,7 +378,7 @@ export default function AdminArticles() {
             onChange={(e) => setForm({ ...form, content: e.target.value })}
             required
             rows={12}
-            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none resize-y font-mono"
+            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-y font-mono"
           />
         </div>
 
@@ -390,7 +389,7 @@ export default function AdminArticles() {
             placeholder="مثال: https://example.com, https://youtube.com/..."
             value={form.links}
             onChange={(e) => setForm({ ...form, links: e.target.value })}
-            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+            className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
           />
         </div>
 
@@ -400,8 +399,8 @@ export default function AdminArticles() {
             disabled={loading}
             className={`px-8 py-3 rounded-lg font-medium transition flex items-center gap-2 ${
               loading 
-                ? 'bg-green-400 text-white cursor-not-allowed' 
-                : 'bg-green-600 text-white hover:bg-green-700'
+                ? 'bg-teal-400 text-white cursor-not-allowed' 
+                : 'bg-teal-600 text-white hover:bg-teal-700'
             }`}
           >
             {loading ? (
@@ -430,7 +429,7 @@ export default function AdminArticles() {
       {/* آرٹیکلز کی لسٹ */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-green-800">موجودہ آرٹیکلز ({articles.length})</h2>
+          <h2 className="text-2xl font-bold text-teal-800">موجودہ آرٹیکلز ({articles.length})</h2>
           <div className="flex gap-4">
             <button
               onClick={fetchArticles}
@@ -482,21 +481,25 @@ export default function AdminArticles() {
                             className="h-10 w-10 rounded-full object-cover mr-3"
                             src={article.thumbnail}
                             alt={article.title}
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = '/images/default-article.jpg';
+                            }}
                           />
                         )}
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {decodeURIComponent(article.title || '')}
+                            {article.title || 'بلا عنوان'}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {decodeURIComponent(article.author || '')}
+                            {article.author || 'ایڈمن'}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                        {decodeURIComponent(article.category || 'General')}
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-teal-100 text-teal-800">
+                        {article.category || 'عام'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -523,7 +526,7 @@ export default function AdminArticles() {
                           href={`/articles/${article._id || article.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-green-600 hover:text-green-900"
+                          className="text-teal-600 hover:text-teal-900"
                         >
                           دیکھیں
                         </a>

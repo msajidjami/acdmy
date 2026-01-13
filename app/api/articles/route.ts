@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { v2 as cloudinary } from 'cloudinary';
-import mongoose from 'mongoose';
 
 // Cloudinary config
 cloudinary.config({
@@ -44,7 +43,23 @@ async function uploadToCloudinary(file: File): Promise<string> {
   });
 }
 
-// GET: Fetch all articles with filters
+// Helper function to decode form data
+function decodeFormData(value: string): string {
+  if (!value) return '';
+  
+  try {
+    // Try to decode if it's URL encoded
+    if (value.includes('%') || value.includes('+')) {
+      return decodeURIComponent(value.replace(/\+/g, ' '));
+    }
+    return value;
+  } catch (error) {
+    console.error('Error decoding value:', error);
+    return value;
+  }
+}
+
+// GET: Fetch all articles
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
@@ -62,7 +77,7 @@ export async function GET(request: NextRequest) {
     const query: any = {};
     
     if (category && category !== 'all') {
-      query.category = category;
+      query.category = decodeFormData(category);
     }
     
     if (language && language !== 'all') {
@@ -70,11 +85,11 @@ export async function GET(request: NextRequest) {
     }
     
     if (author) {
-      query.author = author;
+      query.author = decodeFormData(author);
     }
     
     if (tag) {
-      query.tags = { $in: [tag] };
+      query.tags = { $in: [decodeFormData(tag)] };
     }
     
     // Build sort options
@@ -114,7 +129,7 @@ export async function GET(request: NextRequest) {
       createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: article.updatedAt?.toISOString() || new Date().toISOString(),
       views: article.views || 0,
-      uniqueViews: article.uniqueViews || article.views || 0,
+      uniqueViews: article.uniqueViews || 0,
       tags: article.tags || [],
       links: article.links || [],
     }));
@@ -130,10 +145,6 @@ export async function GET(request: NextRequest) {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       }
-    }, {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      }
     });
     
   } catch (error: any) {
@@ -144,34 +155,41 @@ export async function GET(request: NextRequest) {
         error: 'Failed to fetch articles',
         details: error.message 
       },
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { status: 500 }
     );
   }
 }
 
-// POST: Create new article - سادہ ورژن
+// POST: Create new article
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== POST REQUEST STARTED ===');
     await connectDB();
 
-    // صرف FormData استعمال کریں
     const formData = await request.formData();
+    console.log('FormData received');
 
-    // Extract fields
-    const title = formData.get('title') as string;
-    const content = formData.get('content') as string;
-    const excerpt = formData.get('excerpt') as string || '';
+    // Extract and decode fields
+    const title = decodeFormData(formData.get('title') as string || '');
+    const content = decodeFormData(formData.get('content') as string || '');
+    const excerpt = decodeFormData(formData.get('excerpt') as string || '');
     const language = formData.get('language') as string || 'ur';
-    const category = formData.get('category') as string || 'عام';
-    const author = formData.get('author') as string || 'ایڈمن';
+    const category = decodeFormData(formData.get('category') as string || 'عام');
+    const author = decodeFormData(formData.get('author') as string || 'ایڈمن');
     const tagsInput = formData.get('tags') as string || '';
     const linksInput = formData.get('links') as string || '';
     const thumbnailFile = formData.get('thumbnail') as File | null;
+
+    console.log('Decoded fields:', {
+      titleLength: title.length,
+      contentLength: content.length,
+      language,
+      category,
+      author,
+      hasTags: !!tagsInput,
+      hasLinks: !!linksInput,
+      hasThumbnail: !!thumbnailFile
+    });
 
     // Validate required fields
     if (!title || title.trim().length === 0) {
@@ -194,22 +212,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse tags
+    // Parse tags (handle both JSON string and comma-separated)
     let tags: string[] = [];
     if (tagsInput) {
-      tags = tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      try {
+        // Try to parse as JSON array
+        const parsedTags = JSON.parse(tagsInput);
+        if (Array.isArray(parsedTags)) {
+          tags = parsedTags.map(tag => decodeFormData(tag));
+        }
+      } catch (error) {
+        // If not JSON, treat as comma-separated string
+        tags = tagsInput.split(',')
+          .map(tag => decodeFormData(tag.trim()))
+          .filter(tag => tag.length > 0);
+      }
     }
 
-    // Parse links
+    // Parse links (handle both JSON string and comma-separated)
     let links: string[] = [];
     if (linksInput) {
-      links = linksInput.split(',').map(link => link.trim()).filter(link => link.length > 0);
+      try {
+        const parsedLinks = JSON.parse(linksInput);
+        if (Array.isArray(parsedLinks)) {
+          links = parsedLinks;
+        }
+      } catch (error) {
+        links = linksInput.split(',')
+          .map(link => link.trim())
+          .filter(link => link.length > 0);
+      }
     }
+
+    console.log('Parsed tags and links:', { tags, links });
 
     // Handle thumbnail upload
     let thumbnailUrl = '';
     
     if (thumbnailFile && thumbnailFile.size > 0) {
+      console.log('Uploading thumbnail...');
       // Validate file type
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(thumbnailFile.type)) {
@@ -236,14 +277,14 @@ export async function POST(request: NextRequest) {
       
       try {
         thumbnailUrl = await uploadToCloudinary(thumbnailFile);
+        console.log('Thumbnail uploaded:', thumbnailUrl);
       } catch (uploadError: any) {
         console.error('Thumbnail upload failed:', uploadError);
         // Continue without thumbnail if upload fails
-        thumbnailUrl = '';
       }
     }
 
-    // Create article in database - براہ راست اردو/عربی متن استعمال کریں
+    // Create article in database
     const articleData = {
       title: title.trim(),
       content: content.trim(),
@@ -260,7 +301,15 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date()
     };
 
+    console.log('Saving article to database:', {
+      title: articleData.title.substring(0, 50),
+      language: articleData.language,
+      category: articleData.category,
+      tags: articleData.tags.length
+    });
+
     const article = await Article.create(articleData);
+    console.log('Article saved with ID:', article._id);
 
     return NextResponse.json(
       { 
@@ -275,15 +324,15 @@ export async function POST(request: NextRequest) {
           createdAt: article.createdAt
         }
       },
-      { 
-        status: 201,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { status: 201 }
     );
   } catch (error: any) {
-    console.error('POST error details:', error);
+    console.error('=== POST ERROR ===', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
     
     // Handle duplicate key error
     if (error.code === 11000) {
@@ -292,30 +341,21 @@ export async function POST(request: NextRequest) {
           success: false, 
           error: 'آرٹیکل کا عنوان پہلے سے موجود ہے'
         },
-        { 
-          status: 409,
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8'
-          }
-        }
+        { status: 409 }
       );
     }
     
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+      console.error('Validation errors:', validationErrors);
       return NextResponse.json(
         { 
           success: false, 
           error: 'ویلڈیشن غلطی',
           details: validationErrors.join(', ')
         },
-        { 
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8'
-          }
-        }
+        { status: 400 }
       );
     }
     
@@ -323,14 +363,9 @@ export async function POST(request: NextRequest) {
       { 
         success: false, 
         error: 'آرٹیکل تخلیق کرنے میں ناکامی',
-        details: error.message 
+        details: process.env.NODE_ENV === 'development' ? error.message : ''
       },
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { status: 500 }
     );
   }
 }
@@ -341,8 +376,8 @@ export async function PUT(request: NextRequest) {
     await connectDB();
 
     const formData = await request.formData();
-
     const id = formData.get('id') as string;
+    
     if (!id) {
       return NextResponse.json(
         { 
@@ -353,7 +388,6 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Check if article exists
     const existingArticle = await Article.findById(id);
     if (!existingArticle) {
       return NextResponse.json(
@@ -369,21 +403,21 @@ export async function PUT(request: NextRequest) {
 
     // Update fields if provided
     if (formData.has('title')) {
-      const title = formData.get('title') as string;
-      if (title && title.trim()) {
+      const title = decodeFormData(formData.get('title') as string || '');
+      if (title.trim()) {
         updateData.title = title.trim();
       }
     }
 
     if (formData.has('content')) {
-      const content = formData.get('content') as string;
-      if (content && content.trim()) {
+      const content = decodeFormData(formData.get('content') as string || '');
+      if (content.trim()) {
         updateData.content = content.trim();
       }
     }
 
     if (formData.has('excerpt')) {
-      updateData.excerpt = (formData.get('excerpt') as string) || '';
+      updateData.excerpt = decodeFormData(formData.get('excerpt') as string || '');
     }
 
     if (formData.has('language')) {
@@ -391,39 +425,62 @@ export async function PUT(request: NextRequest) {
     }
 
     if (formData.has('category')) {
-      const category = formData.get('category') as string;
-      if (category && category.trim()) {
+      const category = decodeFormData(formData.get('category') as string || '');
+      if (category.trim()) {
         updateData.category = category.trim();
       }
     }
 
     if (formData.has('author')) {
-      const author = formData.get('author') as string;
-      if (author && author.trim()) {
+      const author = decodeFormData(formData.get('author') as string || '');
+      if (author.trim()) {
         updateData.author = author.trim();
       }
     }
 
     // Handle tags
     if (formData.has('tags')) {
-      const tagsInput = formData.get('tags') as string;
+      const tagsInput = formData.get('tags') as string || '';
+      let tags: string[] = [];
+      
       if (tagsInput) {
-        updateData.tags = tagsInput.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag);
+        try {
+          const parsedTags = JSON.parse(tagsInput);
+          if (Array.isArray(parsedTags)) {
+            tags = parsedTags.map(tag => decodeFormData(tag));
+          }
+        } catch (error) {
+          tags = tagsInput.split(',')
+            .map(tag => decodeFormData(tag.trim()))
+            .filter(tag => tag.length > 0);
+        }
       }
+      updateData.tags = tags;
     }
 
     // Handle links
     if (formData.has('links')) {
-      const linksInput = formData.get('links') as string;
+      const linksInput = formData.get('links') as string || '';
+      let links: string[] = [];
+      
       if (linksInput) {
-        updateData.links = linksInput.split(',').map((link: string) => link.trim()).filter((link: string) => link);
+        try {
+          const parsedLinks = JSON.parse(linksInput);
+          if (Array.isArray(parsedLinks)) {
+            links = parsedLinks;
+          }
+        } catch (error) {
+          links = linksInput.split(',')
+            .map(link => link.trim())
+            .filter(link => link.length > 0);
+        }
       }
+      updateData.links = links;
     }
 
-    // Handle thumbnail upload if new file provided
+    // Handle thumbnail
     const thumbnailFile = formData.get('thumbnail') as File | null;
     if (thumbnailFile && thumbnailFile.size > 0) {
-      // Validate file type
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(thumbnailFile.type)) {
         return NextResponse.json(
@@ -435,7 +492,6 @@ export async function PUT(request: NextRequest) {
         );
       }
       
-      // Validate file size (max 5MB)
       const maxSize = 5 * 1024 * 1024;
       if (thumbnailFile.size > maxSize) {
         return NextResponse.json(
@@ -452,7 +508,6 @@ export async function PUT(request: NextRequest) {
         updateData.thumbnail = thumbnailUrl;
       } catch (uploadError: any) {
         console.error('Thumbnail upload failed:', uploadError);
-        // Don't fail the whole update if thumbnail upload fails
       }
     }
 
@@ -460,10 +515,7 @@ export async function PUT(request: NextRequest) {
     const updatedArticle = await Article.findByIdAndUpdate(
       id,
       { $set: updateData },
-      {
-        new: true,
-        runValidators: true,
-      }
+      { new: true, runValidators: true }
     ).select('-__v').lean();
 
     return NextResponse.json({
@@ -472,10 +524,6 @@ export async function PUT(request: NextRequest) {
       data: {
         ...updatedArticle,
         _id: updatedArticle?._id?.toString()
-      }
-    }, {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
       }
     });
 
@@ -490,12 +538,7 @@ export async function PUT(request: NextRequest) {
           error: 'ویلڈیشن غلطی',
           details: validationErrors 
         },
-        { 
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8'
-          }
-        }
+        { status: 400 }
       );
     }
     
@@ -504,16 +547,12 @@ export async function PUT(request: NextRequest) {
         success: false, 
         error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی'
       },
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { status: 500 }
     );
   }
 }
 
+// DELETE and PATCH methods remain the same...
 // DELETE: Delete article
 export async function DELETE(request: NextRequest) {
   try {
