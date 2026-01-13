@@ -31,10 +31,31 @@ export default function AdminArticles() {
     try {
       const res = await fetch('/api/articles');
       if (!res.ok) throw new Error('Failed to fetch articles');
-      const data = await res.json();
-      setArticles(data);
+      
+      const response = await res.json();
+      
+      // API response کو process کریں - مختلف فارمیٹس کے لیے
+      let dataArray: any[] = [];
+      
+      if (Array.isArray(response)) {
+        // Direct array response
+        dataArray = response;
+      } else if (response && typeof response === 'object') {
+        // Object with data property
+        if (response.success && Array.isArray(response.data)) {
+          dataArray = response.data;
+        } else if (Array.isArray(response.data)) {
+          dataArray = response.data;
+        } else {
+          console.error('Unexpected response format:', response);
+        }
+      }
+      
+      setArticles(dataArray || []);
+      
     } catch (err: any) {
       console.error('Fetch error:', err);
+      setMessage('آرٹیکلز لوڈ کرنے میں ناکامی: ' + err.message);
     }
   };
 
@@ -71,6 +92,9 @@ export default function AdminArticles() {
     // تصویر اگر نئی منتخب کی گئی ہو
     if (thumbnailFile) {
       formData.append('thumbnail', thumbnailFile);
+    } else if (form.thumbnail && !thumbnailFile) {
+      // اگر کوئی نئی فائل نہیں ہے لیکن existing thumbnail ہے تو اسے بھیجیں
+      formData.append('existingThumbnail', form.thumbnail);
     }
 
     try {
@@ -98,7 +122,7 @@ export default function AdminArticles() {
 
   const handleEdit = (article: any) => {
     setForm({
-      id: article._id,
+      id: article._id || article.id,
       title: article.title || '',
       content: article.content || '',
       language: article.language || 'en',
@@ -281,11 +305,21 @@ export default function AdminArticles() {
           <button
             type="submit"
             disabled={loading}
-            className={`bg-green-600 text-white px-8 py-3 rounded-lg font-medium transition ${
-              loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-700'
+            className={`px-8 py-3 rounded-lg font-medium transition flex items-center gap-2 ${
+              loading 
+                ? 'bg-green-400 text-white cursor-not-allowed' 
+                : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
-            {loading ? 'محفوظ ہو رہا ہے...' : isEditing ? 'اپ ڈیٹ کریں' : 'شامل کریں'}
+            {loading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                محفوظ ہو رہا ہے...
+              </>
+            ) : isEditing ? 'اپ ڈیٹ کریں' : 'شامل کریں'}
           </button>
 
           {isEditing && (
@@ -301,47 +335,75 @@ export default function AdminArticles() {
       </form>
 
       {/* آرٹیکلز کی لسٹ */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div>
+        <h2 className="text-2xl font-bold text-green-800 mb-6">موجودہ آرٹیکلز ({articles.length})</h2>
+        
         {articles.length === 0 ? (
-          <p className="text-center text-gray-500 col-span-full py-10">ابھی کوئی آرٹیکل موجود نہیں ہے۔</p>
+          <div className="text-center py-10 bg-gray-50 rounded-xl">
+            <div className="text-5xl mb-4">📝</div>
+            <p className="text-gray-500 text-lg">ابھی کوئی آرٹیکل موجود نہیں ہے۔</p>
+            <p className="text-gray-400 mt-2">پہلا آرٹیکل شامل کرنے کے لیے اوپر فارم استعمال کریں۔</p>
+          </div>
         ) : (
-          articles.map((article) => (
-            <div
-              key={article._id}
-              className="bg-white shadow-md rounded-lg p-6 flex flex-col justify-between hover:shadow-xl transition-shadow"
-            >
-              <div>
-                <h3 className="text-xl font-bold text-green-700 mb-2">{article.title}</h3>
-                {article.thumbnail && (
-                  <img
-                    src={article.thumbnail}
-                    alt={article.title}
-                    className="w-full h-48 object-cover rounded-lg mb-3"
-                  />
-                )}
-                <p className="text-gray-600 text-sm mb-1">کیٹگری: {article.category || 'General'}</p>
-                <p className="text-gray-600 text-sm mb-1">مصنف: {article.author || 'Admin'}</p>
-                <p className="text-gray-500 text-xs mt-2">
-                  {new Date(article.createdAt).toLocaleDateString('ur-PK')}
-                </p>
-              </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {articles.map((article) => (
+              <div
+                key={article._id || article.id}
+                className="bg-white shadow-lg rounded-xl p-6 flex flex-col justify-between hover:shadow-xl transition-shadow border border-green-100"
+              >
+                <div>
+                  <h3 className="text-xl font-bold text-green-700 mb-2 line-clamp-2">{article.title}</h3>
+                  {article.thumbnail && (
+                    <img
+                      src={article.thumbnail}
+                      alt={article.title}
+                      className="w-full h-48 object-cover rounded-lg mb-3"
+                    />
+                  )}
+                  <div className="space-y-2 mb-4">
+                    <p className="text-gray-600">
+                      <span className="font-medium">کیٹگری:</span> {article.category || 'General'}
+                    </p>
+                    <p className="text-gray-600">
+                      <span className="font-medium">مصنف:</span> {article.author || 'Admin'}
+                    </p>
+                    <p className="text-gray-600">
+                      <span className="font-medium">زبان:</span> {article.language === 'ur' ? 'اردو' : article.language === 'ar' ? 'عربی' : 'انگریزی'}
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      <span className="font-medium">تاریخ:</span> {new Date(article.createdAt).toLocaleDateString('ur-PK')}
+                    </p>
+                    {article.views && (
+                      <p className="text-gray-500 text-sm">
+                        <span className="font-medium">ویوز:</span> {article.views}
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-              <div className="flex justify-end gap-3 mt-4">
-                <button
-                  onClick={() => handleEdit(article)}
-                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-                >
-                  ایڈٹ
-                </button>
-                <button
-                  onClick={() => handleDelete(article._id)}
-                  className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
-                >
-                  ڈیلیٹ
-                </button>
+                <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => handleEdit(article)}
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                    ایڈٹ
+                  </button>
+                  <button
+                    onClick={() => handleDelete(article._id || article.id)}
+                    className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    ڈیلیٹ
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>
