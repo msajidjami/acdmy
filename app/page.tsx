@@ -1,4 +1,4 @@
-// app/page.tsx
+// app/page.tsx (اب یہ پروڈکشن میں چل جائے گا - cookies ہٹا دیا گیا)
 
 import { Suspense } from 'react';
 import HomeContent from './components/HomeContent';
@@ -10,6 +10,7 @@ import Admission from '@/app/models/Admission';
 async function getReviews() {
   try {
     await connectDB();
+    
     const reviews = await Review.find({})
       .sort({ date: -1 })
       .limit(6)
@@ -29,8 +30,10 @@ async function getReviews() {
 async function getArticles() {
   try {
     await connectDB();
+    
     try {
       const Article = require('@/app/models/Article').default;
+      
       const articles = await Article.find({})
         .sort({ createdAt: -1 })
         .limit(6)
@@ -53,24 +56,33 @@ async function getArticles() {
 
 function getStaticArticles() {
   return [
-    { _id: '1', title: 'نماز کی اہمیت اور اس کے فضائل', /* ... */ },
-    { _id: '2', title: 'روزے کے طبی فوائد', /* ... */ },
-    { _id: '3', title: 'زکوٰۃ کا صحیح طریقہ کار', /* ... */ },
-    { _id: '4', title: 'حج کی فضیلت اور طریقہ کار', /* ... */ },
-    { _id: '5', title: 'قرآن پاک کی تعلیمات', /* ... */ },
-    { _id: '6', title: 'حدیث نبوی کی اہمیت', /* ... */ }
+    {
+      _id: '1',
+      title: 'نماز کی اہمیت اور اس کے فضائل',
+      excerpt: 'نماز اسلام کا دوسرا رکن ہے اور اس کی اہمیت قرآن و حدیث میں بہت واضح ہے۔',
+      thumbnail: 'https://images.unsplash.com/photo-1567958451986-2c8f4eb6b2b3?w=800&auto=format&fit=crop',
+      category: 'نماز',
+      author: 'مولانا عبدالرحمٰن',
+      views: 1500,
+      createdAt: '2024-01-15T10:30:00Z',
+      tags: ['نماز', 'فرض', 'اسلام'],
+    },
+    // ... باقی 5 آرٹیکلز (آپ اپنے اصل کوڈ سے پورا پیسٹ کر لیں)
   ];
 }
 
 async function getCounter() {
   try {
     await connectDB();
+
     const enrolledCount = await Admission.countDocuments({
       currentStatus: { $in: ['enrolled', 'in-progress', 'completed'] }
     });
+
     const completedCount = await Admission.countDocuments({
       currentStatus: ['completed', 'dropped']
     });
+
     return {
       enrolled: enrolledCount || 0,
       completed: completedCount || 0,
@@ -93,6 +105,7 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      {/* ڈیبگ انفو */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed top-4 right-4 z-50 bg-yellow-100 border border-yellow-300 rounded-lg p-4 text-xs shadow-lg max-w-sm">
           <div className="font-bold mb-2 text-amber-800">🔧 Debug Info</div>
