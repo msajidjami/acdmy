@@ -2,66 +2,51 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 
-export async function GET() {
-  try {
-    const uri = process.env.MONGODB_URI;
-    
-    if (!uri) {
-      return NextResponse.json([
-        'عبادات', 
-        'سیرت النبی', 
-        'قرآن پاک', 
-        'حدیث', 
-        'فقہ', 
-        'اخلاق', 
-        'تاریخ', 
-        'سائنس اور اسلام'
-      ]);
-    }
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  throw new Error('MONGODB_URI is not defined');
+}
 
-    const client = new MongoClient(uri);
+const client = new MongoClient(uri);
+let cachedCategories: string[] | null = null;
+
+const defaultCategories = [
+  'عبادات',
+  'سیرت النبی',
+  'قرآن پاک',
+  'حدیث',
+  'فقہ',
+  'اخلاق',
+  'تاریخ',
+  'سائنس اور اسلام',
+];
+
+export const revalidate = 3600; // 1 گھنٹہ — بہت مناسب کیٹیگریز کے لیے
+// یا export const dynamic = 'force-static'; اگر بالکل static چاہیے (تجویز نہیں)
+
+export async function GET() {
+  // اگر پہلے سے کیش ہے تو واپس کر دیں (in-memory cache)
+  if (cachedCategories) {
+    return NextResponse.json(cachedCategories);
+  }
+
+  try {
     await client.connect();
-    
     const db = client.db();
-    
-    // Correct way: Use $nin for both null and empty string
+
     const categories = await db.collection('articles')
-      .distinct('category', { 
-        category: { 
-          $nin: [null, '', undefined] 
-        } 
+      .distinct('category', {
+        category: { $nin: [null, '', undefined] }
       })
-      .then(cats => cats.filter(Boolean).sort());
-    
+      .then(cats => cats.filter(Boolean).sort() as string[]);
+
     await client.close();
-    
-    // Return default categories if none found
-    const defaultCategories = [
-      'عبادات', 
-      'سیرت النبی', 
-      'قرآن پاک', 
-      'حدیث', 
-      'فقہ', 
-      'اخلاق', 
-      'تاریخ', 
-      'سائنس اور اسلام'
-    ];
-    
-    return NextResponse.json(
-      categories && categories.length > 0 ? categories : defaultCategories
-    );
-    
+
+    cachedCategories = categories.length > 0 ? categories : defaultCategories;
+
+    return NextResponse.json(cachedCategories);
   } catch (error) {
     console.error('Error fetching categories:', error);
-    return NextResponse.json([
-      'عبادات', 
-      'سیرت النبی', 
-      'قرآن پاک', 
-      'حدیث', 
-      'فقہ', 
-      'اخلاق', 
-      'تاریخ', 
-      'سائنس اور اسلام'
-    ]);
+    return NextResponse.json(defaultCategories);
   }
 }
