@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from 'next';  // ← یہ لائن شامل کریں
+import type { Metadata, Viewport } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from './context/AuthContext';
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     title: 'Quran & Islamic - Online Quran Learning Platform',
     description: 'Professional Quran and Islamic education online. Learn with authentic sources.',
     images: ['https://www.quranandislamic.com/og-image.png'],
-    creator: '@yourtwitterhandle',
+    // creator: '@yourtwitterhandle', // اگر چاہیں تو یہاں اپنا ہینڈل ڈالیں
   },
   icons: {
     icon: '/icon.png',
@@ -78,13 +78,14 @@ export const metadata: Metadata = {
   },
 };
 
-// ← یہ نیا الگ viewport ایکسپورٹ کریں
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // اختیاری: زوم روکنے کے لیے
+  userScalable: false,
 };
+
+export const dynamic = 'force-dynamic';
 
 export default function RootLayout({
   children,
@@ -92,8 +93,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${poppins.variable} font-sans`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
         <AuthProvider>
           <Navbar />
           {children}
