@@ -1,6 +1,5 @@
 // app/articles/layout.tsx
 import { ReactNode } from 'react';
-import TopBar from '@/app/components/TopBar';
 
 export default function ArticlesLayout({
   children,
@@ -9,7 +8,6 @@ export default function ArticlesLayout({
 }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <TopBar />
       <div className="container mx-auto px-4 pt-24">
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="lg:w-3/4">
