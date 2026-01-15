@@ -118,7 +118,6 @@ export default function AdminArticles() {
     const previewUrl = URL.createObjectURL(file);
     setThumbnailPreview(previewUrl);
 
-    // کلین اپ پچھلی preview
     return () => URL.revokeObjectURL(previewUrl);
   };
 
@@ -130,7 +129,7 @@ export default function AdminArticles() {
     const formData = new FormData();
 
     formData.append('title', form.title.trim());
-    formData.append('content', form.content.trim());
+    formData.append('content', form.content.trim()); // سادہ ٹیکسٹ بھیجا جا رہا ہے
     formData.append('language', form.language);
     formData.append('category', form.category.trim());
     formData.append('author', form.author.trim());
@@ -387,14 +386,21 @@ export default function AdminArticles() {
         </div>
 
         <div className="mt-8">
-          <label className="block text-sm font-medium text-gray-700 mb-2">مواد (HTML سپورٹڈ) *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            آرٹیکل کا مواد (سادہ تحریر) *
+          </label>
+          <p className="text-sm text-gray-600 mb-2">
+            • نئی لائن کے لیے Enter دبائیں<br />
+            • نئے پیراگراف کے لیے دو بار Enter دبائیں
+          </p>
           <textarea
-            placeholder="آرٹیکل کا مکمل مواد یہاں لکھیں... (کسی بھی زبان میں)"
+            placeholder="یہاں مکمل آرٹیکل لکھیں...\n\nمثال:\n\nاسلامی کیلنڈر چاند کی گردش پر مبنی ہے۔\nایک سال تقریباً 354 یا 355 دنوں کا ہوتا ہے۔\n\nاس کی وجہ سے..."
             value={form.content}
             onChange={e => setForm({ ...form, content: e.target.value })}
             required
-            rows={14}
-            className="border border-gray-300 rounded-lg p-4 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-y font-mono transition"
+            rows={20}
+            className="border border-gray-300 rounded-lg p-5 w-full focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-y font-[system-ui] text-base leading-relaxed whitespace-pre-wrap"
+            style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}
           />
         </div>
 
