@@ -20,6 +20,18 @@ interface Admission {
   platform?: string;
   referredByType?: 'owner' | 'teacher' | null;
   referralCode?: string;
+  // Additional fields from the model
+  dateOfBirth?: string;
+  feeAmount?: number;
+  feeCurrency?: string;
+  preferredTiming?: string;
+  additionalNotes?: string;
+  classLink?: string;
+  meetingId?: string;
+  meetingPassword?: string;
+  adminNotes?: string;
+  startDate?: string;
+  completionDate?: string;
 }
 
 interface Owner {
@@ -105,6 +117,18 @@ export default function AdminDashboard() {
           platform: item.platform || 'whatsapp',
           referredByType: item.referredByType || null,
           referralCode: item.referralCode || '',
+          // additional fields
+          dateOfBirth: item.dateOfBirth,
+          feeAmount: item.feeAmount,
+          feeCurrency: item.feeCurrency,
+          preferredTiming: item.preferredTiming,
+          additionalNotes: item.additionalNotes,
+          classLink: item.classLink,
+          meetingId: item.meetingId,
+          meetingPassword: item.meetingPassword,
+          adminNotes: item.adminNotes,
+          startDate: item.startDate,
+          completionDate: item.completionDate,
         }));
 
         setAdmissions(formatted);
@@ -268,6 +292,15 @@ export default function AdminDashboard() {
       dropped: 'منسوخ'
     };
     return map[status] || status;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString('ur-PK', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
   };
 
   return (
@@ -534,10 +567,10 @@ export default function AdminDashboard() {
         </>
       )}
 
-      {/* Details Modal */}
+      {/* Details Modal - اب تمام فیلڈز دکھائے جائیں گے */}
       {showDetailsModal && selectedAdmission && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="p-8">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold text-gray-800">طالب علم کی تفصیلات</h3>
@@ -546,25 +579,56 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
+              {/* ذاتی معلومات */}
+              <div className="mb-8">
+                <h4 className="text-lg font-semibold text-teal-700 border-b pb-2 mb-4">ذاتی معلومات</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <DetailItem label="نام" value={selectedAdmission.name} />
                   <DetailItem label="والد کا نام" value={selectedAdmission.fatherName} />
-                  <DetailItem label="ای میل" value={selectedAdmission.email} />
-                  <DetailItem label="رابطہ نمبر" value={selectedAdmission.contactNumber || 'دستیاب نہیں'} />
-                  <DetailItem label="ملک" value={selectedAdmission.country || 'دستیاب نہیں'} />
+                  <DetailItem label="تاریخ پیدائش" value={formatDate(selectedAdmission.dateOfBirth)} />
                   <DetailItem label="جنس" value={selectedAdmission.gender === 'male' ? 'مرد' : selectedAdmission.gender === 'female' ? 'خاتون' : 'دیگر'} />
-                </div>
-                <div className="space-y-4">
-                  <DetailItem label="کورس" value={selectedAdmission.selectedCourse} />
-                  <DetailItem label="پلیٹ فارم" value={selectedAdmission.platform || 'واٹس ایپ'} />
-                  <DetailItem label="استاد" value={selectedAdmission.assignedTeacher || 'تخصیص نہیں'} />
-                  <DetailItem label="ریفرل سورس" value={selectedAdmission.referredByType ? `${selectedAdmission.referredByType === 'owner' ? 'اونر' : 'ٹیچر'} (${selectedAdmission.referralCode})` : 'کوئی نہیں'} />
-                  <DetailItem label="اسٹیٹس" value={getStatusText(selectedAdmission.currentStatus)} />
-                  <DetailItem label="کورس مکمل" value={selectedAdmission.courseCompleted ? 'ہاں' : 'نہیں'} />
-                  <DetailItem label="تاریخ اندراج" value={new Date(selectedAdmission.createdAt).toLocaleDateString('ur-PK', { year: 'numeric', month: 'long', day: 'numeric' })} />
+                  <DetailItem label="ملک" value={selectedAdmission.country || 'دستیاب نہیں'} />
+                  <DetailItem label="ای میل" value={selectedAdmission.email} />
+                  <DetailItem label="واٹس ایپ نمبر" value={selectedAdmission.contactNumber || 'دستیاب نہیں'} />
                 </div>
               </div>
+
+              {/* کورس سے متعلق معلومات */}
+              <div className="mb-8">
+                <h4 className="text-lg font-semibold text-teal-700 border-b pb-2 mb-4">کورس کی تفصیلات</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <DetailItem label="منتخب کورس" value={selectedAdmission.selectedCourse} />
+                  <DetailItem label="فیس" value={selectedAdmission.feeAmount ? `${selectedAdmission.feeAmount} ${selectedAdmission.feeCurrency || 'PKR'}` : '—'} />
+                  <DetailItem label="ترجیحی وقت" value={selectedAdmission.preferredTiming || '—'} />
+                  <DetailItem label="پلیٹ فارم" value={selectedAdmission.platform || 'واٹس ایپ'} />
+                  <DetailItem label="کلاس لنک" value={selectedAdmission.classLink ? <a href={selectedAdmission.classLink} target="_blank" rel="noopener noreferrer" className="text-teal-600 underline">لنک</a> : '—'} />
+                  <DetailItem label="میٹنگ آئی ڈی" value={selectedAdmission.meetingId || '—'} />
+                  <DetailItem label="میٹنگ پاس ورڈ" value={selectedAdmission.meetingPassword || '—'} />
+                  <DetailItem label="شروع کرنے کی تاریخ" value={formatDate(selectedAdmission.startDate)} />
+                  <DetailItem label="مکمل کرنے کی تاریخ" value={formatDate(selectedAdmission.completionDate)} />
+                  <DetailItem label="کورس مکمل" value={selectedAdmission.courseCompleted ? 'ہاں' : 'نہیں'} />
+                </div>
+              </div>
+
+              {/* انتظامی معلومات */}
+              <div className="mb-8">
+                <h4 className="text-lg font-semibold text-teal-700 border-b pb-2 mb-4">انتظامی معلومات</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <DetailItem label="موجودہ اسٹیٹس" value={getStatusText(selectedAdmission.currentStatus)} />
+                  <DetailItem label="تفویض کردہ استاد" value={selectedAdmission.assignedTeacher || 'کوئی نہیں'} />
+                  <DetailItem label="ریفرل سورس" value={selectedAdmission.referredByType ? `${selectedAdmission.referredByType === 'owner' ? 'اونر' : 'ٹیچر'} (${selectedAdmission.referralCode})` : 'کوئی نہیں'} />
+                  <DetailItem label="تاریخ اندراج" value={formatDate(selectedAdmission.createdAt)} />
+                  <DetailItem label="انتظامی نوٹس" value={selectedAdmission.adminNotes || '—'} />
+                </div>
+              </div>
+
+              {/* اضافی نوٹس */}
+              {selectedAdmission.additionalNotes && (
+                <div className="mb-8">
+                  <h4 className="text-lg font-semibold text-teal-700 border-b pb-2 mb-4">اضافی نوٹس (طالب علم کی طرف سے)</h4>
+                  <p className="bg-gray-50 p-4 rounded-lg text-gray-700">{selectedAdmission.additionalNotes}</p>
+                </div>
+              )}
 
               <div className="mt-8 flex justify-end gap-4">
                 <button onClick={() => setShowDetailsModal(false)} className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -585,7 +649,7 @@ export default function AdminDashboard() {
   );
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
+function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <span className="text-sm font-medium text-gray-500">{label}:</span>
@@ -593,3 +657,4 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+// اب درست کیا 
