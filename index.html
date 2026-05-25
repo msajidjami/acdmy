@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -10,112 +9,65 @@
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-      user-select: none; /* جلوگیری از انتخاب متن در حین تپ */
+      user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
-
     body {
       background: linear-gradient(145deg, #0a2f2a 0%, #06312b 100%);
       min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-family: 'Segoe UI', 'Poppins', system-ui, -apple-system, 'Roboto', sans-serif;
+      font-family: 'Segoe UI', 'Poppins', system-ui, sans-serif;
       padding: 16px;
-      margin: 0;
     }
-
-    /* کارڈ اصلی */
     .app-card {
       max-width: 500px;
       width: 100%;
       background: rgba(255, 248, 225, 0.96);
-      backdrop-filter: blur(2px);
       border-radius: 64px 48px 64px 48px;
-      box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3), inset 0 1px 2px rgba(255,255,240,0.6);
+      box-shadow: 0 25px 45px rgba(0,0,0,0.3);
       overflow: hidden;
-      transition: all 0.2s ease;
     }
-
-    /* سربرگ اسلامی */
     .header {
       background: #2c5a3e;
-      padding: 20px 20px 18px;
+      padding: 20px;
       text-align: center;
       color: #ffefcf;
       border-bottom: 3px solid #e9b35f;
     }
-
     .header h1 {
       font-size: 1.9rem;
-      font-weight: 700;
-      letter-spacing: -0.5px;
       display: flex;
-      align-items: center;
       justify-content: center;
       gap: 10px;
-      flex-wrap: wrap;
     }
-
-    .header h1 span {
-      background: #f9b23f;
-      font-size: 1.4rem;
-      padding: 4px 12px;
-      border-radius: 60px;
-      color: #2c3e2b;
-    }
-
-    .sub {
-      font-size: 0.8rem;
-      margin-top: 8px;
-      opacity: 0.85;
-      font-weight: 400;
-    }
-
-    /* کارڈ بیلنس */
     .balance-card {
       background: #2f4f36;
-      margin: 20px 20px 12px 20px;
+      margin: 20px;
       border-radius: 48px;
-      padding: 18px 20px;
+      padding: 18px;
       text-align: center;
-      box-shadow: inset 0 0 0 2px #fbe6a2, 0 10px 15px -5px rgba(0,0,0,0.2);
     }
-
-    .balance-card h2 {
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: #ffe5b4;
-      letter-spacing: 1px;
-    }
-
     .coin-value {
-      font-size: 4.2rem;
+      font-size: 4rem;
       font-weight: 800;
       color: #ffd966;
-      text-shadow: 0 3px 0 #8b5a2b;
       background: #1f3c28;
       display: inline-block;
       padding: 5px 28px;
       border-radius: 60px;
       margin-top: 8px;
-      letter-spacing: 2px;
-      font-family: monospace;
     }
-
-    /* منطقه تپ (بزرگ و لمسی) */
     .tap-zone {
       position: relative;
       background: #e9dbbd;
-      margin: 12px 20px 20px 20px;
+      margin: 12px 20px;
       border-radius: 48px;
       cursor: pointer;
-      transition: transform 0.05s linear;
-      box-shadow: 0 12px 20px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 12px 20px rgba(0,0,0,0.2);
       overflow: hidden;
-      border: 2px solid #cbad6e;
     }
-
     .tap-circle {
       background: radial-gradient(circle at 30% 25%, #ffe0a3, #d9b45b);
       margin: 25px;
@@ -124,261 +76,186 @@
       text-align: center;
       font-size: 2rem;
       font-weight: bold;
-      color: #2f2b1f;
-      transition: all 0.05s ease;
       box-shadow: inset 0 1px 4px rgba(255,255,200,0.8), 0 6px 0 #8b6942;
-      font-family: 'Segoe UI', sans-serif;
     }
-
     .tap-zone:active .tap-circle {
       transform: scale(0.97);
-      box-shadow: inset 0 1px 4px rgba(255,255,200,0.8), 0 2px 0 #8b6942;
     }
-
-    /* متن شناور "سبحان اللہ" */
     .floating-dhikr {
       position: absolute;
       pointer-events: none;
-      font-size: 1.5rem;
+      font-size: 1.3rem;
       font-weight: bold;
       color: #ffec80;
-      text-shadow: 0 0 5px #2c6e2f, 1px 1px 0 #1f3f1a;
-      background: rgba(33, 65, 35, 0.7);
+      background: rgba(33, 65, 35, 0.8);
       backdrop-filter: blur(6px);
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 50px;
       white-space: nowrap;
-      font-family: 'Amiri', 'Segoe UI', serif;
       animation: floatUpFade 0.9s ease-out forwards;
       z-index: 200;
     }
-
     @keyframes floatUpFade {
-      0% {
-        opacity: 1;
-        transform: translateY(0px) scale(0.9);
-      }
-      70% {
-        opacity: 0.8;
-        transform: translateY(-35px) scale(1.05);
-      }
-      100% {
-        opacity: 0;
-        transform: translateY(-70px) scale(0.9);
-        visibility: hidden;
-      }
+      0% { opacity: 1; transform: translateY(0px) scale(0.9); }
+      100% { opacity: 0; transform: translateY(-70px) scale(0.9); visibility: hidden; }
     }
-
-    /* بخش تبلیغات و تایمر */
     .ad-panel {
       background: #1f3c2c;
-      margin: 0 20px 28px 20px;
+      margin: 0 20px 28px;
       border-radius: 40px;
-      padding: 18px 20px;
+      padding: 18px;
       text-align: center;
-      box-shadow: inset 0 0 0 1px #ffefb9, 0 8px 14px rgba(0,0,0,0.2);
     }
-
     .timer-info {
       background: #0f2a1f;
       border-radius: 60px;
       padding: 8px 12px;
       display: inline-flex;
-      align-items: center;
       gap: 10px;
-      font-size: 1.3rem;
+      font-size: 1.2rem;
       font-weight: bold;
       color: #ffeaac;
       margin-bottom: 15px;
-      width: auto;
-      justify-content: center;
     }
-
-    .timer-info span {
-      font-size: 1.9rem;
-      font-weight: 800;
-      background: #2c2b1f;
-      padding: 0 12px;
-      border-radius: 50px;
-      font-family: monospace;
-      letter-spacing: 2px;
-    }
-
     .ad-button, .ad-loading, .waiting-message {
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       font-weight: 600;
       border: none;
       background: #f0b34b;
       color: #1e3a1e;
-      padding: 14px 20px;
+      padding: 12px;
       border-radius: 60px;
       width: 100%;
       cursor: pointer;
-      transition: 0.2s;
-      box-shadow: 0 5px 0 #7e582a;
-      font-family: inherit;
+      box-shadow: 0 4px 0 #7e582a;
     }
-
-    .ad-button:active {
-      transform: translateY(2px);
-      box-shadow: 0 2px 0 #7e582a;
-    }
-
     .ad-loading {
       background: #6f7c6b;
-      color: #fbffdc;
       cursor: default;
       box-shadow: none;
-      animation: pulse 1.2s infinite;
     }
-
     .waiting-message {
       background: #315e40;
       color: #ffe0a1;
-      box-shadow: none;
       cursor: default;
+      box-shadow: none;
     }
-
-    @keyframes pulse {
-      0% { opacity: 0.7; }
-      100% { opacity: 1; }
+    .toast-msg {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2c5a3e;
+      color: #ffefcf;
+      padding: 10px 20px;
+      border-radius: 50px;
+      font-weight: bold;
+      z-index: 1000;
+      animation: fadeOut 2s forwards;
+      white-space: nowrap;
     }
-
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      70% { opacity: 1; }
+      100% { opacity: 0; visibility: hidden; }
+    }
     footer {
+      background: #173e2b;
       text-align: center;
       font-size: 0.7rem;
+      padding: 10px;
       color: #cfcfaa;
-      background: #173e2b;
-      padding: 12px;
-      margin-top: 6px;
-    }
-
-    /* ریسپانسیو برای موبایل */
-    @media (max-width: 480px) {
-      .coin-value { font-size: 3rem; }
-      .tap-circle { padding: 38px 12px; font-size: 1.6rem; }
-      .floating-dhikr { font-size: 1.2rem; padding: 4px 12px; }
     }
   </style>
 </head>
 <body>
-
 <div class="app-card">
   <div class="header">
-    <h1>🕌 Tap & Earn <span>حلال</span></h1>
+    <h1>🕌 Tap & Earn <span style="background:#f9b23f; padding:4px 12px; border-radius:60px;">حلال</span></h1>
     <div class="sub">✨ ہر ٹیپ پر "سبحان اللہ" اور ایک سکہ ✨</div>
   </div>
-
-  <!-- بیلنس کارڈ -->
   <div class="balance-card">
     <h2>🪙 آپ کے سکے</h2>
     <div class="coin-value" id="coinBalance">0</div>
   </div>
-
-  <!-- منطقه تپ -->
   <div class="tap-zone" id="tapZone">
-    <div class="tap-circle">
-      👇 یہاں ٹیپ کریں
-    </div>
-    <!-- یہاں پر فلوتنگ متن ڈائنامکلی شامل ہوں گے -->
+    <div class="tap-circle">👇 یہاں ٹیپ کریں</div>
   </div>
-
-  <!-- اشتہار اور ٹائمر سیکشن -->
-  <div class="ad-panel" id="adPanel">
-    <div class="timer-info" id="timerDisplayBox">
-      ⏳ اگلا ایڈ میں: <span id="countdownSeconds">60</span> سیکنڈ
-    </div>
-    <div id="dynamicAdArea">
-      <!-- یہاں بٹن / لوڈنگ / میسج ڈائنامکلی آئے گا -->
-    </div>
+  <div class="ad-panel">
+    <div class="timer-info" id="timerDisplayBox"></div>
+    <div id="dynamicAdArea"></div>
   </div>
-  <footer>
-    🌙 ہر 60 سیکنڈ بعد ویڈیو ایڈ دیکھیں → +50 سکے | ذکرِ الٰہی
-  </footer>
+  <footer>🌙 ہر 60 سیکنڈ بعد ویڈیو ایڈ دیکھیں → +50 سکے | ذکرِ الٰہی</footer>
 </div>
 
 <script>
   (function() {
-    // ---------- STATE ----------
     let coins = 0;
-    let timeLeft = 60;          // باقی سیکنڈ (جب ایڈ تیار نہیں)
-    let isAdReady = false;      // جب ٹائمر صفر ہو جائے گا true
-    let isWatchingAd = false;   // ایڈ دیکھنے کے دوران لاک
+    let timeLeft = 60;
+    let isAdReady = false;
+    let isWatchingAd = false;
+    let timerInterval = null;
 
-    // DOM elements
     const coinSpan = document.getElementById('coinBalance');
-    const countdownSpan = document.getElementById('countdownSeconds');
+    const timerDisplayBox = document.getElementById('timerDisplayBox');
     const dynamicAdArea = document.getElementById('dynamicAdArea');
     const tapZone = document.getElementById('tapZone');
-    const timerDisplayBox = document.getElementById('timerDisplayBox');
 
-    // ---------- Helper: UI کو مکمل اپ ڈیٹ ----------
+    function showToast(message, isSuccess = true) {
+      const toast = document.createElement('div');
+      toast.className = 'toast-msg';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2000);
+    }
+
     function updateUI() {
-      // 1. سکوں کی اپ ڈیٹ
-      coinSpan.innerText = coins;
+      coinSpan.textContent = coins;
+      // clear timer area
+      timerDisplayBox.innerHTML = '';
+      dynamicAdArea.innerHTML = '';
 
-      // 2. ٹائمر ڈسپلے (countdownSeconds والا حصہ)
-      // جب ایڈ تیار ہو یا ایڈ چل رہا ہو تو ٹائمر نمبر مختلف انداز میں دکھائیں
       if (isAdReady) {
-        countdownSpan.innerText = '🔥';
-        timerDisplayBox.style.opacity = '0.9';
-        timerDisplayBox.innerHTML = `🎁 ایڈ تیار ہے! <span id="countdownSeconds">🔥</span> ابھی دیکھیں`;
-        // دوبارہ ID ریفریش کریں (کیونکہ innerHTML نے تبدیل کیا)
-        document.getElementById('countdownSeconds') && (document.getElementById('countdownSeconds').innerText = '🔥');
-      } else if (isWatchingAd) {
-        countdownSpan.innerText = '📺';
-        timerDisplayBox.innerHTML = `📡 ایڈ چل رہا ہے... <span id="countdownSeconds">📺</span> صبر کریں`;
-        document.getElementById('countdownSeconds') && (document.getElementById('countdownSeconds').innerText = '📺');
-      } else {
-        // عام حالت: ٹائمر چل رہا ہے
-        timerDisplayBox.innerHTML = `⏳ اگلا ایڈ میں: <span id="countdownSeconds">${timeLeft}</span> سیکنڈ`;
-        const newSpan = document.getElementById('countdownSeconds');
-        if (newSpan) newSpan.innerText = timeLeft;
-      }
-
-      // 3. ڈائنامک ایڈ ایریا (بٹن / لوڈنگ / میسج)
-      if (isWatchingAd) {
-        dynamicAdArea.innerHTML = `<div class="ad-loading">📺 ویڈیو ایڈ چل رہا ہے (5 سیکنڈ)... براہ کرم انتظار کریں</div>`;
+        const timerSpan = document.createElement('span');
+        timerSpan.textContent = '🎁 ایڈ تیار ہے! ابھی دیکھیں 🔥';
+        timerDisplayBox.appendChild(timerSpan);
+        
+        const btn = document.createElement('button');
+        btn.className = 'ad-button';
+        btn.textContent = '▶️ ویڈیو ایڈ دیکھیں (+50 سکے)';
+        btn.addEventListener('click', () => handleWatchAd());
+        dynamicAdArea.appendChild(btn);
       } 
-      else if (isAdReady) {
-        dynamicAdArea.innerHTML = `<button class="ad-button" id="watchAdBtn">▶️ ویڈیو ایڈ دیکھیں (+50 سکے) 🔥</button>`;
-        const adBtn = document.getElementById('watchAdBtn');
-        if (adBtn) {
-          adBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleWatchAd();
-          });
-        }
+      else if (isWatchingAd) {
+        const timerSpan = document.createElement('span');
+        timerSpan.textContent = '📡 ایڈ چل رہا ہے... صبر کریں 📺';
+        timerDisplayBox.appendChild(timerSpan);
+        
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'ad-loading';
+        loadingDiv.textContent = '📺 ویڈیو ایڈ چل رہا ہے (5 سیکنڈ)...';
+        dynamicAdArea.appendChild(loadingDiv);
       }
       else {
-        // نہ ایڈ ریڈی، نہ واچنگ: ٹائمر چل رہا
-        dynamicAdArea.innerHTML = `<div class="waiting-message">🕋 ایڈ آنے میں ${timeLeft} سیکنڈ باقی ہیں  <br/> صبر و شکر 🤲</div>`;
+        const timerSpan = document.createElement('span');
+        timerSpan.textContent = `⏳ اگلا ایڈ میں: ${timeLeft} سیکنڈ`;
+        timerDisplayBox.appendChild(timerSpan);
+        
+        const waitDiv = document.createElement('div');
+        waitDiv.className = 'waiting-message';
+        waitDiv.textContent = `🕋 ایڈ آنے میں ${timeLeft} سیکنڈ باقی ہیں ۔ صبر و شکر 🤲`;
+        dynamicAdArea.appendChild(waitDiv);
       }
     }
 
-    // ---------- ٹائمر کا انٹروال (ہر سیکنڈ) ----------
-    let timerInterval = null;
-
-    function startGlobalTimer() {
+    function startTimer() {
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(() => {
-        // اگر ایڈ دیکھنے کی حالت میں ہیں تو ٹائمر مت چلائیں (وقت نہ گھٹے)
-        if (isWatchingAd) {
-          // صرف UI مستحکم رہے، کوئی تبدیلی نہیں
-          return;
-        }
-        
-        // اگر ایڈ پہلے سے ریڈی ہے تو ٹائمر نہ گھٹائیں (صفر پر ہے)
-        if (isAdReady) {
-          return;
-        }
-        
-        // عام حالت: جب نہ ایڈ ریڈی ہے اور نہ ہی واچنگ موڈ
+        if (isWatchingAd) return;
+        if (isAdReady) return;
         if (timeLeft > 0) {
           timeLeft--;
           updateUI();
-          
-          // جب ٹائمر صفر پر پہنچے تو ایڈ ریڈی ہو جائے
           if (timeLeft === 0) {
             isAdReady = true;
             updateUI();
@@ -387,121 +264,72 @@
       }, 1000);
     }
 
-    // ---------- ایڈ دیکھنے کا فنکشن ----------
     function handleWatchAd() {
-      // صرف اس وقت چلے جب واقعی ایڈ ریڈی ہو اور کوئی ایڈ نہ چل رہا ہو
       if (!isAdReady || isWatchingAd) return;
-
-      // ایڈ شروع
       isWatchingAd = true;
-      isAdReady = false;       // اب ایڈ ریڈی نہیں رہی
-      updateUI();              // فوری طور پر لوڈنگ والا یوآئی دکھائیں
+      isAdReady = false;
+      updateUI();
 
-      // مصنوعی ایڈ (5 سیکنڈ کی نقلی ویڈیو)
       setTimeout(() => {
-        // ایڈ مکمل ہوا
-        if (isWatchingAd === true) {   // سیفٹی چیک
-          // انعام: 50 سکے شامل
+        if (isWatchingAd) {
           coins += 50;
-          // ٹائمر دوبارہ 60 سیکنڈ سیٹ کریں
           timeLeft = 60;
-          isAdReady = false;      // ابھی ریڈی نہیں (نئے ٹائمر کا انتظار)
+          isAdReady = false;
           isWatchingAd = false;
-          
-          // UI اپ ڈیٹ
           updateUI();
-          
-          // خوشی کا الرٹ (Telegram میں موزوں)
-          alert("🎉 مبارک! ویڈیو ایڈ مکمل! آپ کو 50 سکے مل گئے۔\nاللہ تعالیٰ قبول فرمائے 🤲");
+          showToast('🎉 مبارک! 50 سکے مل گئے۔ اللہ قبول فرمائے 🤲', true);
         }
-      }, 5000);  // 5 سیکنڈ کا نقلی ایڈ
+      }, 5000);
     }
 
-    // ---------- تپ کرنے پر سکہ بڑھائیں + سبحان اللہ کا فلوتنگ ٹیکسٹ ----------
-    function createFloatingDhikr(clientX, clientY, targetRect) {
-      // کلک کی پوزیشن نسبتاً tapZone کے اندر
-      const relativeX = clientX - targetRect.left;
-      const relativeY = clientY - targetRect.top;
-      
-      // ڈیو بنائیں
+    function createFloatingDhikr(clientX, clientY, rect) {
+      const relativeX = clientX - rect.left;
+      const relativeY = clientY - rect.top;
       const floatDiv = document.createElement('div');
       floatDiv.className = 'floating-dhikr';
-      floatDiv.innerText = 'سبحان اللہ';
-      // تھوڑا اوپر شفٹ تاکہ انگلی ڈھانپ نہ سکے
+      floatDiv.textContent = 'سبحان اللہ';
       floatDiv.style.left = `${relativeX - 20}px`;
       floatDiv.style.top = `${relativeY - 35}px`;
       floatDiv.style.position = 'absolute';
-      tapZone.style.position = 'relative'; // یقینی بنائیں
+      tapZone.style.position = 'relative';
       tapZone.appendChild(floatDiv);
-      
-      // اینیمیشن ختم ہونے کے بعد حذف کریں (1 سیکنڈ بعد)
-      setTimeout(() => {
-        if (floatDiv && floatDiv.parentNode) floatDiv.remove();
-      }, 900);
+      setTimeout(() => floatDiv.remove(), 900);
     }
-    
-    // تپ ہینڈلر (سکے + فلوتنگ)
-    function onTapHandler(event) {
-      // اصلاح: اگر ایڈ دیکھنے کے دوران بھی تپ کر سکتے ہیں، لیکن پابندی نہیں۔ صارف کو سکے ملتے رہیں گے۔
-      // سکہ بڑھائیں
+
+    function onTap(event) {
       coins++;
       updateUI();
-      
-      // پوزیشن حاصل کریں (ماؤس یا ٹچ)
+
       let clientX, clientY;
       if (event.touches) {
-        // ٹچ ایونٹ
         clientX = event.touches[0].clientX;
         clientY = event.touches[0].clientY;
-        event.preventDefault();  // موبائل پر زوم / سکرول روکنے کے لیے
+        event.preventDefault();
       } else {
         clientX = event.clientX;
         clientY = event.clientY;
       }
-      
       const rect = tapZone.getBoundingClientRect();
-      // چیک کریں کہ پوائنٹ tapZone کے اندر ہے
       if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
         createFloatingDhikr(clientX, clientY, rect);
       } else {
-        // حفاظتی: اگر کسی وجہ سے باہر ہو تو rect کے بیچ میں تخمینی
-        const fallbackX = rect.left + rect.width / 2;
-        const fallbackY = rect.top + rect.height / 2;
+        const fallbackX = rect.left + rect.width/2;
+        const fallbackY = rect.top + rect.height/2;
         createFloatingDhikr(fallbackX, fallbackY, rect);
       }
     }
-    
-    // ایونٹس کو جوڑیں (click + touchstart تاکہ تیز جواب)
-    function bindTapEvents() {
-      // موبائل کے لیے touchstart تیز behaviour
-      tapZone.addEventListener('touchstart', (e) => {
-        e.preventDefault();  // سکرولنگ اور زوم سے بچاؤ
-        onTapHandler(e);
-      }, { passive: false });
-      
-      // ڈیسک ٹاپ اور کلک (اضافی طور پر)
-      tapZone.addEventListener('click', (e) => {
-        onTapHandler(e);
-      });
-    }
-    
-    // ---------- انیشیلائزیشن: تمام ڈیفالٹ ویلیوز اور انٹروال اسٹارٹ ----------
+
+    tapZone.addEventListener('touchstart', (e) => { e.preventDefault(); onTap(e); }, { passive: false });
+    tapZone.addEventListener('click', onTap);
+
     function init() {
       coins = 0;
       timeLeft = 60;
       isAdReady = false;
       isWatchingAd = false;
-      
       updateUI();
-      bindTapEvents();
-      startGlobalTimer();
-      
-      // اضافی سیکیورٹی: اگر ایپ بیک گراؤنڈ میں جائے تو انٹروال کو صاف رکھیں (ضرورت نہیں)
-      window.addEventListener('beforeunload', () => {
-        if (timerInterval) clearInterval(timerInterval);
-      });
+      startTimer();
     }
-    
     init();
   })();
 </script>
