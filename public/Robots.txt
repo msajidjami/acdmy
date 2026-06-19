@@ -1,0 +1,5 @@
+# میں یہاں فائل کا مواد لکھ رہا ہوں تاکہ آپ اسے ڈاؤن لوڈ کر سکیں
+User-agent: *
+Allow: /
+
+Sitemap: https://www.quranandislamic.com/sitemap.xml
