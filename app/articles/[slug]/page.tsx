@@ -1,0 +1,138 @@
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import connectDB from '@/app/lib/dbConnect';
+import Article from '@/app/models/Article';
+import { Metadata } from 'next';
+import { Eye, Calendar, User, Tag } from 'lucide-react';
+import ArticleShareButtons from '@/app/components/ArticleShareButtons';
+import mongoose from 'mongoose';
+
+interface ArticlePageProps {
+  params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
+  const { slug } = await params;
+  await connectDB();
+  let article = await Article.findOne({ slug }).lean();
+  if (!article && mongoose.Types.ObjectId.isValid(slug)) {
+    article = await Article.findById(slug).lean();
+  }
+  if (!article) return { title: 'Article Not Found' };
+
+  return {
+    title: `${article.title} – Quran & Islamic Academy`,
+    description: article.excerpt || article.content?.substring(0, 160),
+  };
+}
+
+async function getArticle(slug: string) {
+  await connectDB();
+  let article = await Article.findOne({ slug }).lean();
+  if (!article && mongoose.Types.ObjectId.isValid(slug)) {
+    article = await Article.findById(slug).lean();
+  }
+  return article;
+}
+
+export default async function ArticlePage({ params }: ArticlePageProps) {
+  const { slug } = await params;
+  const article = await getArticle(slug);
+
+  if (!article) notFound();
+
+  // Increment views (already done in API route, but we do it again here for safety)
+  // Actually better to increment via API call from client, but we'll keep it simple.
+  // We'll use the API route for view increment, but we can also do it here.
+  // However, doing it here would block rendering, so we'll do it in the client side.
+  // We'll rely on the API route which is called from the client later.
+
+  const formatDate = (date: Date) =>
+    new Date(date).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+  const articleUrl = `https://www.quranandislamic.com/articles/${article.slug || article._id}`;
+
+  return (
+    <article className="min-h-screen bg-slate-50 pt-28 pb-12">
+      <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
+        <Link
+          href="/articles"
+          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-teal-700 transition mb-6"
+        >
+          ← Back to Articles
+        </Link>
+
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          {article.thumbnail && (
+            <div className="relative h-80 w-full bg-slate-100">
+              <img
+                src={article.thumbnail}
+                alt={article.title}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6">
+                <span className="bg-teal-700 text-white text-sm font-semibold px-4 py-1.5 rounded-full">
+                  {article.category}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="p-6 sm:p-8 lg:p-10">
+            <header className="mb-8">
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
+                {article.title}
+              </h1>
+              <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-slate-500">
+                <span className="flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  <span className="font-medium text-slate-700">{article.author}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  {formatDate(article.createdAt)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Eye className="w-4 h-4" />
+                  {article.views} views
+                </span>
+              </div>
+            </header>
+
+            <div
+              className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-700 prose-a:text-teal-700 prose-blockquote:border-l-4 prose-blockquote:border-teal-600 prose-blockquote:pl-6 prose-blockquote:italic prose-blockquote:bg-slate-50 prose-img:rounded-xl prose-ul:list-disc prose-ol:list-decimal"
+              dangerouslySetInnerHTML={{ __html: article.content }}
+            />
+
+            {article.tags?.length > 0 && (
+              <div className="mt-10 pt-6 border-t border-slate-200">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                  <Tag className="w-4 h-4" /> Topics
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {article.tags.map((tag: string) => (
+                    <Link
+                      key={tag}
+                      href={`/articles?tag=${encodeURIComponent(tag)}`}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-1.5 rounded-full text-sm transition"
+                    >
+                      #{tag}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <ArticleShareButtons title={article.title} url={articleUrl} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}

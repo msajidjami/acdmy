@@ -50,6 +50,7 @@ export default function AdminArticles() {
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [debugError, setDebugError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,22 +118,33 @@ export default function AdminArticles() {
     setThumbnailFile(file);
     const previewUrl = URL.createObjectURL(file);
     setThumbnailPreview(previewUrl);
-
-    return () => URL.revokeObjectURL(previewUrl);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
+    setDebugError('');
     setLoading(true);
+
+    // Basic validation
+    if (!form.title.trim()) {
+      setMessage('براہ کرم ٹائٹل درج کریں');
+      setLoading(false);
+      return;
+    }
+    if (!form.content.trim()) {
+      setMessage('براہ کرم آرٹیکل کا مواد درج کریں');
+      setLoading(false);
+      return;
+    }
 
     const formData = new FormData();
 
     formData.append('title', form.title.trim());
-    formData.append('content', form.content.trim()); // سادہ ٹیکسٹ بھیجا جا رہا ہے
+    formData.append('content', form.content.trim());
     formData.append('language', form.language);
-    formData.append('category', form.category.trim());
-    formData.append('author', form.author.trim());
+    formData.append('category', form.category.trim() || 'General');
+    formData.append('author', form.author.trim() || 'Admin');
 
     const tagsArray = form.tags.split(',').map(t => t.trim()).filter(Boolean);
     const linksArray = form.links.split(',').map(l => l.trim()).filter(Boolean);
@@ -158,10 +170,14 @@ export default function AdminArticles() {
         credentials: 'include',
       });
 
-      const data = await res.json();
+      // Parse response even if not ok to get error message
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || 'محفوظ کرنے میں ناکامی');
+        // Show detailed error if available
+        const errorMsg = data.error || data.message || `HTTP ${res.status}`;
+        setDebugError(`Full error: ${JSON.stringify(data)}`);
+        throw new Error(errorMsg);
       }
 
       setMessage(data.message || (isEditing ? 'آرٹیکل کامیابی سے اپ ڈیٹ ہو گیا!' : 'آرٹیکل کامیابی سے شامل ہو گیا!'));
@@ -229,6 +245,7 @@ export default function AdminArticles() {
     setThumbnailFile(null);
     setIsEditing(false);
     setMessage('');
+    setDebugError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -263,7 +280,6 @@ export default function AdminArticles() {
 
   return (
     <div className="container mx-auto pt-20 px-4 py-12 max-w-7xl">
-      {/* ہیڈر */}
       <div className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white rounded-2xl p-6 mb-10 shadow-xl">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div>
@@ -287,7 +303,7 @@ export default function AdminArticles() {
         </div>
       </div>
 
-      {/* میسج */}
+      {/* Error Message */}
       {message && (
         <div
           className={`p-4 mb-8 rounded-xl text-center font-medium border shadow-sm ${
@@ -297,10 +313,15 @@ export default function AdminArticles() {
           }`}
         >
           {message}
+          {debugError && (
+            <details className="mt-2 text-sm text-left bg-red-100 p-2 rounded">
+              <summary className="cursor-pointer font-medium">تفصیلی خرابی (کلک کریں)</summary>
+              <pre className="text-xs whitespace-pre-wrap break-all mt-1">{debugError}</pre>
+            </details>
+          )}
         </div>
       )}
 
-      {/* فارم */}
       <form onSubmit={handleSubmit} className="bg-white shadow-2xl rounded-2xl p-8 mb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -386,15 +407,13 @@ export default function AdminArticles() {
         </div>
 
         <div className="mt-8">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            آرٹیکل کا مواد (سادہ تحریر) *
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">آرٹیکل کا مواد (سادہ تحریر) *</label>
           <p className="text-sm text-gray-600 mb-2">
             • نئی لائن کے لیے Enter دبائیں<br />
             • نئے پیراگراف کے لیے دو بار Enter دبائیں
           </p>
           <textarea
-            placeholder="یہاں مکمل آرٹیکل لکھیں...\n\nمثال:\n\nاسلامی کیلنڈر چاند کی گردش پر مبنی ہے۔\nایک سال تقریباً 354 یا 355 دنوں کا ہوتا ہے۔\n\nاس کی وجہ سے..."
+            placeholder="یہاں مکمل آرٹیکل لکھیں..."
             value={form.content}
             onChange={e => setForm({ ...form, content: e.target.value })}
             required
@@ -448,7 +467,6 @@ export default function AdminArticles() {
         </div>
       </form>
 
-      {/* آرٹیکلز کی لسٹ */}
       <div className="bg-white rounded-2xl shadow-xl p-6">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
           <h2 className="text-2xl font-bold text-teal-800">

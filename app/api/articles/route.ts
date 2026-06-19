@@ -11,7 +11,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || '',
 });
 
-// Helper function to upload image to Cloudinary
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
 async function uploadToCloudinary(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
@@ -28,95 +29,62 @@ async function uploadToCloudinary(file: File): Promise<string> {
         ]
       },
       (error, result) => {
-        if (error) {
-          console.error('Cloudinary upload error:', error);
-          reject(new Error(`Cloudinary upload failed: ${error.message}`));
-        } else if (result) {
-          resolve(result.secure_url);
-        } else {
-          reject(new Error('Cloudinary upload failed: No result'));
-        }
+        if (error) reject(new Error(`Cloudinary upload failed: ${error.message}`));
+        else if (result) resolve(result.secure_url);
+        else reject(new Error('Cloudinary upload failed: No result'));
       }
     );
-    
     uploadStream.end(buffer);
   });
 }
 
-// Helper function to decode form data
 function decodeFormData(value: string): string {
   if (!value) return '';
-  
   try {
-    // Try to decode if it's URL encoded
     if (value.includes('%') || value.includes('+')) {
       return decodeURIComponent(value.replace(/\+/g, ' '));
     }
     return value;
-  } catch (error) {
-    console.error('Error decoding value:', error);
+  } catch {
     return value;
   }
 }
 
-// GET: Fetch all articles
+// ─── GET ──────────────────────────────────────────────────────────────────
+
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
-    
     const searchParams = request.nextUrl.searchParams;
     const category = searchParams.get('category');
     const language = searchParams.get('language');
     const sort = searchParams.get('sort');
     const author = searchParams.get('author');
     const tag = searchParams.get('tag');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const page = parseInt(searchParams.get('page') || '1');
-    
-    // Build query
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+
     const query: any = {};
-    
-    if (category && category !== 'all') {
-      query.category = decodeFormData(category);
-    }
-    
-    if (language && language !== 'all') {
-      query.language = language;
-    }
-    
-    if (author) {
-      query.author = decodeFormData(author);
-    }
-    
-    if (tag) {
-      query.tags = { $in: [decodeFormData(tag)] };
-    }
-    
-    // Build sort options
+    if (category && category !== 'all') query.category = decodeFormData(category);
+    if (language && language !== 'all') query.language = language;
+    if (author) query.author = decodeFormData(author);
+    if (tag) query.tags = { $in: [decodeFormData(tag)] };
+
     let sortOptions: any = { createdAt: -1 };
-    
-    if (sort === 'popular' || sort === 'views') {
-      sortOptions = { views: -1, createdAt: -1 };
-    } else if (sort === 'latest') {
-      sortOptions = { createdAt: -1 };
-    }
-    
-    // Calculate pagination
+    if (sort === 'views' || sort === 'popular') sortOptions = { views: -1, createdAt: -1 };
+    else if (sort === 'latest') sortOptions = { createdAt: -1 };
+
     const skip = (page - 1) * limit;
-    
-    // Fetch articles with pagination
     const articles = await Article.find(query)
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
       .select('-__v')
       .lean();
-    
-    // Get total count for pagination
+
     const totalArticles = await Article.countDocuments(query);
     const totalPages = Math.ceil(totalArticles / limit);
-    
-    // Convert _id to string and add safe defaults
+
     const serializedArticles = articles.map((article: any) => ({
       _id: article._id?.toString() || '',
       title: article.title || 'بلا عنوان',
@@ -133,7 +101,7 @@ export async function GET(request: NextRequest) {
       tags: article.tags || [],
       links: article.links || [],
     }));
-    
+
     return NextResponse.json({
       success: true,
       data: serializedArticles,
@@ -143,177 +111,126 @@ export async function GET(request: NextRequest) {
         total: totalArticles,
         totalPages,
         hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
-      }
-    });
-    
-  } catch (error: any) {
-    console.error('Error fetching articles:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch articles',
-        details: error.message 
+        hasPrevPage: page > 1,
       },
+    });
+  } catch (error: any) {
+    console.error('GET error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch articles', details: error.message },
       { status: 500 }
     );
   }
 }
 
-// POST: Create new article
+// ─── POST ─────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== POST REQUEST STARTED ===');
     await connectDB();
-
     const formData = await request.formData();
-    console.log('FormData received');
 
-    // Extract and decode fields
-    const title = decodeFormData(formData.get('title') as string || '');
-    const content = decodeFormData(formData.get('content') as string || '');
-    const excerpt = decodeFormData(formData.get('excerpt') as string || '');
-    const language = formData.get('language') as string || 'ur';
-    const category = decodeFormData(formData.get('category') as string || 'عام');
-    const author = decodeFormData(formData.get('author') as string || 'ایڈمن');
+    // 1. Extract and decode fields
+    const title = decodeFormData(formData.get('title') as string || '').trim();
+    const content = decodeFormData(formData.get('content') as string || '').trim();
+    const language = (formData.get('language') as string) || 'ur';
+    const category = decodeFormData(formData.get('category') as string || '').trim() || 'General';
+    const author = decodeFormData(formData.get('author') as string || '').trim() || 'Admin';
     const tagsInput = formData.get('tags') as string || '';
     const linksInput = formData.get('links') as string || '';
     const thumbnailFile = formData.get('thumbnail') as File | null;
 
-    console.log('Decoded fields:', {
-      titleLength: title.length,
-      contentLength: content.length,
-      language,
-      category,
-      author,
-      hasTags: !!tagsInput,
-      hasLinks: !!linksInput,
-      hasThumbnail: !!thumbnailFile
-    });
-
-    // Validate required fields
-    if (!title || title.trim().length === 0) {
+    // 2. Validate required fields
+    if (!title) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'عنوان درکار ہے' 
-        }, 
+        { success: false, error: 'عنوان درکار ہے' },
+        { status: 400 }
+      );
+    }
+    if (!content) {
+      return NextResponse.json(
+        { success: false, error: 'مواد درکار ہے' },
         { status: 400 }
       );
     }
 
-    if (!content || content.trim().length === 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'مواد درکار ہے' 
-        }, 
-        { status: 400 }
-      );
-    }
+    // 3. Auto‑generate excerpt from content (first 160 characters, strip HTML)
+    const plainText = content.replace(/<[^>]+>/g, '');
+    const excerpt = plainText.substring(0, 160) + (plainText.length > 160 ? '…' : '');
 
-    // Parse tags (handle both JSON string and comma-separated)
+    // 4. Parse tags
     let tags: string[] = [];
     if (tagsInput) {
       try {
-        // Try to parse as JSON array
-        const parsedTags = JSON.parse(tagsInput);
-        if (Array.isArray(parsedTags)) {
-          tags = parsedTags.map(tag => decodeFormData(tag));
+        const parsed = JSON.parse(tagsInput);
+        if (Array.isArray(parsed)) {
+          tags = parsed.map((t: string) => decodeFormData(t).trim()).filter(Boolean);
         }
-      } catch (error) {
-        // If not JSON, treat as comma-separated string
-        tags = tagsInput.split(',')
-          .map(tag => decodeFormData(tag.trim()))
-          .filter(tag => tag.length > 0);
+      } catch {
+        tags = tagsInput.split(',').map(t => decodeFormData(t.trim())).filter(Boolean);
       }
     }
 
-    // Parse links (handle both JSON string and comma-separated)
+    // 5. Parse links
     let links: string[] = [];
     if (linksInput) {
       try {
-        const parsedLinks = JSON.parse(linksInput);
-        if (Array.isArray(parsedLinks)) {
-          links = parsedLinks;
+        const parsed = JSON.parse(linksInput);
+        if (Array.isArray(parsed)) {
+          links = parsed.map((l: string) => l.trim()).filter(Boolean);
         }
-      } catch (error) {
-        links = linksInput.split(',')
-          .map(link => link.trim())
-          .filter(link => link.length > 0);
+      } catch {
+        links = linksInput.split(',').map(l => l.trim()).filter(Boolean);
       }
     }
 
-    console.log('Parsed tags and links:', { tags, links });
-
-    // Handle thumbnail upload
+    // 6. Upload thumbnail if provided
     let thumbnailUrl = '';
-    
     if (thumbnailFile && thumbnailFile.size > 0) {
-      console.log('Uploading thumbnail...');
-      // Validate file type
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(thumbnailFile.type)) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'غلط فائل قسم۔ صرف JPEG, PNG, WebP اور GIF کی اجازت ہے۔' 
-          }, 
+          { success: false, error: 'غلط فائل قسم۔ صرف JPEG, PNG, WebP اور GIF کی اجازت ہے۔' },
           { status: 400 }
         );
       }
-      
-      // Validate file size (max 5MB)
       const maxSize = 5 * 1024 * 1024;
       if (thumbnailFile.size > maxSize) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'فائل سائز بہت بڑا ہے۔ زیادہ سے زیادہ سائز 5MB ہے۔' 
-          }, 
+          { success: false, error: 'فائل سائز بہت بڑا ہے۔ زیادہ سے زیادہ سائز 5MB ہے۔' },
           { status: 400 }
         );
       }
-      
       try {
         thumbnailUrl = await uploadToCloudinary(thumbnailFile);
-        console.log('Thumbnail uploaded:', thumbnailUrl);
       } catch (uploadError: any) {
         console.error('Thumbnail upload failed:', uploadError);
-        // Continue without thumbnail if upload fails
+        // Continue without thumbnail
       }
     }
 
-    // Create article in database
+    // 7. Create article
     const articleData = {
-      title: title.trim(),
-      content: content.trim(),
-      excerpt: excerpt.trim(),
+      title,
+      content,
+      excerpt,
       language,
-      category: category.trim(),
-      author: author.trim(),
+      category,
+      author,
       thumbnail: thumbnailUrl,
       tags,
       links,
       views: 0,
       uniqueViews: 0,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
-    console.log('Saving article to database:', {
-      title: articleData.title.substring(0, 50),
-      language: articleData.language,
-      category: articleData.category,
-      tags: articleData.tags.length
-    });
-
     const article = await Article.create(articleData);
-    console.log('Article saved with ID:', article._id);
 
     return NextResponse.json(
-      { 
-        success: true, 
+      {
+        success: true,
         message: 'آرٹیکل کامیابی سے تخلیق ہو گیا!',
         data: {
           _id: article._id.toString(),
@@ -321,80 +238,60 @@ export async function POST(request: NextRequest) {
           category: article.category,
           author: article.author,
           thumbnail: article.thumbnail,
-          createdAt: article.createdAt
-        }
+          createdAt: article.createdAt,
+        },
       },
       { status: 201 }
     );
   } catch (error: any) {
-    console.error('=== POST ERROR ===', {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    
-    // Handle duplicate key error
+    console.error('POST error:', error);
+
+    // Handle duplicate key error (if title has unique index)
     if (error.code === 11000) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل کا عنوان پہلے سے موجود ہے'
-        },
+        { success: false, error: 'آرٹیکل کا عنوان پہلے سے موجود ہے' },
         { status: 409 }
       );
     }
-    
+
     // Handle validation errors
     if (error.name === 'ValidationError') {
-      const validationErrors = Object.values(error.errors).map((err: any) => err.message);
-      console.error('Validation errors:', validationErrors);
+      const messages = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'ویلڈیشن غلطی',
-          details: validationErrors.join(', ')
-        },
+        { success: false, error: 'ویلڈیشن غلطی', details: messages.join(', ') },
         { status: 400 }
       );
     }
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'آرٹیکل تخلیق کرنے میں ناکامی',
-        details: process.env.NODE_ENV === 'development' ? error.message : ''
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       },
       { status: 500 }
     );
   }
 }
 
-// PUT: Update article
+// ─── PUT ──────────────────────────────────────────────────────────────────
+
 export async function PUT(request: NextRequest) {
   try {
     await connectDB();
-
     const formData = await request.formData();
     const id = formData.get('id') as string;
-    
     if (!id) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل آئی ڈی درکار ہے' 
-        }, 
+        { success: false, error: 'آرٹیکل آئی ڈی درکار ہے' },
         { status: 400 }
       );
     }
 
-    const existingArticle = await Article.findById(id);
-    if (!existingArticle) {
+    const existing = await Article.findById(id);
+    if (!existing) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل نہیں ملا' 
-        }, 
+        { success: false, error: 'آرٹیکل نہیں ملا' },
         { status: 404 }
       );
     }
@@ -403,302 +300,186 @@ export async function PUT(request: NextRequest) {
 
     // Update fields if provided
     if (formData.has('title')) {
-      const title = decodeFormData(formData.get('title') as string || '');
-      if (title.trim()) {
-        updateData.title = title.trim();
-      }
+      const val = decodeFormData(formData.get('title') as string || '').trim();
+      if (val) updateData.title = val;
     }
-
     if (formData.has('content')) {
-      const content = decodeFormData(formData.get('content') as string || '');
-      if (content.trim()) {
-        updateData.content = content.trim();
+      const val = decodeFormData(formData.get('content') as string || '').trim();
+      if (val) {
+        updateData.content = val;
+        // Re‑generate excerpt
+        const plain = val.replace(/<[^>]+>/g, '');
+        updateData.excerpt = plain.substring(0, 160) + (plain.length > 160 ? '…' : '');
       }
     }
-
-    if (formData.has('excerpt')) {
-      updateData.excerpt = decodeFormData(formData.get('excerpt') as string || '');
-    }
-
-    if (formData.has('language')) {
-      updateData.language = formData.get('language') as string;
-    }
-
+    if (formData.has('language')) updateData.language = formData.get('language') as string;
     if (formData.has('category')) {
-      const category = decodeFormData(formData.get('category') as string || '');
-      if (category.trim()) {
-        updateData.category = category.trim();
-      }
+      const val = decodeFormData(formData.get('category') as string || '').trim();
+      if (val) updateData.category = val;
     }
-
     if (formData.has('author')) {
-      const author = decodeFormData(formData.get('author') as string || '');
-      if (author.trim()) {
-        updateData.author = author.trim();
-      }
+      const val = decodeFormData(formData.get('author') as string || '').trim();
+      if (val) updateData.author = val;
     }
 
-    // Handle tags
+    // Tags
     if (formData.has('tags')) {
-      const tagsInput = formData.get('tags') as string || '';
+      const input = formData.get('tags') as string || '';
       let tags: string[] = [];
-      
-      if (tagsInput) {
+      if (input) {
         try {
-          const parsedTags = JSON.parse(tagsInput);
-          if (Array.isArray(parsedTags)) {
-            tags = parsedTags.map(tag => decodeFormData(tag));
-          }
-        } catch (error) {
-          tags = tagsInput.split(',')
-            .map(tag => decodeFormData(tag.trim()))
-            .filter(tag => tag.length > 0);
+          const parsed = JSON.parse(input);
+          if (Array.isArray(parsed)) tags = parsed.map((t: string) => decodeFormData(t).trim()).filter(Boolean);
+        } catch {
+          tags = input.split(',').map(t => decodeFormData(t.trim())).filter(Boolean);
         }
       }
       updateData.tags = tags;
     }
 
-    // Handle links
+    // Links
     if (formData.has('links')) {
-      const linksInput = formData.get('links') as string || '';
+      const input = formData.get('links') as string || '';
       let links: string[] = [];
-      
-      if (linksInput) {
+      if (input) {
         try {
-          const parsedLinks = JSON.parse(linksInput);
-          if (Array.isArray(parsedLinks)) {
-            links = parsedLinks;
-          }
-        } catch (error) {
-          links = linksInput.split(',')
-            .map(link => link.trim())
-            .filter(link => link.length > 0);
+          const parsed = JSON.parse(input);
+          if (Array.isArray(parsed)) links = parsed.map((l: string) => l.trim()).filter(Boolean);
+        } catch {
+          links = input.split(',').map(l => l.trim()).filter(Boolean);
         }
       }
       updateData.links = links;
     }
 
-    // Handle thumbnail
+    // Thumbnail
     const thumbnailFile = formData.get('thumbnail') as File | null;
     if (thumbnailFile && thumbnailFile.size > 0) {
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowedTypes.includes(thumbnailFile.type)) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'غلط فائل قسم۔ صرف JPEG، PNG، WebP اور GIF کی اجازت ہے۔' 
-          }, 
+          { success: false, error: 'غلط فائل قسم۔ صرف JPEG, PNG, WebP اور GIF کی اجازت ہے۔' },
           { status: 400 }
         );
       }
-      
       const maxSize = 5 * 1024 * 1024;
       if (thumbnailFile.size > maxSize) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'فائل سائز بہت بڑا ہے۔ زیادہ سے زیادہ سائز 5MB ہے۔' 
-          }, 
+          { success: false, error: 'فائل سائز بہت بڑا ہے۔ زیادہ سے زیادہ سائز 5MB ہے۔' },
           { status: 400 }
         );
       }
-      
       try {
-        const thumbnailUrl = await uploadToCloudinary(thumbnailFile);
-        updateData.thumbnail = thumbnailUrl;
+        updateData.thumbnail = await uploadToCloudinary(thumbnailFile);
       } catch (uploadError: any) {
         console.error('Thumbnail upload failed:', uploadError);
       }
     }
 
-    // Update article
-    const updatedArticle = await Article.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    ).select('-__v').lean();
+    const updated = await Article.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true });
 
     return NextResponse.json({
       success: true,
       message: 'آرٹیکل کامیابی سے اپ ڈیٹ ہو گیا!',
-      data: {
-        ...updatedArticle,
-        _id: updatedArticle?._id?.toString()
-      }
+      data: { _id: updated?._id?.toString(), title: updated?.title },
     });
-
   } catch (error: any) {
-    console.error('PUT Error:', error);
-    
+    console.error('PUT error:', error);
     if (error.name === 'ValidationError') {
-      const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+      const messages = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'ویلڈیشن غلطی',
-          details: validationErrors 
-        },
+        { success: false, error: 'ویلڈیشن غلطی', details: messages.join(', ') },
         { status: 400 }
       );
     }
-    
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی'
-      },
+      { success: false, error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی' },
       { status: 500 }
     );
   }
 }
 
-// DELETE and PATCH methods remain the same...
-// DELETE: Delete article
+// ─── DELETE ──────────────────────────────────────────────────────────────
+
 export async function DELETE(request: NextRequest) {
   try {
     await connectDB();
-    
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
     if (!id) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل آئی ڈی درکار ہے' 
-        }, 
+        { success: false, error: 'آرٹیکل آئی ڈی درکار ہے' },
         { status: 400 }
       );
     }
 
-    const article = await Article.findById(id);
-    if (!article) {
+    const deleted = await Article.findByIdAndDelete(id);
+    if (!deleted) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل نہیں ملا' 
-        }, 
+        { success: false, error: 'آرٹیکل نہیں ملا' },
         { status: 404 }
       );
     }
-
-    await Article.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,
       message: 'آرٹیکل کامیابی سے حذف ہو گیا!',
-    }, {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      }
     });
-
   } catch (error: any) {
-    console.error('DELETE Error:', error);
+    console.error('DELETE error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'آرٹیکل حذف کرنے میں ناکامی'
-      }, 
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { success: false, error: 'آرٹیکل حذف کرنے میں ناکامی' },
+      { status: 500 }
     );
   }
 }
 
-// PATCH: Update specific fields (like view count)
+// ─── PATCH ─────────────────────────────────────────────────────────────────
+
 export async function PATCH(request: NextRequest) {
   try {
     await connectDB();
-    
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const action = searchParams.get('action');
-    
+
     if (!id) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل آئی ڈی درکار ہے' 
-        }, 
+        { success: false, error: 'آرٹیکل آئی ڈی درکار ہے' },
         { status: 400 }
       );
     }
-    
-    const article = await Article.findById(id);
-    if (!article) {
+
+    let updateData: any = {};
+    if (action === 'increment-views') {
+      updateData = { $inc: { views: 1 }, updatedAt: new Date() };
+    } else if (action === 'increment-unique-views') {
+      updateData = { $inc: { uniqueViews: 1 }, updatedAt: new Date() };
+    } else {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'آرٹیکل نہیں ملا' 
-        }, 
+        { success: false, error: 'غلط ایکشن' },
+        { status: 400 }
+      );
+    }
+
+    const updated = await Article.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: 'آرٹیکل نہیں ملا' },
         { status: 404 }
       );
     }
-    
-    let updateData: any = {};
-    
-    switch (action) {
-      case 'increment-views':
-        updateData = { 
-          $inc: { views: 1 },
-          updatedAt: new Date()
-        };
-        break;
-        
-      case 'increment-unique-views':
-        updateData = { 
-          $inc: { uniqueViews: 1 },
-          updatedAt: new Date()
-        };
-        break;
-        
-      default:
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'غلط ایکشن' 
-          }, 
-          { status: 400 }
-        );
-    }
-    
-    const updated = await Article.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true }
-    ).select('-__v').lean();
-    
+
     return NextResponse.json({
       success: true,
       message: 'آرٹیکل کامیابی سے اپ ڈیٹ ہو گیا!',
-      data: {
-        ...updated,
-        _id: updated?._id?.toString()
-      }
-    }, {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      }
+      data: { _id: updated._id.toString(), views: updated.views, uniqueViews: updated.uniqueViews },
     });
-    
   } catch (error: any) {
-    console.error('PATCH Error:', error);
+    console.error('PATCH error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی'
-      }, 
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8'
-        }
-      }
+      { success: false, error: 'آرٹیکل اپ ڈیٹ کرنے میں ناکامی' },
+      { status: 500 }
     );
   }
 }
