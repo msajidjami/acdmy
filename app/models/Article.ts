@@ -1,59 +1,88 @@
-import mongoose from 'mongoose';
+import mongoose, {
+  Schema,
+  models,
+  HydratedDocument,
+} from 'mongoose';
 
-const ArticleSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: [true, 'آرٹیکل کا ٹائٹل درکار ہے'],
-    trim: true,
-  },
-  content: {
-    type: String,
-    required: [true, 'آرٹیکل کا مواد درکار ہے'],
-  },
-  language: {
-    type: String,
-    enum: ['en', 'ur', 'ar'],
-    default: 'en',
-  },
-  category: {
-    type: String,
-    required: [true, 'کیٹگری درکار ہے'],
-    trim: true,
-    default: 'General',
-  },
-  author: {
-    type: String,
-    required: [true, 'مصنف کا نام درکار ہے'],
-    trim: true,
-    default: 'Admin',
-  },
-  thumbnail: {
-    type: String,
-    trim: true,
-    default: '',
-  },
-  views: {
-    type: Number,
-    default: 0,
-  },
-  tags: {
-    type: [String],
-    default: [],
-  },
-  links: {
-    type: [String],
-    default: [],
-  },
-}, {
-  timestamps: true,
-});
+export interface IArticle {
+  title: string;
+  slug?: string;
+  content: string;
+  language: 'en' | 'ur' | 'ar';
+  category: string;
+  author: string;
+  thumbnail?: string;
+  views: number;
+  tags: string[];
+  links: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-// انڈیکس صرف اگر واقعی سرچ کی ضرورت ہو تو رکھیں، ورنہ ہٹا دیں
-ArticleSchema.index(
-  { title: 'text', content: 'text', category: 'text', tags: 'text' },
-  { default_language: 'none' } // ← یہ اردو اور عربی کے لیے ضروری ہے
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+const ArticleSchema = new Schema<IArticle>(
+  {
+    title: { type: String, required: true, trim: true },
+    slug: { type: String, unique: true, sparse: true },
+    content: { type: String, required: true },
+    language: {
+      type: String,
+      enum: ['en', 'ur', 'ar'],
+      default: 'en',
+    },
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      default: 'General',
+    },
+    author: {
+      type: String,
+      required: true,
+      trim: true,
+      default: 'Admin',
+    },
+    thumbnail: { type: String, default: '' },
+    views: { type: Number, default: 0 },
+    tags: { type: [String], default: [] },
+    links: { type: [String], default: [] },
+  },
+  { timestamps: true }
 );
 
-const Article = mongoose.models.Article || mongoose.model('Article', ArticleSchema);
+// ✅ Correct pre-save hook
+ArticleSchema.pre(
+  'save',
+  async function (this: HydratedDocument<IArticle>) {
+    if (this.isModified('title') && !this.slug) {
+      this.slug = generateSlug(this.title);
+    }
+  }
+);
+
+ArticleSchema.index(
+  {
+    title: 'text',
+    content: 'text',
+    category: 'text',
+    tags: 'text',
+  },
+  {
+    default_language: 'none',
+    language_override: 'none',
+  }
+);
+
+const Article =
+  models.Article ||
+  mongoose.model<IArticle>('Article', ArticleSchema);
 
 export default Article;
