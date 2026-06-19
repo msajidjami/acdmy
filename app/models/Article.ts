@@ -13,6 +13,7 @@ export interface IArticle {
   author: string;
   thumbnail?: string;
   views: number;
+  uniqueViews: number; // ✅ Added: unique view counter
   tags: string[];
   links: string[];
   createdAt: Date;
@@ -52,6 +53,7 @@ const ArticleSchema = new Schema<IArticle>(
     },
     thumbnail: { type: String, default: '' },
     views: { type: Number, default: 0 },
+    uniqueViews: { type: Number, default: 0 }, // ✅ Added here
     tags: { type: [String], default: [] },
     links: { type: [String], default: [] },
   },

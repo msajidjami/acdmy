@@ -23,8 +23,8 @@ export async function GET(
       return NextResponse.json({ error: 'Article not found' }, { status: 404 });
     }
 
-    // Increment views
-    await Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } });
+    // ❌ Do NOT increment views here – we'll track unique views separately
+    // await Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } });
 
     return NextResponse.json(article);
   } catch (error) {
