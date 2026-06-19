@@ -1,144 +1,142 @@
 // app/articles/page.tsx
 import Link from 'next/link';
-import ArticleCard from '@/app/components/ArticleCard';
 import { Suspense } from 'react';
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
+import { Metadata } from 'next';
 
-// Types
+// ─── Types ────────────────────────────────────────────────────────────────
 interface ArticleType {
-  _id?: string;
-  id?: string;
+  _id: string;
   title: string;
   thumbnail?: string;
   category?: string;
-  language?: string;
   author?: string;
   excerpt?: string;
-  content?: string;
-  createdAt?: string;
-  views?: number;
-  uniqueViews?: number;
+  createdAt: string;
+  views: number;
   tags?: string[];
 }
 
+// ─── Metadata ─────────────────────────────────────────────────────────────
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const category = params.category as string;
+  const sort = params.sort as string;
+
+  let title = 'Articles – Quran & Islamic Academy';
+  let description = 'Explore authentic Islamic articles, scholarly insights, and educational resources on Quran, Hadith, Fiqh, Seerah, and more.';
+
+  if (category) {
+    title = `${category} – Articles | Quran & Islamic Academy`;
+    description = `Read insightful articles on ${category} from qualified Islamic scholars.`;
+  } else if (sort === 'views') {
+    title = 'Most Popular Articles – Quran & Islamic Academy';
+    description = 'The most read and shared Islamic articles on our platform.';
+  } else if (sort === 'createdAt') {
+    title = 'Latest Articles – Quran & Islamic Academy';
+    description = 'Newly published Islamic articles and scholarly reflections.';
+  }
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: 'https://www.quranandislamic.com/articles',
+      siteName: 'Quran & Islamic Academy',
+      images: [
+        {
+          url: 'https://www.quranandislamic.com/og-articles.jpg',
+          width: 1200,
+          height: 630,
+          alt: 'Islamic Articles',
+        },
+      ],
+      type: 'website',
+    },
+    alternates: {
+      canonical: 'https://www.quranandislamic.com/articles',
+    },
+  };
+}
+
+// ─── Data Fetching ──────────────────────────────────────────────────────
 async function getArticles(filters?: {
   category?: string;
-  language?: string;
   sort?: string;
   author?: string;
 }): Promise<ArticleType[]> {
   try {
     await connectDB();
-    
-    // Query بنائیں
     const query: any = {};
-    
-    if (filters?.category && filters.category !== 'all') {
-      query.category = filters.category;
-    }
-    
-    if (filters?.language) {
-      query.language = filters.language;
-    }
-    
-    if (filters?.author) {
-      query.author = filters.author;
-    }
+    if (filters?.category && filters.category !== 'all') query.category = filters.category;
+    if (filters?.author) query.author = filters.author;
 
-    // Sort options
     let sortOptions: any = { createdAt: -1 };
-    if (filters?.sort === 'views') {
-      sortOptions = { views: -1, createdAt: -1 };
-    } else if (filters?.sort === 'createdAt') {
-      sortOptions = { createdAt: -1 };
-    }
+    if (filters?.sort === 'views') sortOptions = { views: -1, createdAt: -1 };
+    else if (filters?.sort === 'createdAt') sortOptions = { createdAt: -1 };
 
-    // آرٹیکلز fetch کریں
     const articles = await Article.find(query)
       .sort(sortOptions)
       .limit(50)
       .select('-__v')
       .lean();
 
-    // آرٹیکلز کو transform کریں
     return articles.map((article: any) => ({
-      _id: article._id?.toString(),
-      id: article._id?.toString(),
-      title: article.title || 'بلا عنوان',
+      _id: article._id.toString(),
+      title: article.title || 'Untitled',
       thumbnail: article.thumbnail,
-      category: article.category || 'عام',
-      language: article.language || 'ur',
-      author: article.author || 'ایڈمن',
+      category: article.category || 'General',
+      author: article.author || 'Admin',
       excerpt: article.excerpt || '',
-      content: article.content || '',
       createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
       views: article.views || 0,
-      uniqueViews: article.uniqueViews || article.views || 0,
       tags: article.tags || [],
     }));
-    
   } catch (error) {
     console.error('Error fetching articles:', error);
     return [];
   }
 }
 
-// Filter buttons component
-function FilterButtons({ 
-  activeFilter,
-  currentCategory 
-}: { 
-  activeFilter: string;
-  currentCategory?: string;
-}) {
+// ─── Components ──────────────────────────────────────────────────────────
+
+// Filter Buttons
+function FilterButtons({ activeFilter, currentCategory }: { activeFilter: string; currentCategory?: string }) {
   const filters = [
-    { key: 'all', label: 'تمام', icon: '📚', sort: '', language: '' },
-    { key: 'popular', label: 'مقبول ترین', icon: '🔥', sort: 'views', language: '' },
-    { key: 'latest', label: 'تازہ ترین', icon: '🆕', sort: 'createdAt', language: '' },
-    { key: 'urdu', label: 'اردو', icon: '🇵🇰', sort: '', language: 'ur' },
-    { key: 'english', label: 'انگریزی', icon: '🇬🇧', sort: '', language: 'en' },
+    { key: 'all', label: 'All', icon: '📚', sort: '', category: '' },
+    { key: 'popular', label: 'Most Popular', icon: '🔥', sort: 'views', category: '' },
+    { key: 'latest', label: 'Latest', icon: '🆕', sort: 'createdAt', category: '' },
   ];
 
   return (
-    <div className="mt-6 flex flex-wrap gap-3">
+    <div className="mt-6 flex flex-wrap items-center gap-3">
       {filters.map((filter) => {
         const isActive = activeFilter === filter.key;
-        
         const params = new URLSearchParams();
-        
-        if (filter.sort) {
-          params.set('sort', filter.sort);
-        }
-        
-        if (filter.language) {
-          params.set('language', filter.language);
-        }
-        
-        if (currentCategory && currentCategory !== 'all') {
-          params.set('category', currentCategory);
-        }
-        
-        const queryString = params.toString();
-        const href = queryString ? `/articles?${queryString}` : '/articles';
+        if (filter.sort) params.set('sort', filter.sort);
+        if (currentCategory && currentCategory !== 'all') params.set('category', currentCategory);
+        const href = params.toString() ? `/articles?${params.toString()}` : '/articles';
 
         return (
           <Link
             key={filter.key}
             href={href}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-medium transition-all ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all ${
               isActive
-                ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg'
-                : 'bg-green-100 text-green-700 hover:bg-green-200 hover:shadow-md'
+                ? 'bg-teal-700 text-white shadow-md'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <span className="text-lg">{filter.icon}</span>
             <span>{filter.label}</span>
-            {isActive && (
-              <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded-full">
-                ✓
-              </span>
-            )}
+            {isActive && <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded-full">✓</span>}
           </Link>
         );
       })}
@@ -146,355 +144,193 @@ function FilterButtons({
   );
 }
 
-// Loading skeleton for categories
-function CategoryFilterSkeleton() {
+// Category Filter
+async function CategoryFilterButtons({
+  currentSort,
+  currentCategory,
+}: {
+  currentSort?: string;
+  currentCategory?: string;
+}) {
+  await connectDB();
+  let categories = await Article.distinct('category');
+  if (!categories || categories.length === 0) {
+    categories = ['Quran', 'Hadith', 'Fiqh', 'Seerah', 'Tafsir', 'Aqeedah', 'History'];
+  }
+
+  const baseParams = new URLSearchParams();
+  if (currentSort) baseParams.set('sort', currentSort);
+  const baseQuery = baseParams.toString();
+
   return (
-    <div className="mt-4">
-      <div className="h-6 bg-gray-200 rounded w-32 mb-3 animate-pulse"></div>
-      <div className="flex flex-wrap gap-3">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="h-9 bg-gray-200 rounded-lg w-20 animate-pulse"></div>
-        ))}
+    <div className="mt-6">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">Categories</h3>
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={baseQuery ? `/articles?${baseQuery}` : '/articles'}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            !currentCategory ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          All
+        </Link>
+        {categories.map((cat) => {
+          const params = new URLSearchParams(baseQuery);
+          params.set('category', cat);
+          return (
+            <Link
+              key={cat}
+              href={`/articles?${params.toString()}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                currentCategory === cat
+                  ? 'bg-teal-700 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {cat}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// Category filter buttons component
-async function CategoryFilterButtons({
-  currentSort,
-  currentLanguage
+// ─── Main Page ──────────────────────────────────────────────────────────
+
+export default async function ArticlesPage({
+  searchParams,
 }: {
-  currentSort?: string;
-  currentLanguage?: string;
-}) {
-  try {
-    await connectDB();
-    
-    // ڈیٹا بیس سے منفرد categories حاصل کریں
-    const categories = await Article.distinct('category');
-    
-    // اگر کوئی category نہ ملے تو default categories
-    const categoryList = Array.isArray(categories) && categories.length > 0 
-      ? categories.slice(0, 8)
-      : ['عبادات', 'سیرت النبی', 'قرآن پاک', 'حدیث', 'فقہ', 'اخلاق', 'تاریخ'];
-
-    const params = new URLSearchParams();
-    if (currentSort) params.set('sort', currentSort);
-    if (currentLanguage) params.set('language', currentLanguage);
-    const baseQuery = params.toString();
-
-    return (
-      <div className="mt-4">
-        <h3 className="text-lg font-bold text-green-800 mb-3">زمرہ جات:</h3>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href={baseQuery ? `/articles?${baseQuery}` : '/articles'}
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-medium hover:shadow-md transition-all"
-          >
-            تمام
-          </Link>
-          {categoryList.map((category: string) => {
-            const categoryParams = new URLSearchParams(baseQuery);
-            categoryParams.set('category', category);
-            return (
-              <Link
-                key={category}
-                href={`/articles?${categoryParams.toString()}`}
-                className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-medium hover:bg-blue-200 hover:shadow-md transition-all"
-              >
-                {category}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    );
-  } catch (error) {
-    return (
-      <div className="mt-4">
-        <h3 className="text-lg font-bold text-green-800 mb-3">زمرہ جات:</h3>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/articles"
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-medium"
-          >
-            تمام
-          </Link>
-          {['عبادات', 'سیرت', 'قرآن', 'حدیث'].map((category) => (
-            <Link
-              key={category}
-              href={`/articles?category=${category}`}
-              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-medium"
-            >
-              {category}
-            </Link>
-          ))}
-        </div>
-      </div>
-    );
-  }
-}
-
-// Main page component
-export default async function ArticlesPage(props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  // Await the searchParams promise
-  const searchParams = props.searchParams ? await props.searchParams : {};
-  
-  // Extract parameters
-  const sort = Array.isArray(searchParams.sort) ? searchParams.sort[0] : searchParams.sort;
-  const language = Array.isArray(searchParams.language) ? searchParams.language[0] : searchParams.language;
-  const category = Array.isArray(searchParams.category) ? searchParams.category[0] : searchParams.category;
-  const filter = Array.isArray(searchParams.filter) ? searchParams.filter[0] : searchParams.filter;
+  const params = searchParams ? await searchParams : {};
+  const sort = Array.isArray(params.sort) ? params.sort[0] : params.sort;
+  const category = Array.isArray(params.category) ? params.category[0] : params.category;
+
+  // Build filters
+  const filters: any = {};
+  if (sort) filters.sort = sort;
+  if (category) filters.category = category;
+
+  const articles = await getArticles(filters);
 
   // Determine active filter for UI
   let activeFilter = 'all';
-  if (filter === 'popular' || sort === 'views') activeFilter = 'popular';
-  else if (filter === 'latest' || sort === 'createdAt') activeFilter = 'latest';
-  else if (filter === 'urdu' || language === 'ur') activeFilter = 'urdu';
-  else if (filter === 'english' || language === 'en') activeFilter = 'english';
-  else if (category) activeFilter = 'category';
-
-  // Build filters for API
-  const filters: any = {};
-  
-  // Handle legacy filter parameter
-  if (filter === 'popular' || sort === 'views') {
-    filters.sort = 'views';
-  } else if (filter === 'latest' || sort === 'createdAt') {
-    filters.sort = 'createdAt';
-  } else if (sort) {
-    filters.sort = sort;
-  }
-  
-  if (filter === 'urdu' || language === 'ur') {
-    filters.language = 'ur';
-  } else if (filter === 'english' || language === 'en') {
-    filters.language = 'en';
-  } else if (language) {
-    filters.language = language;
-  }
-  
-  if (category) {
-    filters.category = category;
-  }
-
-  // Fetch articles with filters
-  const articles = await getArticles(filters);
-  
-  // Get page title and description
-  const getPageTitle = () => {
-    if (category) return `${category} - آرٹیکلز`;
-    if (filter === 'popular' || sort === 'views') return 'مقبول ترین آرٹیکلز';
-    if (filter === 'latest' || sort === 'createdAt') return 'تازہ ترین آرٹیکلز';
-    if (filter === 'urdu' || language === 'ur') return 'اردو آرٹیکلز';
-    if (filter === 'english' || language === 'en') return 'انگریزی آرٹیکلز';
-    return 'اسلامی آرٹیکلز';
-  };
-
-  const getPageDescription = () => {
-    if (category) return `${category} سے متعلق اسلامی مضامین کا ذخیرہ`;
-    if (filter === 'popular' || sort === 'views') return 'سب سے زیادہ پڑھے جانے والے اسلامی مضامین';
-    if (filter === 'latest' || sort === 'createdAt') return 'تازہ ترین اسلامی مضامین';
-    if (filter === 'urdu' || language === 'ur') return 'اردو زبان میں اسلامی مضامین';
-    if (filter === 'english' || language === 'en') return 'انگریزی زبان میں اسلامی مضامین';
-    return 'قرآن و سنت کی روشنی میں اسلامی تعلیمات کا وسیع ذخیرہ';
-  };
-
-  // Function to remove a specific parameter from current URL
-  const removeParam = (paramToRemove: string) => {
-    const newParams = new URLSearchParams();
-    
-    if (sort && paramToRemove !== 'sort') newParams.set('sort', sort);
-    if (language && paramToRemove !== 'language') newParams.set('language', language);
-    if (category && paramToRemove !== 'category') newParams.set('category', category);
-    if (filter && paramToRemove !== 'filter') newParams.set('filter', filter);
-    
-    const queryString = newParams.toString();
-    return queryString ? `/articles?${queryString}` : '/articles';
-  };
+  if (sort === 'views') activeFilter = 'popular';
+  else if (sort === 'createdAt') activeFilter = 'latest';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white pt-24">
-      <div className="container mx-auto px-4 py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-extrabold text-green-800 mb-3 tracking-tight">
-            {getPageTitle()}
+    <div className="min-h-screen bg-slate-50 pt-28 pb-12">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
+        {/* Header */}
+        <div className="border-b border-slate-200 pb-6 mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
+            Islamic <span className="text-teal-700">Articles</span>
           </h1>
-          <p className="text-gray-600 text-lg">
-            {getPageDescription()}
+          <p className="text-slate-600 mt-2 text-lg">
+            Scholarly insights, Quranic reflections, and authentic Islamic knowledge
           </p>
-          
-          {/* Active Filters Display */}
-          {(filter || sort || language || category) && (
-            <div className="mt-4 flex items-center gap-3">
-              <span className="text-sm text-gray-500">فعال فلٹرز:</span>
-              <div className="flex flex-wrap gap-2">
-                {category && (
-                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                    {category}
-                    <Link 
-                      href={removeParam('category')}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ✕
-                    </Link>
-                  </span>
-                )}
-                {(filter === 'popular' || sort === 'views') && (
-                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                    مقبول ترین
-                    <Link 
-                      href={sort === 'views' ? removeParam('sort') : removeParam('filter')}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ✕
-                    </Link>
-                  </span>
-                )}
-                {(filter === 'latest' || sort === 'createdAt') && (
-                  <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                    تازہ ترین
-                    <Link 
-                      href={sort === 'createdAt' ? removeParam('sort') : removeParam('filter')}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ✕
-                    </Link>
-                  </span>
-                )}
-                {(filter === 'urdu' || language === 'ur') && (
-                  <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                    اردو
-                    <Link 
-                      href={language === 'ur' ? removeParam('language') : removeParam('filter')}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ✕
-                    </Link>
-                  </span>
-                )}
-                {(filter === 'english' || language === 'en') && (
-                  <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-                    انگریزی
-                    <Link 
-                      href={language === 'en' ? removeParam('language') : removeParam('filter')}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      ✕
-                    </Link>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Filter Buttons */}
-        <FilterButtons activeFilter={activeFilter} currentCategory={category} />
-        
-        {/* Category Filter Buttons */}
-        <Suspense fallback={<CategoryFilterSkeleton />}>
-          <CategoryFilterButtons currentSort={sort} currentLanguage={language} />
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-4 mb-8">
+          <FilterButtons activeFilter={activeFilter} currentCategory={category} />
+        </div>
+
+        <Suspense fallback={<div className="h-12 w-full bg-slate-200 rounded animate-pulse" />}>
+          <CategoryFilterButtons currentSort={sort} currentCategory={category} />
         </Suspense>
 
         {/* Results Count */}
-        {articles.length > 0 && (
-          <div className="mt-8 mb-6 flex items-center justify-between">
-            <div className="text-gray-600">
-              کل <span className="font-bold text-green-700">{articles.length}</span> آرٹیکلز
-            </div>
-            <div className="text-sm text-gray-500">
-              {sort === 'views' ? 'ترتیب: مقبول ترین' : 
-               sort === 'createdAt' ? 'ترتیب: تازہ ترین' :
-               language === 'ur' ? 'زبان: اردو' :
-               language === 'en' ? 'زبان: انگریزی' :
-               category ? `زمرہ: ${category}` : 'ترتیب: ڈیفالٹ'}
-            </div>
-          </div>
-        )}
+        <div className="mt-8 flex justify-between items-center text-sm text-slate-500 border-t border-slate-200 pt-4">
+          <span>
+            Showing <strong className="text-slate-800">{articles.length}</strong> articles
+          </span>
+          {sort && (
+            <span className="capitalize">
+              Sorted by: <span className="font-medium text-slate-700">{sort === 'views' ? 'Popularity' : 'Latest'}</span>
+            </span>
+          )}
+        </div>
 
-        {/* Articles Grid */}
+        {/* Grid */}
         {articles.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-lg border border-green-200 mt-8">
-            <div className="text-5xl mb-6">📝</div>
-            <h3 className="text-2xl font-bold text-gray-700 mb-4">کوئی آرٹیکل نہیں ملا</h3>
-            <p className="text-gray-600 mb-6">
-              آپ کی منتخب کردہ شرائط کے مطابق کوئی آرٹیکل دستیاب نہیں ہے۔
+          <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-slate-200 mt-8">
+            <div className="text-5xl mb-4">📭</div>
+            <h3 className="text-2xl font-bold text-slate-700 mb-2">No Articles Found</h3>
+            <p className="text-slate-500 max-w-md mx-auto">
+              Try adjusting your filters or browse all articles.
             </p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <Link
-                href="/articles"
-                className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-full font-bold hover:shadow-lg transition-all"
-              >
-                تمام آرٹیکلز دیکھیں
-              </Link>
-              <Link
-                href="/articles?sort=views"
-                className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-3 rounded-full font-bold hover:shadow-lg transition-all"
-              >
-                مقبول ترین دیکھیں
-              </Link>
-              <Link
-                href="/admin/articles"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 rounded-full font-bold hover:shadow-lg transition-all"
-              >
-                نیا آرٹیکل بنائیں
-              </Link>
-            </div>
+            <Link
+              href="/articles"
+              className="mt-6 inline-block bg-teal-700 text-white px-8 py-3 rounded-lg font-semibold hover:bg-teal-800 transition"
+            >
+              View All Articles
+            </Link>
           </div>
         ) : (
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 mt-8">
-            {articles.map((article, index) => (
-              <ArticleCard 
-                key={article._id || article.id || index} 
-                article={article} 
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+            {articles.map((article) => (
+              <Link
+                key={article._id}
+                href={`/articles/${article._id}`}
+                className="group bg-white rounded-xl shadow-sm hover:shadow-xl border border-slate-200 overflow-hidden transition-all duration-300 hover:-translate-y-1"
+              >
+                <div className="relative h-48 bg-slate-100">
+                  {article.thumbnail ? (
+                    <img
+                      src={article.thumbnail}
+                      alt={article.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-teal-50 to-emerald-50 text-6xl opacity-30">
+                      📖
+                    </div>
+                  )}
+                  <div className="absolute top-3 right-3 bg-teal-700/90 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                    {article.category}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h2 className="text-xl font-bold text-slate-900 group-hover:text-teal-700 transition line-clamp-2">
+                    {article.title}
+                  </h2>
+                  <p className="text-slate-600 text-sm mt-2 line-clamp-3">{article.excerpt}</p>
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <span className="font-medium text-slate-700">{article.author}</span>
+                      <span className="text-slate-300">•</span>
+                      <span>{new Date(article.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="text-slate-400">👁</span>
+                      <span>{article.views}</span>
+                    </span>
+                  </div>
+                </div>
+              </Link>
             ))}
           </div>
         )}
 
-        {/* Pagination - اگر زیادہ آرٹیکلز ہوں */}
-        {articles.length > 0 && articles.length >= 12 && (
-          <div className="mt-12 flex justify-center">
-            <nav className="flex items-center gap-2">
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                ← پچھلا
-              </button>
-              <span className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold">
-                1
-              </span>
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                اگلا →
-              </button>
-            </nav>
-          </div>
-        )}
-
-        {/* Call to Action */}
-        <div className="mt-16 bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-8 text-center text-white">
-          <h2 className="text-3xl font-bold mb-4">آپ بھی اپنا آرٹیکل شائع کریں!</h2>
-          <p className="text-lg mb-6">
-            اسلامی معلومات اور تجربات دوسروں تک پہنچائیں
+        {/* CTA Section */}
+        <section className="mt-16 bg-slate-900 text-white rounded-2xl p-8 text-center">
+          <h2 className="text-2xl font-bold mb-2">Contribute Your Knowledge</h2>
+          <p className="text-slate-300 max-w-2xl mx-auto">
+            Share your Islamic insights, research, and reflections with our growing community of learners.
           </p>
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Link
-              href="/admin/articles"
-              className="bg-white text-green-700 px-8 py-3 rounded-full font-bold hover:bg-gray-100 transition-all"
-            >
-              نیا آرٹیکل بنائیں
-            </Link>
-            <Link
-              href="/contact"
-              className="bg-transparent border-2 border-white text-white px-8 py-3 rounded-full font-bold hover:bg-white/10 transition-all"
-            >
-              رابطہ کریں
-            </Link>
-          </div>
-        </div>
+          <Link
+            href="/admin/articles"
+            className="mt-4 inline-block bg-teal-600 hover:bg-teal-500 text-white font-semibold px-8 py-3 rounded-lg transition"
+          >
+            Submit an Article
+          </Link>
+        </section>
       </div>
     </div>
   );
