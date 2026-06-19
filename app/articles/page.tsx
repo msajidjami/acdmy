@@ -14,9 +14,12 @@ interface ArticleType {
   author?: string;
   excerpt?: string;
   createdAt: string;
-  views: number;
+  uniqueViews: number;
   tags?: string[];
 }
+
+// ✅ Disable static caching to always fetch fresh data
+export const revalidate = 0;
 
 // ─── Metadata ─────────────────────────────────────────────────────────────
 export async function generateMetadata({
@@ -79,7 +82,7 @@ async function getArticles(filters?: {
     if (filters?.author) query.author = filters.author;
 
     let sortOptions: any = { createdAt: -1 };
-    if (filters?.sort === 'views') sortOptions = { views: -1, createdAt: -1 };
+    if (filters?.sort === 'views') sortOptions = { uniqueViews: -1, createdAt: -1 };
     else if (filters?.sort === 'createdAt') sortOptions = { createdAt: -1 };
 
     const articles = await Article.find(query)
@@ -96,7 +99,8 @@ async function getArticles(filters?: {
       author: article.author || 'Admin',
       excerpt: article.excerpt || '',
       createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
-      views: article.views || 0,
+      // ✅ Ensure uniqueViews has a value, even if missing from DB
+      uniqueViews: article.uniqueViews ?? 0,
       tags: article.tags || [],
     }));
   } catch (error) {
@@ -207,14 +211,12 @@ export default async function ArticlesPage({
   const sort = Array.isArray(params.sort) ? params.sort[0] : params.sort;
   const category = Array.isArray(params.category) ? params.category[0] : params.category;
 
-  // Build filters
   const filters: any = {};
   if (sort) filters.sort = sort;
   if (category) filters.category = category;
 
   const articles = await getArticles(filters);
 
-  // Determine active filter for UI
   let activeFilter = 'all';
   if (sort === 'views') activeFilter = 'popular';
   else if (sort === 'createdAt') activeFilter = 'latest';
@@ -309,7 +311,8 @@ export default async function ArticlesPage({
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="text-slate-400">👁</span>
-                      <span>{article.views}</span>
+                      {/* ✅ Fallback added to ensure number always shows */}
+                      <span>{article.uniqueViews ?? 0}</span>
                     </span>
                   </div>
                 </div>

@@ -3,9 +3,13 @@ import Link from 'next/link';
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { Metadata } from 'next';
-import { Eye, Calendar, User, Tag } from 'lucide-react';
+import { Calendar, User, Tag } from 'lucide-react';
 import ArticleShareButtons from '@/app/components/ArticleShareButtons';
+import ArticleViewCounter from '@/app/components/ArticleViewCounter';
 import mongoose from 'mongoose';
+
+// ✅ Disable static caching – always fetch fresh data
+export const revalidate = 0;
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
@@ -40,12 +44,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const article = await getArticle(slug);
 
   if (!article) notFound();
-
-  // Increment views (already done in API route, but we do it again here for safety)
-  // Actually better to increment via API call from client, but we'll keep it simple.
-  // We'll use the API route for view increment, but we can also do it here.
-  // However, doing it here would block rendering, so we'll do it in the client side.
-  // We'll rely on the API route which is called from the client later.
 
   const formatDate = (date: Date) =>
     new Date(date).toLocaleDateString('en-US', {
@@ -96,10 +94,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   <Calendar className="w-4 h-4" />
                   {formatDate(article.createdAt)}
                 </span>
-                <span className="flex items-center gap-1">
-                  <Eye className="w-4 h-4" />
-                  {article.views} views
-                </span>
+                {/* ✅ Display and update views using client component */}
+                <ArticleViewCounter
+                  articleId={article._id.toString()}
+                  initialViews={article.uniqueViews || 0}
+                />
               </div>
             </header>
 
