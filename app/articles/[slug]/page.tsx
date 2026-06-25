@@ -1,5 +1,7 @@
+// app/articles/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import Script from 'next/script'; // ✅ Next.js Script import کیا گیا ہے
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { Metadata } from 'next';
@@ -56,6 +58,22 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   return (
     <article className="min-h-screen bg-slate-50 pt-28 pb-12">
+      
+      {/* 🚀 Monetag Ads Integration Starts Here */}
+      <Script 
+        id="monetag-vignette" 
+        src="https://n6wxm.com/vignette.min.js" 
+        data-zone="11197980" 
+        strategy="afterInteractive" 
+      />
+      <Script 
+        id="monetag-in-page-push" 
+        src="https://nap5k.com/tag.min.js" 
+        data-zone="11197983" 
+        strategy="afterInteractive" 
+      />
+      {/* 🚀 Monetag Ads Integration Ends Here */}
+
       <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
         <Link
           href="/articles"
@@ -94,7 +112,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   <Calendar className="w-4 h-4" />
                   {formatDate(article.createdAt)}
                 </span>
-                {/* ✅ Display and update views using client component */}
                 <ArticleViewCounter
                   articleId={article._id.toString()}
                   initialViews={article.uniqueViews || 0}
