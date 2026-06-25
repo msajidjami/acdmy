@@ -1,6 +1,7 @@
 // app/articles/page.tsx
 import Link from 'next/link';
 import { Suspense } from 'react';
+import Script from 'next/script'; // ✅ Next.js Script import کیا گیا ہے
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { Metadata } from 'next';
@@ -223,6 +224,22 @@ export default async function ArticlesPage({
 
   return (
     <div className="min-h-screen bg-slate-50 pt-28 pb-12">
+      
+      {/* 🚀 Monetag Ads Integration Starts Here */}
+      <Script 
+        id="monetag-vignette-articles-page" 
+        src="https://n6wxm.com/vignette.min.js" 
+        data-zone="11197980" 
+        strategy="afterInteractive" 
+      />
+      <Script 
+        id="monetag-in-page-push-articles-page" 
+        src="https://nap5k.com/tag.min.js" 
+        data-zone="11197983" 
+        strategy="afterInteractive" 
+      />
+      {/* 🚀 Monetag Ads Integration Ends Here */}
+
       <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
         {/* Header */}
         <div className="border-b border-slate-200 pb-6 mb-8">
@@ -311,7 +328,6 @@ export default async function ArticlesPage({
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="text-slate-400">👁</span>
-                      {/* ✅ Fallback added to ensure number always shows */}
                       <span>{article.uniqueViews ?? 0}</span>
                     </span>
                   </div>
