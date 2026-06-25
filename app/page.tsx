@@ -8,6 +8,7 @@ import connectDB from '@/app/lib/dbConnect';
 import Review from '@/app/models/Review';
 import Admission from '@/app/models/Admission';
 import Link from 'next/link';
+import ClientChatWrapper from './components/ClientChatWrapper';
 
 interface SessionUser {
   userId: string;
@@ -17,7 +18,8 @@ interface SessionUser {
   name?: string;
 }
 
-// Data Fetching Functions
+// ─── Data Fetching Functions ─────────────────────────────────────────────
+
 async function getReviews() {
   try {
     await connectDB();
@@ -27,7 +29,9 @@ async function getReviews() {
       _id: review._id.toString(),
       date: review.date?.toISOString() || new Date().toISOString(),
     }));
-  } catch (error) { return []; }
+  } catch (error) {
+    return [];
+  }
 }
 
 async function getArticles() {
@@ -40,15 +44,21 @@ async function getArticles() {
       _id: article._id.toString(),
       createdAt: article.createdAt?.toISOString() || new Date().toISOString(),
     }));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 async function getCounter() {
   try {
     await connectDB();
-    const enrolledCount = await Admission.countDocuments({ currentStatus: { $in: ['enrolled', 'in-progress', 'completed'] } });
+    const enrolledCount = await Admission.countDocuments({
+      currentStatus: { $in: ['enrolled', 'in-progress', 'completed'] },
+    });
     return { enrolled: enrolledCount || 450, completed: 1200, teachers: 35 };
-  } catch (error) { return { enrolled: 450, completed: 1200, teachers: 35 }; }
+  } catch (error) {
+    return { enrolled: 450, completed: 1200, teachers: 35 };
+  }
 }
 
 async function getSession(): Promise<SessionUser | null> {
@@ -64,10 +74,14 @@ async function getSession(): Promise<SessionUser | null> {
       email: decoded.email,
       role: decoded.role,
       isVerified: decoded.isVerified || false,
-      name: decoded.name || decoded.email.split('@')[0]
+      name: decoded.name || decoded.email.split('@')[0],
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
+
+// ─── Main Component ─────────────────────────────────────────────────────
 
 export default async function Home() {
   const [reviews, counter, articles, session] = await Promise.all([
@@ -95,16 +109,16 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-teal-500 selection:text-white">
-      
-      {/* سیشن ڈیبگ الرٹ (صرف ڈیولپمنٹ موڈ کے لیے) */}
+      {/* Debug info */}
       {process.env.NODE_ENV === 'development' && (
         <div className="fixed top-4 right-4 z-[9999] bg-slate-900 text-slate-100 rounded-xl p-4 text-xs shadow-2xl max-w-sm border border-slate-700 backdrop-blur-lg">
           <div className="font-bold text-teal-400 mb-1">🔧 System Status</div>
           <div>Authenticated: {typedSession ? 'Yes' : 'No'}</div>
+          <div>Role: {typedSession?.role || 'Guest'}</div>
         </div>
       )}
 
-      {/* یوزر ڈیش بورڈ */}
+      {/* User Dashboard */}
       {dashboardUser && !isAdmin && (
         <section className="py-6 bg-white border-b border-slate-200">
           <div className="container mx-auto px-6">
@@ -113,44 +127,57 @@ export default async function Home() {
         </section>
       )}
 
-      {/* --- فلوٹنگ ایکشن بٹنز (سب نیچے دائیں جانب) --- */}
+      {/* Floating Action Buttons */}
       <div className="fixed bottom-8 right-6 z-[9999] flex flex-col space-y-3 items-end">
-        
-        {/* 1. ایڈمن پینل بٹن */}
         {isAdmin && (
-          <Link href="/admin/dashboard" className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-xl shadow-2xl font-bold flex items-center gap-2 transition-transform transform hover:-translate-y-1 text-sm">
+          <Link
+            href="/admin/dashboard"
+            className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-xl shadow-2xl font-bold flex items-center gap-2 transition-transform transform hover:-translate-y-1 text-sm"
+          >
             <span>Management Console</span>
           </Link>
         )}
 
-        {/* 2. واٹس ایپ بٹن */}
-        <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-xl shadow-2xl font-bold flex items-center gap-2 transition-transform transform hover:-translate-y-1 text-sm">
+        <a
+          href={whatsappLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-xl shadow-2xl font-bold flex items-center gap-2 transition-transform transform hover:-translate-y-1 text-sm"
+        >
           <span>Direct WhatsApp Support</span>
         </a>
 
-        {/* 3. میسج بٹن */}
-        <Link href="/contact" className="bg-slate-900 hover:bg-black text-white px-5 py-3.5 rounded-xl shadow-xl font-semibold flex items-center gap-2 transition-transform transform hover:-translate-y-1 text-sm border border-slate-800">
-          <span>Leave a Message</span>
-        </Link>
-
-        {/* 4. لاگ ان / لاگ آؤٹ بٹن */}
         {!typedSession ? (
-          <Link href="/login" className="bg-white hover:bg-slate-100 text-slate-900 px-5 py-3 rounded-xl shadow-lg font-semibold border border-slate-200 text-sm">
+          <Link
+            href="/login"
+            className="bg-white hover:bg-slate-100 text-slate-900 px-5 py-3 rounded-xl shadow-lg font-semibold border border-slate-200 text-sm"
+          >
             <span>Student Portal Access</span>
           </Link>
         ) : (
-          <a href="/api/auth/logout" className="bg-red-50 hover:bg-red-100 text-red-700 px-5 py-3 rounded-xl shadow-lg font-semibold border border-red-200 text-sm">
+          <a
+            href="/api/auth/logout"
+            className="bg-red-50 hover:bg-red-100 text-red-700 px-5 py-3 rounded-xl shadow-lg font-semibold border border-red-200 text-sm"
+          >
             <span>Secure Logout</span>
           </a>
         )}
       </div>
 
       <main>
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-teal-600 font-bold text-xl">Loading Experience...</div>}>
-          {/* ریویوز، کاؤنٹر اور آرٹیکلز کا ڈیٹا پاس کیا گیا ہے */}
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center text-teal-600 font-bold text-xl">
+              Loading Experience...
+            </div>
+          }
+        >
           <HomeContent reviews={reviews} counter={counter} articles={articles} />
         </Suspense>
       </main>
+
+      {/* Chat Widget & Admin Chat Button */}
+      <ClientChatWrapper isAdmin={isAdmin} />
     </div>
   );
 }
