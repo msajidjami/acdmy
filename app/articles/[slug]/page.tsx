@@ -1,7 +1,7 @@
 // app/articles/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import Script from 'next/script'; // ✅ Next.js Script import کیا گیا ہے
+import Script from 'next/script';
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/app/models/Article';
 import { Metadata } from 'next';
@@ -17,18 +17,54 @@ interface ArticlePageProps {
   params: Promise<{ slug: string }>;
 }
 
+// 🚀 1. Advanced SEO Meta Tags Generation
 export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
   const { slug } = await params;
   await connectDB();
+  
   let article = await Article.findOne({ slug }).lean();
   if (!article && mongoose.Types.ObjectId.isValid(slug)) {
     article = await Article.findById(slug).lean();
   }
+  
   if (!article) return { title: 'Article Not Found' };
 
+  const canonicalUrl = `https://www.quranandislamic.com/articles/${article.slug || article._id}`;
+  // HTML ٹیگز کو ختم کر کے صاف ڈسکرپشن بنانا
+  const plainDescription = article.seo?.metaDescription || article.excerpt || article.content?.substring(0, 160).replace(/<[^>]+>/g, '') + '...';
+
   return {
-    title: `${article.title} – Quran & Islamic Academy`,
-    description: article.excerpt || article.content?.substring(0, 160),
+    title: `${article.seo?.metaTitle || article.title} – Quran & Islamic Academy`,
+    description: plainDescription,
+    keywords: article.tags?.join(', ') || 'Islamic Articles, Quran, Sunnah, Islamic Education',
+    authors: [{ name: article.author || 'Admin' }],
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: article.title,
+      description: plainDescription,
+      url: canonicalUrl,
+      siteName: 'Quran & Islamic Academy',
+      type: 'article',
+      publishedTime: new Date(article.createdAt).toISOString(),
+      modifiedTime: new Date(article.updatedAt || article.createdAt).toISOString(),
+      authors: [article.author || 'Admin'],
+      images: [
+        {
+          url: article.thumbnail || 'https://www.quranandislamic.com/default-thumbnail.jpg',
+          width: 1200,
+          height: 630,
+          alt: article.title,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: article.title,
+      description: plainDescription,
+      images: [article.thumbnail || 'https://www.quranandislamic.com/default-thumbnail.jpg'],
+    },
   };
 }
 
@@ -56,9 +92,42 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   const articleUrl = `https://www.quranandislamic.com/articles/${article.slug || article._id}`;
 
+  // 🚀 2. JSON-LD Schema for Google Rich Results
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": articleUrl
+    },
+    "headline": article.title,
+    "image": [article.thumbnail || "https://www.quranandislamic.com/default-thumbnail.jpg"],
+    "datePublished": new Date(article.createdAt).toISOString(),
+    "dateModified": new Date(article.updatedAt || article.createdAt).toISOString(),
+    "author": {
+      "@type": "Person",
+      "name": article.author || "Admin"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Quran & Islamic Academy",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://www.quranandislamic.com/logo.png"
+      }
+    },
+    "description": article.excerpt || article.content?.substring(0, 160).replace(/<[^>]+>/g, '')
+  };
+
   return (
     <article className="min-h-screen bg-slate-50 pt-28 pb-12">
       
+      {/* JSON-LD Schema Script */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       {/* 🚀 Monetag Ads Integration Starts Here */}
       <Script 
         id="monetag-vignette" 
@@ -108,10 +177,10 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   <User className="w-4 h-4" />
                   <span className="font-medium text-slate-700">{article.author}</span>
                 </span>
-                <span className="flex items-center gap-1">
+                <time dateTime={new Date(article.createdAt).toISOString()} className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
                   {formatDate(article.createdAt)}
-                </span>
+                </time>
                 <ArticleViewCounter
                   articleId={article._id.toString()}
                   initialViews={article.uniqueViews || 0}
@@ -119,8 +188,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             </header>
 
+            {/* 🚀 3. Text Formatting Fix: whitespace-pre-wrap added */}
             <div
-              className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-700 prose-a:text-teal-700 prose-blockquote:border-l-4 prose-blockquote:border-teal-600 prose-blockquote:pl-6 prose-blockquote:italic prose-blockquote:bg-slate-50 prose-img:rounded-xl prose-ul:list-disc prose-ol:list-decimal"
+              className="prose prose-lg max-w-none whitespace-pre-wrap prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-700 prose-a:text-teal-700 prose-blockquote:border-l-4 prose-blockquote:border-teal-600 prose-blockquote:pl-6 prose-blockquote:italic prose-blockquote:bg-slate-50 prose-img:rounded-xl prose-ul:list-disc prose-ol:list-decimal"
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
@@ -150,5 +220,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </div>
       </div>
     </article>
+    //good
   );
+  // good
 }
+// ok hy good
