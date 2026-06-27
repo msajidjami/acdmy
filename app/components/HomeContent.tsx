@@ -254,38 +254,57 @@ export default function HomeContent({ reviews, counter, articles = [] }: HomeCon
       
       {/* 1. Hero Section (unchanged) */}
       <section className="relative bg-slate-900 pt-28 pb-20 overflow-hidden border-b border-slate-800">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black opacity-80"></div>
-        
-        <div className="container mx-auto px-6 relative z-10 text-center max-w-5xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <span className="inline-block py-1 px-3 rounded-full bg-teal-500/10 text-teal-400 text-sm font-semibold tracking-wider uppercase mb-6 border border-teal-500/20">
-              International Online Academy
-            </span>
-            
-            <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-white mb-6 tracking-tight leading-tight">
-              Bridging <span className="text-teal-400">Islamic Heritage</span> <br className="hidden sm:block" />
-              with <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Modern Sciences</span>
-            </h1>
-            
-            <p className="text-lg sm:text-xl text-slate-300 mb-10 max-w-3xl mx-auto font-light leading-relaxed">
-              Delivering bespoke, one-on-one online tutoring to students worldwide. We seamlessly integrate authentic <strong className="text-white font-medium">Islamic Studies</strong> with premier <strong className="text-white font-medium">Academic Curricula</strong>, nurturing both intellectual excellence and core values.
-            </p>
+  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black opacity-80"></div>
 
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-              <Link href="/register" className="w-full sm:w-auto bg-teal-600 hover:bg-teal-500 text-white px-8 py-4 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-1">
-                Start Your Free Trial
-              </Link>
-              <Link href="#courses" className="w-full sm:w-auto bg-transparent border border-slate-600 hover:bg-slate-800 text-white px-8 py-4 rounded-xl font-semibold transition-colors">
-                Explore Our Programs
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+  <div className="container mx-auto px-6 relative z-10 text-center max-w-5xl">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8 }}
+    >
+      <span className="inline-block py-1 px-3 rounded-full bg-teal-500/10 text-teal-400 text-sm font-semibold tracking-wider uppercase mb-6 border border-teal-500/20">
+        QuranAndIslamic.com | International Online Academy
+      </span>
+
+```
+  <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold text-white mb-6 tracking-tight leading-tight">
+    Learn Quran Online with{" "}
+    <span className="text-teal-400">QuranAndIslamic.com</span>
+    <br className="hidden sm:block" />
+    Islamic Studies &{" "}
+    <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+      Modern Sciences
+    </span>
+  </h1>
+
+  <p className="text-lg sm:text-xl text-slate-300 mb-10 max-w-3xl mx-auto font-light leading-relaxed">
+    Join QuranAndIslamic.com for professional one-on-one online Quran
+    classes, Tajweed, Hifz-ul-Quran, Islamic Studies, Arabic Language,
+    Mathematics, Science and English courses. Empowering students worldwide
+    with authentic Islamic knowledge and academic excellence.
+  </p>
+
+  <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+    <Link
+      href="/register"
+      className="w-full sm:w-auto bg-teal-600 hover:bg-teal-500 text-white px-8 py-4 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-1"
+    >
+      Start Your Free Trial
+    </Link>
+
+    <Link
+      href="#courses"
+      className="w-full sm:w-auto bg-transparent border border-slate-600 hover:bg-slate-800 text-white px-8 py-4 rounded-xl font-semibold transition-colors"
+    >
+      Explore Our Programs
+    </Link>
+  </div>
+</motion.div>
+```
+
+  </div>
+</section>
+
 
       {/* 2. Courses Section - unchanged */}
       <section id="courses" className="py-20 bg-white">
