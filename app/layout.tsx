@@ -21,13 +21,16 @@ const poppins = Poppins({
 // ── EXPANDED METADATA for US & dual‑focus ──
 export const metadata: Metadata = {
   title: {
-    default: 'Quran & Islamic Academy – Online Islamic & Academic Tutoring in USA',
+    default: 'Quran & Islamic Academy  Online Islamic & Academic Tutoring in USA',
     template: '%s | Quran & Islamic Academy',
   },
   description:
     'Top‑rated online Islamic & academic tutoring for US students. Learn Quran, Tajweed, Arabic, Islamic Studies alongside Math, Physics, Chemistry & Biology. One‑on‑one classes by qualified scholars and teachers.',
   keywords: [
     // Religious / Islamic
+    "quranandislamic",
+    "quran and islamic",
+    "قرآن و سنت",
     'online quran classes usa',
     'learn quran online',
     'tajweed course usa',
