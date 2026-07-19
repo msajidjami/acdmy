@@ -1,10 +1,9 @@
-// app/layout.tsx
-
 import type { Metadata, Viewport } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from './context/AuthContext';
-import Navbar from './components/Navbar';
+// ✅ یہاں سے درست AuthProvider درآمد کریں
+import { AuthProvider } from './components/AuthProvider';  // یہ وہی ہے جو ہم نے بنایا
+import Navbar from './components/Navbar';  // ✅ یہ وہی Navbar جو useAuth استعمال کرتی ہے
 import Script from 'next/script';
 
 const inter = Inter({
@@ -27,7 +26,6 @@ export const metadata: Metadata = {
   description:
     'Top‑rated online Islamic & academic tutoring for US students. Learn Quran, Tajweed, Arabic, Islamic Studies alongside Math, Physics, Chemistry & Biology. One‑on‑one classes by qualified scholars and teachers.',
   keywords: [
-    // Religious / Islamic
     "quranandislamic",
     "quran and islamic",
     "قرآن و سنت",
@@ -41,7 +39,6 @@ export const metadata: Metadata = {
     'quran teacher usa',
     'online madrasa',
     'seerah classes',
-    // Academic / Secular
     'online math tutor usa',
     'physics tutoring online',
     'chemistry help online',
@@ -53,7 +50,6 @@ export const metadata: Metadata = {
     'a level physics',
     'academic tutoring usa',
     'homeschooling support',
-    // Combined
     'online education platform',
     'virtual learning usa',
     'one on one tutoring',
@@ -101,7 +97,7 @@ export const metadata: Metadata = {
     description:
       'Learn Quran, Arabic, Islamic Studies, Math, Physics, Chemistry & Biology with certified teachers. Free trial.',
     images: ['https://www.quranandislamic.com/og-image.jpg'],
-    site: '@QuranAcademyUS', // اپنا ٹویٹر ہینڈل دیں
+    site: '@QuranAcademyUS',
     creator: '@QuranAcademyUS',
   },
   icons: {
@@ -109,7 +105,7 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   verification: {
-    google: 'YOUR_GOOGLE_VERIFICATION_CODE', // گوگل سرچ کنسول کوڈ ڈالیں
+    google: 'YOUR_GOOGLE_VERIFICATION_CODE',
   },
 };
 
@@ -117,7 +113,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  userScalable: true, // userScalable: true is better for accessibility
+  userScalable: true,
 };
 
 export const dynamic = 'force-dynamic';
@@ -134,7 +130,7 @@ const structuredData = {
   sameAs: [
     'https://www.facebook.com/QuranIslamicAcademy',
     'https://www.instagram.com/quranislamicacademy',
-    'https://www.youtube.com/channel/UC...', // اپنا یوٹیوب لنک
+    'https://www.youtube.com/channel/UC...',
   ],
   address: {
     '@type': 'PostalAddress',
@@ -224,7 +220,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* JSON‑LD Structured Data */}
         <Script
           id="structured-data"
           type="application/ld+json"
@@ -233,6 +228,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
+        {/* ✅ AuthProvider نے Navbar اور باقی سب کو لپیٹ لیا */}
         <AuthProvider>
           <Navbar />
           {children}

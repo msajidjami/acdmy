@@ -1,5 +1,3 @@
-// app/components/Navbar.tsx
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -13,26 +11,19 @@ import {
   X,
   Mail,
 } from 'lucide-react';
-import { useAuth } from '@/app/context/AuthContext';
+import { useAuth } from '../hooks/useAuth'; // ✅ ہمارا کسٹم ہک
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 export default function Navbar() {
   const router = useRouter();
-
-  // 🔧 FIX: Use the correct property name from your AuthContext.
-  // If your context uses 'loading' instead of 'isLoading', change here.
-  const { user, isAdmin, logout } = useAuth();
-
-  // Fallback loading state: if 'useAuth' does not provide a loading flag,
-  // we assume loading is true until the user object is defined.
-  // You can also add a 'loading' property from the context if available.
-  const isLoading = false; // Replace this with actual loading state from context if available.
-
-  // If your context provides a 'loading' property, use it like this:
-  // const { user, isAdmin, logout, loading: isLoading } = useAuth();
+  const { user, loading, logout } = useAuth(); // ✅ صحیح نام
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
+
+  const isAdmin = user?.role === 'admin'; // یا جیسے آپ چیک کرتے ہیں
 
   // Close mobile menu on outside click
   useEffect(() => {
@@ -54,7 +45,7 @@ export default function Navbar() {
       return;
     }
     try {
-      const res = await fetch('/api/admin/messages/count', {
+      const res = await fetch(`${API_BASE}/api/admin/messages/count`, {
         credentials: 'include',
       });
       if (res.ok) {
@@ -152,7 +143,7 @@ export default function Navbar() {
           )}
 
           {/* User Section - Desktop */}
-          {isLoading ? (
+          {loading ? (
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-teal-600"></div>
               <span className="text-slate-600">Loading...</span>
@@ -262,7 +253,7 @@ export default function Navbar() {
             )}
 
             {/* User Section - Mobile */}
-            {isLoading ? (
+            {loading ? (
               <div className="flex items-center space-x-2 py-3 border-b border-slate-100">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-teal-600"></div>
                 <span className="text-slate-600">Loading...</span>
