@@ -1,3 +1,4 @@
+// app/api/admin/courses/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
@@ -16,6 +17,22 @@ async function verifyAdmin() {
   } catch { return false; }
 }
 
+// GET: تمام کورسز کی فہرست
+export async function GET(req: NextRequest) {
+  if (!(await verifyAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    await connectDB();
+    const courses = await Course.find({}).lean();
+    return NextResponse.json({ courses });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// POST: نیا کورس شامل کریں
 export async function POST(req: NextRequest) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,12 +43,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { title, description, category, instructor, price, duration, level, isActive } = body;
 
-    // ✅ instructor کو مطلوبہ فیلڈز سے ہٹا دیں
     if (!title || !description || !category || !duration || !level) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // ✅ ڈیٹا آبجیکٹ بنائیں (instructor کو صرف اس صورت شامل کریں جب فراہم کیا گیا ہو)
     const courseData: any = {
       title,
       description,
@@ -47,10 +62,8 @@ export async function POST(req: NextRequest) {
     }
 
     const course = await Course.create(courseData);
-
-    return NextResponse.json({ success: true, course: { id: course._id, title: course.title } }, { status: 201 });
+    return NextResponse.json({ success: true, course }, { status: 201 });
   } catch (error: any) {
-    console.error('Create course error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
