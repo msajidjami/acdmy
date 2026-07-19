@@ -1,30 +1,38 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, Variants } from 'framer-motion';
+import Link from 'next/link';
+import {
+  EnvelopeIcon,
+  LockClosedIcon,
+  EyeIcon,
+  EyeSlashIcon,
+} from '@heroicons/react/24/outline';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: {
-      duration: 0.6,
-      ease: "easeOut",
-    },
+    transition: { duration: 0.6, ease: 'easeOut' },
   },
 };
 
 export default function LoginPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -34,24 +42,19 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
     if (!formData.email || !formData.password) {
-      setError('Email and password are required');
-      setLoading(false);
+      setError('All fields are required');
       return;
     }
 
-    if (!formData.email.endsWith('@gmail.com')) {
-      setError('Only Gmail addresses are allowed');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -60,16 +63,20 @@ export default function LoginPage() {
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
-        router.push('/');
+      if (response.ok) {
+        router.push('/dashboard');
       } else {
-        setError(data.message || 'Login failed – Invalid email or password');
+        setError(data.message || 'Login failed');
       }
-    } catch (err) {
+    } catch {
       setError('Unable to connect to server. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = `${API_BASE}/api/auth/google`;
   };
 
   return (
@@ -77,88 +84,147 @@ export default function LoginPage() {
       initial="hidden"
       animate="visible"
       variants={fadeInUp}
-      className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 flex items-center justify-center p-4"
+      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4"
     >
       <div className="max-w-md w-full">
         <div className="text-center mb-10">
-          <Link href="/" className="inline-block">
-            <div className="flex items-center justify-center space-x-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-r from-teal-600 to-emerald-600 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14v6l9-5M12 20l-9-5" />
-                </svg>
-              </div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-teal-700 to-emerald-600 bg-clip-text text-transparent">
-                Quran Academy
-              </h1>
-            </div>
-          </Link>
-          <h2 className="text-3xl font-bold text-slate-800 mb-3">Welcome Back</h2>
-          <p className="text-slate-600">Sign in to your account</p>
+          <motion.div
+            className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center mb-4"
+            whileHover={{ scale: 1.05 }}
+          >
+            <LockClosedIcon className="h-8 w-8 text-white" />
+          </motion.div>
+          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
+          <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
         </div>
 
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm"
-          >
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
             {error}
-          </motion.div>
+          </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition outline-none"
-              placeholder="example@gmail.com"
-              required
-            />
-            <p className="text-xs text-slate-500 mt-1">Only Gmail addresses are allowed</p>
-          </div>
+        <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <div className="relative">
+                <EnvelopeIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="example@gmail.com"
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-200 transition outline-none"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <div className="relative">
+                <LockClosedIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3"
+                >
+                  {showPassword ? (
+                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <EyeIcon className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              </div>
+            </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 text-white py-4 rounded-xl font-bold hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </motion.button>
-
-          <div className="text-center">
-            <p className="text-slate-600">
-              Don't have an account?{' '}
-              <Link href="/signup" className="text-teal-600 hover:text-teal-700 font-medium">
-                Sign Up
+            <div className="flex items-center justify-between">
+              <label className="flex items-center text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <span className="ml-2">Remember me</span>
+              </label>
+              <Link href="/forgot-password" className="text-sm text-indigo-600 hover:underline">
+                Forgot password?
               </Link>
-            </p>
-          </div>
-        </form>
+            </div>
 
-        <div className="mt-8 text-center text-slate-500 text-sm">
-          <p>© 2025 Quran Academy. All rights reserved.</p>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 transition"
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </motion.button>
+          </form>
+
+          {/* Google Login */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                Sign in with Google
+              </motion.button>
+            </div>
+          </div>
+
+          <p className="mt-8 text-center text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link href="/signup" className="text-indigo-600 font-medium hover:underline">
+              Sign Up
+            </Link>
+          </p>
         </div>
       </div>
     </motion.div>

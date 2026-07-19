@@ -1,8 +1,8 @@
-// app/components/ChatWidget.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { X, Send, MessageCircle } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth'; // ✅ نیا درست ہک
 
 const COURSES = [
   'Quran & Tajweed Mastery',
@@ -17,18 +17,8 @@ const COURSES = [
   'English Language & Literature',
 ];
 
-// ✅ Safe useAuth – fallback if context missing
-let useAuth: any;
-try {
-  // Dynamic require to avoid build issues if AuthContext is missing
-  const authModule = require('@/app/context/AuthContext');
-  useAuth = authModule.useAuth;
-} catch {
-  useAuth = () => ({ user: null });
-}
-
 export default function ChatWidget() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // ✅ اب یہ کام کرے گا
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
