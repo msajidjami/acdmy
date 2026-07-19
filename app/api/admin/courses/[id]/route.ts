@@ -17,14 +17,17 @@ async function verifyAdmin() {
   } catch { return false; }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> } // ✅ params کو Promise کے طور پر ٹائپ کیا
+) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     await connectDB();
-    const { id } = await params;
+    const { id } = await params; // ✅ params کو await کیا
     const deleted = await Course.findByIdAndDelete(id);
     if (!deleted) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
