@@ -31,7 +31,7 @@ async function verifyAdmin() {
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // ✅ params کو Promise کے طور پر ٹائپ کیا
 ) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -39,7 +39,7 @@ export async function PUT(
 
   try {
     await connectDB();
-    const { id } = await params;
+    const { id } = await params; // ✅ params کو await کیا
     const body = await req.json();
     const { status, progress, teacherId } = body;
 

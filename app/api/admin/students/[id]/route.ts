@@ -29,7 +29,7 @@ async function verifyAdmin() {
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // ✅ params کو Promise کے طور پر ٹائپ کیا
 ) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -37,9 +37,8 @@ export async function DELETE(
 
   try {
     await connectDB();
-    const { id } = params;
+    const { id } = await params; // ✅ params کو await کیا
 
-    // Check if user exists and is a student (role 'user')
     const user = await User.findById(id);
     if (!user) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
