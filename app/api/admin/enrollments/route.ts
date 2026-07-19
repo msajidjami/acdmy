@@ -1,9 +1,11 @@
-// app/api/admin/students/route.ts
+// app/api/admin/enrollments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
+import Enrollment from '@/app/models/Enrollment';
 import User from '@/app/models/User';
+import Course from '@/app/models/Course';
 
 const ADMIN_ROLES = ['admin', 'owner', 'super-admin', 'education-admin', 'darul-ifta-admin', 'section1-admin', 'section2-admin'];
 
@@ -17,7 +19,7 @@ async function verifyAdmin() {
   } catch { return false; }
 }
 
-// GET: تمام طلباء کی فہرست
+// GET: تمام انرولمنٹس کی فہرست (فیلٹر کے ساتھ)
 export async function GET(req: NextRequest) {
   if (!(await verifyAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,25 +27,22 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectDB();
-    const students = await User.find({ role: 'user' }).select('-password').lean();
-    return NextResponse.json({ students });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get('status');
 
-// POST: نیا طالب علم شامل کریں (اگر ضرورت ہو)
-export async function POST(req: NextRequest) {
-  if (!(await verifyAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+    const filter: any = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
 
-  try {
-    await connectDB();
-    const body = await req.json();
-    // ... validation and creation logic
-    // یہاں آپ اپنی مرضی کے مطابق کوڈ ڈالیں
-    return NextResponse.json({ success: true });
+    const enrollments = await Enrollment.find(filter)
+      .sort({ enrolledAt: -1 })
+      .lean();
+
+    // Manual population (if needed) – یا آپ populate بھی استعمال کر سکتے ہیں
+    // ...
+
+    return NextResponse.json({ enrollments });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
