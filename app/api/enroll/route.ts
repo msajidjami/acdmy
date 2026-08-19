@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
 import Enrollment from '@/app/models/Enrollment';
 import User from '@/app/models/User';
-import Course from '@/app/models/Course'; // ✅ Course ماڈل شامل کریں
+import Course from '@/app/models/Course';
+import Progress from '@/app/models/Progress';  // ✅ شامل کریں
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -11,9 +12,8 @@ export async function POST(request: NextRequest) {
     await connectDB();
     const body = await request.json();
 
-    const { fullName, email, phone, courseTitle, message } = body; // ✅ courseTitle استعمال کریں
+    const { fullName, email, phone, courseTitle, message } = body;
 
-    // ─── Validation ────────────────────────────────────────────────
     if (!fullName || !email || !phone || !courseTitle) {
       return NextResponse.json(
         { success: false, message: 'All required fields must be filled.' },
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ─── Find Course by Title ──────────────────────────────────────
+    // ─── کورس تلاش کریں ──────────────────────────────
     const course = await Course.findOne({ title: courseTitle });
     if (!course) {
       return NextResponse.json(
@@ -30,9 +30,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ─── Find or Create User ───────────────────────────────────────
+    // ─── صارف تلاش کریں یا بنائیں ────────────────────
     let user = await User.findOne({ email });
-
     if (!user) {
       const tempPassword = crypto.randomBytes(16).toString('hex');
       user = await User.create({
@@ -44,14 +43,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ─── Create Enrollment Record (ObjectId کے ساتھ) ──────────────
+    // ─── انرولمنٹ بنائیں ──────────────────────────────
     const enrollment = await Enrollment.create({
-      studentId: user._id,          // ✅ ObjectId
-      courseId: course._id,         // ✅ ObjectId
+      studentId: user._id,
+      courseId: course._id,
       status: 'pending',
       progress: 0,
       enrolledAt: new Date(),
     });
+
+    // ─── پروگریس ڈاکیومنٹ بنائیں (نصاب کی بنیاد پر) ──
+    if (course.syllabus && course.syllabus.length > 0) {
+      const unitProgress = course.syllabus.map((unit: any) => ({
+        unitNumber: unit.unitNumber,
+        completed: false,
+      }));
+
+      await Progress.create({
+        studentId: user._id,
+        courseId: course._id,
+        unitProgress,
+      });
+    }
 
     return NextResponse.json(
       {

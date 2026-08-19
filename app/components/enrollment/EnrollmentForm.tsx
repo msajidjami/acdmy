@@ -1,7 +1,7 @@
 // components/enrollment/EnrollmentForm.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,28 +24,46 @@ type EnrollmentFormData = z.infer<typeof enrollmentSchema>;
 interface EnrollmentFormProps {
   onClose: () => void;
   onSuccess?: () => void;
-  defaultEmail?: string; // ✅ نئی پراپ
+  defaultEmail?: string;
+  defaultCourseTitle?: string; // جس کورس پر کلک کیا گیا
 }
-
-// ─── Courses List ──────────────────────────────────────────────────
-
-const courses = [
-  { id: 'quran-tajweed', label: 'Quran with Tajweed' },
-  { id: 'quran-hifz', label: 'Quran Hifz (Memorization)' },
-  { id: 'arabic-language', label: 'Arabic Language' },
-  { id: 'islamic-studies', label: 'Islamic Studies' },
-  { id: 'fiqh', label: 'Fiqh (Islamic Jurisprudence)' },
-  { id: 'tafsir', label: 'Tafsir (Quran Exegesis)' },
-];
 
 // ─── Component ────────────────────────────────────────────────────
 
-export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }: EnrollmentFormProps) {
+export default function EnrollmentForm({ 
+  onClose, 
+  onSuccess, 
+  defaultEmail = '', 
+  defaultCourseTitle = '' 
+}: EnrollmentFormProps) {
+  const [courses, setCourses] = useState<{ id: string; title: string }[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
+
+  // ── کورسز کو API سے لائیں ─────────────────────────────────────
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoadingCourses(true);
+        const res = await fetch('/api/courses');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to fetch courses');
+        setCourses(data.courses || []);
+      } catch (err: any) {
+        setCoursesError(err.message);
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
+    fetchCourses();
+  }, []);
+
   const {
     control,
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
+    setValue,
   } = useForm<EnrollmentFormData>({
     resolver: zodResolver(enrollmentSchema),
     defaultValues: {
@@ -57,31 +75,47 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
     },
   });
 
+  // ── جب کورسز لوڈ ہو جائیں اور defaultCourseTitle موجود ہو تو منتخب کریں ──
+  useEffect(() => {
+    if (!loadingCourses && defaultCourseTitle && courses.length > 0) {
+      const matched = courses.find(c => c.title === defaultCourseTitle);
+      if (matched) {
+        setValue('course', matched.id);
+      }
+    }
+  }, [loadingCourses, courses, defaultCourseTitle, setValue]);
+
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
   const onSubmit = async (data: EnrollmentFormData) => {
     try {
       setSubmitStatus('idle');
+
+      const selectedCourse = courses.find(c => c.id === data.course);
+      const courseTitle = selectedCourse ? selectedCourse.title : data.course;
+
+      const payload = {
+        fullName: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        courseTitle: courseTitle,
+        message: data.message,
+      };
+
       const response = await fetch('/api/enroll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Enrollment failed');
-      }
+      if (!response.ok) throw new Error(result.message || 'Enrollment failed');
 
       setSubmitStatus('success');
       reset();
       if (onSuccess) onSuccess();
-      // خود بند ہونے کے لیے 3 سیکنڈ
-      setTimeout(() => {
-        onClose();
-      }, 3000);
+      setTimeout(() => onClose(), 3000);
     } catch (error: any) {
       setSubmitStatus('error');
       setErrorMessage(error.message || 'Something went wrong. Please try again.');
@@ -91,7 +125,6 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
@@ -105,7 +138,9 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
             Enroll Now
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            {defaultEmail ? 'You are enrolling with your logged-in email.' : 'Start your journey with us. Fill in the details below.'}
+            {defaultEmail 
+              ? `You are enrolling with your logged-in email.${defaultCourseTitle ? ` Course: ${defaultCourseTitle}` : ''}` 
+              : 'Start your journey with us. Fill in the details below.'}
           </p>
 
           {submitStatus === 'success' ? (
@@ -120,7 +155,6 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
             </div>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Full Name *
@@ -137,12 +171,9 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                     />
                   )}
                 />
-                {errors.fullName && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.fullName.message}</p>
-                )}
+                {errors.fullName && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.fullName.message}</p>}
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email Address *
@@ -162,9 +193,7 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                     />
                   )}
                 />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>
-                )}
+                {errors.email && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>}
                 {defaultEmail && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     Using your logged-in email. This cannot be changed.
@@ -172,7 +201,6 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                 )}
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Phone Number *
@@ -189,12 +217,9 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                     />
                   )}
                 />
-                {errors.phone && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.phone.message}</p>
-                )}
+                {errors.phone && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.phone.message}</p>}
               </div>
 
-              {/* Course Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Select Course *
@@ -205,23 +230,24 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                   render={({ field }) => (
                     <select
                       {...field}
-                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      disabled={loadingCourses}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-60"
                     >
-                      <option value="">Choose a course...</option>
+                      <option value="">
+                        {loadingCourses ? 'Loading courses...' : 'Choose a course...'}
+                      </option>
                       {courses.map((course) => (
                         <option key={course.id} value={course.id}>
-                          {course.label}
+                          {course.title}
                         </option>
                       ))}
                     </select>
                   )}
                 />
-                {errors.course && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.course.message}</p>
-                )}
+                {coursesError && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{coursesError}</p>}
+                {errors.course && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.course.message}</p>}
               </div>
 
-              {/* Message */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Additional Message (Optional)
@@ -246,7 +272,6 @@ export default function EnrollmentForm({ onClose, onSuccess, defaultEmail = '' }
                 </div>
               )}
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isSubmitting}
