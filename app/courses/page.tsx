@@ -1,160 +1,47 @@
 // app/courses/page.tsx
 import Link from 'next/link';
 import { Metadata } from 'next';
-import { CheckCircle, Clock, GraduationCap, BookOpen, Users } from 'lucide-react';
+import connectDB from '@/app/lib/dbConnect';
+import Course from '@/app/models/Course';
+import { Clock, Users } from 'lucide-react';
+import SyllabusButton from '@/app/components/SyllabusButton';
+import EnrollNowButton from '@/app/components/EnrollNowButton';
 
 // ─── Metadata ─────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
   title: 'Courses – Quran & Islamic Academy',
-  description:
-    'Explore our comprehensive range of Islamic and academic courses. From Quran and Tajweed to Mathematics, Physics, and Biology – all taught by qualified scholars.',
-  openGraph: {
-    title: 'Courses – Quran & Islamic Academy',
-    description:
-      'Online courses in Quran, Islamic Studies, Math, Physics, Chemistry, and more. Enroll today and start your learning journey.',
-    url: 'https://www.quranandislamic.com/courses',
-    siteName: 'Quran & Islamic Academy',
-    images: [
-      {
-        url: 'https://www.quranandislamic.com/og-courses.jpg',
-        width: 1200,
-        height: 630,
-        alt: 'Quran & Islamic Academy Courses',
-      },
-    ],
-    type: 'website',
-  },
-  alternates: {
-    canonical: 'https://www.quranandislamic.com/courses',
-  },
+  description: 'Explore our comprehensive range of Islamic and academic courses.',
+  // ... باقی metadata
 };
 
-// ─── Data ─────────────────────────────────────────────────────────────────
-// This can later be replaced with a database fetch
-const allCourses = [
-  // Islamic Courses
-  {
-    id: 1,
-    title: 'Quran & Tajweed Mastery',
-    description:
-      'Master fluent recitation of the Holy Quran with precise Tajweed rules. Guided by certified native Arab and English-speaking scholars.',
-    icon: '📖',
-    category: 'Islamic',
-    level: 'Beginner to Advanced',
-    duration: '3-6 Months',
-    features: ['Arabic Alphabets', 'Fluent Quran Reading', 'Daily Practice'],
-  },
-  {
-    id: 2,
-    title: 'Islamic Studies & Seerah',
-    description:
-      'In-depth exploration of Prophetic Biography, daily supplications, and core Islamic values to build strong moral character.',
-    icon: '🌙',
-    category: 'Islamic',
-    level: 'All Levels',
-    duration: '6-12 Months',
-    features: ['Prophetic Life Events', 'Daily Masnoon Duas', 'Character Building'],
-  },
-  {
-    id: 3,
-    title: 'Quran Hifz Program',
-    description:
-      'Structured memorization pathway using advanced revision techniques to ensure lifelong retention of the Holy Quran.',
-    icon: '💖',
-    category: 'Islamic',
-    level: 'Intermediate',
-    duration: '2-3 Years',
-    features: ['Customized Pacing', 'Retention Techniques', 'Tajweed Integration'],
-  },
-  {
-    id: 4,
-    title: 'Tafseer & Quranic Exegesis',
-    description:
-      'Study the deeper meanings of the Quran with classical and contemporary Tafseer. Understand the context and wisdom behind each verse.',
-    icon: '📚',
-    category: 'Islamic',
-    level: 'Intermediate to Advanced',
-    duration: '1-2 Years',
-    features: ['Classical Tafseer', 'Thematic Studies', 'Contemporary Application'],
-  },
-  {
-    id: 5,
-    title: 'Arabic Language & Grammar',
-    description:
-      'Build a strong foundation in Arabic language – from basic grammar to advanced rhetoric – to understand the Quran and Hadith in their original language.',
-    icon: '🔤',
-    category: 'Islamic',
-    level: 'Beginner to Advanced',
-    duration: '6-18 Months',
-    features: ['Grammar (Nahw & Sarf)', 'Vocabulary Building', 'Reading & Writing Skills'],
-  },
-  {
-    id: 6,
-    title: 'Fiqh & Islamic Jurisprudence',
-    description:
-      'Learn the rulings of worship, transactions, and daily life according to the authentic schools of Islamic law.',
-    icon: '⚖️',
-    category: 'Islamic',
-    level: 'Intermediate',
-    duration: '1-2 Years',
-    features: ['Worship (Ibadat)', 'Transactions (Muamalat)', 'Contemporary Fiqh Issues'],
-  },
+// ─── Data Fetching ──────────────────────────────────────────────────────
+async function getCourses(category: string) {
+  await connectDB();
+  const filter: any = { isActive: true };
+  if (category !== 'All') filter.category = category;
+  const courses = await Course.find(filter)
+    .select('title description category level duration price studentsEnrolled syllabusFiles syllabusDescription')
+    .sort({ title: 1 })
+    .lean();
 
-  // Academic Courses
-  {
-    id: 7,
-    title: 'Advanced Mathematics',
-    description:
-      'Comprehensive instruction covering Algebra, Calculus, and Geometry aligned with US, UK, and international academic standards.',
-    icon: '📐',
-    category: 'Academic',
-    level: 'Grades 8–12 & College Prep',
-    duration: 'Flexible',
-    features: ['O/A Levels & AP Math', 'SAT Prep Foundation', 'Conceptual Clarity'],
-  },
-  {
-    id: 8,
-    title: 'Physics & Chemistry',
-    description:
-      'Core scientific principles taught by elite faculty, ensuring robust preparation for board exams and standardized tests.',
-    icon: '⚛️',
-    category: 'Academic',
-    level: 'Grades 9–12',
-    duration: 'Flexible',
-    features: ['Practical Concepts', 'Exam Preparation', 'Problem-Solving Skills'],
-  },
-  {
-    id: 9,
-    title: 'Biology & Pre-Medical',
-    description:
-      'Intensive biology curriculum focusing on cellular biology, human anatomy, and genetics to build a strong pre-medical foundation.',
-    icon: '🧬',
-    category: 'Academic',
-    level: 'Grades 10–12 & Pre-Med',
-    duration: 'Flexible',
-    features: ['Human Anatomy', 'Cellular Biology', 'Pre-Med Foundation'],
-  },
-  {
-    id: 10,
-    title: 'English Language & Literature',
-    description:
-      'Develop strong reading, writing, and analytical skills through the study of classic and contemporary literature, essay writing, and critical thinking.',
-    icon: '📝',
-    category: 'Academic',
-    level: 'Grades 6–12',
-    duration: 'Flexible',
-    features: ['Reading Comprehension', 'Essay Writing', 'Literary Analysis'],
-  },
-];
-
-// ─── Filter Logic ────────────────────────────────────────────────────────
-function getFilteredCourses(category: string) {
-  if (category === 'All') return allCourses;
-  return allCourses.filter((course) => course.category === category);
+  return courses.map((c: any) => ({
+    id: c._id.toString(),
+    title: c.title,
+    description: c.description,
+    category: c.category,
+    level: c.level,
+    duration: c.duration,
+    price: c.price,
+    studentsEnrolled: c.studentsEnrolled || 0,
+    syllabusDescription: c.syllabusDescription || '',
+    syllabusFiles: (c.syllabusFiles || []).map((f: any) => ({
+      fileName: f.fileName,
+      fileUrl: f.fileUrl,
+    })),
+  }));
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
-
 export default async function CoursesPage({
   searchParams,
 }: {
@@ -164,14 +51,22 @@ export default async function CoursesPage({
   const categoryParam = Array.isArray(params.category) ? params.category[0] : params.category;
   const activeCategory = categoryParam && ['Islamic', 'Academic'].includes(categoryParam) ? categoryParam : 'All';
 
-  const filteredCourses = getFilteredCourses(activeCategory);
+  const courses = await getCourses(activeCategory);
 
-  // Build filter links
   const filterLinks = [
     { label: 'All', value: 'All' },
     { label: 'Islamic', value: 'Islamic' },
     { label: 'Academic', value: 'Academic' },
   ];
+
+  const getLevelColor = (level: string) => {
+    const map: Record<string, string> = {
+      beginner: 'bg-green-100 text-green-700',
+      intermediate: 'bg-yellow-100 text-yellow-700',
+      advanced: 'bg-red-100 text-red-700',
+    };
+    return map[level] || 'bg-gray-100 text-gray-700';
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pt-28 pb-12">
@@ -209,12 +104,12 @@ export default async function CoursesPage({
 
         {/* Results Count */}
         <div className="text-sm text-slate-500 mb-6">
-          Showing <strong className="text-slate-800">{filteredCourses.length}</strong> courses
+          Showing <strong className="text-slate-800">{courses.length}</strong> courses
           {activeCategory !== 'All' && ` in "${activeCategory}"`}
         </div>
 
         {/* Course Grid */}
-        {filteredCourses.length === 0 ? (
+        {courses.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-slate-200">
             <div className="text-5xl mb-4">📭</div>
             <h3 className="text-2xl font-bold text-slate-700 mb-2">No Courses Found</h3>
@@ -222,14 +117,16 @@ export default async function CoursesPage({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => (
+            {courses.map((course) => (
               <div
                 key={course.id}
                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 group flex flex-col"
               >
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-4xl">{course.icon}</span>
+                    <span className="text-4xl">
+                      {course.category === 'Islamic' ? '📖' : '📐'}
+                    </span>
                     <span
                       className={`text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full ${
                         course.category === 'Islamic'
@@ -246,31 +143,33 @@ export default async function CoursesPage({
                   <p className="text-slate-600 text-sm mb-4 flex-1">{course.description}</p>
 
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mb-4">
-                    <span className="flex items-center gap-1">
-                      <GraduationCap className="w-4 h-4" />
+                    <span className={`px-2 py-0.5 rounded-full ${getLevelColor(course.level)}`}>
                       {course.level}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
                       {course.duration}
                     </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-4 h-4" />
+                      {course.studentsEnrolled}
+                    </span>
                   </div>
 
-                  <ul className="space-y-1.5 mb-4 text-sm">
-                    {course.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-slate-600">
-                        <CheckCircle className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link
-                    href="/contact"
-                    className="mt-auto w-full bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2.5 rounded-lg text-center transition-colors"
-                  >
-                    Enroll Now
-                  </Link>
+                  <div className="mt-auto flex gap-2">
+                    <EnrollNowButton
+                      courseId={course.id}
+                      courseTitle={course.title}
+                      className="flex-1"
+                    />
+                    {/* ✅ ہمیشہ نصاب کا بٹن دکھائیں */}
+                    <SyllabusButton
+                      courseId={course.id}
+                      courseTitle={course.title}
+                      syllabusDescription={course.syllabusDescription}
+                      files={course.syllabusFiles}
+                    />
+                  </div>
                 </div>
               </div>
             ))}

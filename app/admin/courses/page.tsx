@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
 import Course from '@/app/models/Course';
 import Link from 'next/link';
-import { BookOpen, Plus, Eye, Pencil, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Eye, Pencil, Trash2, FileText } from 'lucide-react';
 import DeleteButton from '@/app/components/admin/DeleteButton';
 
 const ADMIN_ROLES = ['admin', 'owner', 'super-admin', 'education-admin', 'darul-ifta-admin', 'section1-admin', 'section2-admin'];
@@ -65,7 +65,7 @@ export default async function AdminCoursesPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
-                  <tr>
+                  <tr>{/* ✅ تمام th ایک ہی لائن پر، کوئی اضافی سپیس نہیں */}
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Title</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Category</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Level</th>
@@ -73,6 +73,7 @@ export default async function AdminCoursesPage() {
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Price</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Students</th>
                     <th className="text-left px-6 py-3 font-medium text-gray-600">Status</th>
+                    <th className="text-center px-6 py-3 font-medium text-gray-600">Syllabus</th>
                     <th className="text-center px-6 py-3 font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
@@ -91,6 +92,15 @@ export default async function AdminCoursesPage() {
                         ) : (
                           <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-medium">Inactive</span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <Link
+                          href={`/admin/courses/${course.id}/syllabus`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-xs font-medium transition"
+                          title="Manage Syllabus"
+                        >
+                          <FileText size={14} /> Syllabus
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
