@@ -3,10 +3,47 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import PDFViewer from '../components/PDFViewer';
-import AIWhiteboard from '../components/AIWhiteboard';
-import ZoomEmbed from '../components/ZoomEmbed';
-import { Classroom as ClassroomType } from '../types';
+
+// ----- گم شدہ اجزاء کی تعریف (اسی فائل میں) -----
+const PDFViewer: React.FC<{ fileUrl: string }> = ({ fileUrl }) => {
+  return (
+    <div className="h-full flex items-center justify-center bg-gray-100 text-gray-600">
+      📄 PDF Viewer: {fileUrl || 'کوئی کتاب دستیاب نہیں'}
+    </div>
+  );
+};
+
+const AIWhiteboard: React.FC = () => {
+  return (
+    <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
+      <h3 className="text-lg font-semibold">🖊️ AI Whiteboard</h3>
+      <div className="h-48 bg-gray-50 rounded mt-2 flex items-center justify-center text-gray-400">
+        (AI Whiteboard یہاں ظاہر ہوگا)
+      </div>
+    </div>
+  );
+};
+
+const ZoomEmbed: React.FC<{ classroomId: string }> = ({ classroomId }) => {
+  return (
+    <div className="bg-white rounded-lg shadow p-4 border border-gray-200">
+      <h3 className="text-lg font-semibold">📹 Zoom Session</h3>
+      <div className="h-48 bg-gray-50 rounded mt-2 flex items-center justify-center text-gray-400">
+        Zoom Embed for Classroom: {classroomId}
+      </div>
+    </div>
+  );
+};
+// -------------------------------------------------
+
+// ٹائپ کی تعریف (اگر پہلے سے موجود نہیں تو)
+interface ClassroomType {
+  _id: string;
+  title: string;
+  course: string;
+  bookUrl: string;
+  teacher?: { name: string };
+}
 
 const Classroom: React.FC = () => {
   const { id } = useParams<{ id: string }>();
