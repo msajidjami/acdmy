@@ -1,8 +1,14 @@
 // src/components/PDFViewer.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 
+// TypeScript کو CSS درآمدات کو نظر انداز کرنے دیں
+// @ts-ignore
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+// @ts-ignore
+import 'react-pdf/dist/Page/TextLayer.css';
+
+// PDF.js ورکر کا راستہ (CDN سے)
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface PDFViewerProps {
@@ -12,6 +18,17 @@ interface PDFViewerProps {
 const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl }) => {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState<number>(1);
+  // کلائنٹ سائڈ پر ونڈو کی چوڑائی حاصل کریں (SSR سے بچنے کے لیے)
+  const [width, setWidth] = useState<number>(500);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      setWidth(Math.min(window.innerWidth * 0.6, 500));
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }): void => {
     setNumPages(numPages);
@@ -28,7 +45,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl }) => {
   return (
     <div className="flex flex-col items-center h-full overflow-auto bg-gray-100 rounded">
       <Document file={fileUrl} onLoadSuccess={onDocumentLoadSuccess} className="shadow-lg">
-        <Page pageNumber={pageNumber} width={Math.min(window.innerWidth * 0.6, 500)} />
+        <Page pageNumber={pageNumber} width={width} />
       </Document>
 
       <div className="flex gap-4 mt-2 p-2 bg-white w-full justify-center sticky bottom-0 border-t">
