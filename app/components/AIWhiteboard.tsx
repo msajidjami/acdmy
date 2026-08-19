@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { DrawingInstruction } from '../types';
+import { DrawingInstruction } from '@/types';
 
 const AIWhiteboard: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
