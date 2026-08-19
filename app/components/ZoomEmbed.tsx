@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { ZoomMeetingResponse } from '../types';
+import { ZoomMeetingResponse } from '@/types';
 
 interface ZoomEmbedProps {
   classroomId: string;
