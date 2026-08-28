@@ -69,7 +69,7 @@ async function getStudents(search: string = '') {
 // ─── Page ─────────────────────────────────────────────────────────
 
 interface PageProps {
-  searchParams?: { q?: string };
+  searchParams: Promise<{ q?: string }>;  // ✅ Next.js 15: searchParams is a Promise
 }
 
 export default async function StudentsPage({ searchParams }: PageProps) {
@@ -78,8 +78,8 @@ export default async function StudentsPage({ searchParams }: PageProps) {
     redirect('/');
   }
 
-  const searchQuery = searchParams?.q || '';
-  const students = await getStudents(searchQuery);
+  const { q = '' } = await searchParams;  // ✅ await the Promise
+  const students = await getStudents(q);
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -105,7 +105,7 @@ export default async function StudentsPage({ searchParams }: PageProps) {
             <input
               type="text"
               name="q"
-              defaultValue={searchQuery}
+              defaultValue={q}
               placeholder="Search by name or email..."
               className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
@@ -116,7 +116,7 @@ export default async function StudentsPage({ searchParams }: PageProps) {
           >
             Search
           </button>
-          {searchQuery && (
+          {q && (
             <Link
               href="/admin/students"
               className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition"
@@ -165,12 +165,14 @@ export default async function StudentsPage({ searchParams }: PageProps) {
                           <Link
                             href={`/admin/students/${student.id}`}
                             className="p-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-blue-600 transition"
+                            title="View Student"
                           >
                             <Eye size={16} />
                           </Link>
                           <Link
                             href={`/admin/students/${student.id}/edit`}
                             className="p-1.5 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-yellow-600 transition"
+                            title="Edit Student"
                           >
                             <Pencil size={16} />
                           </Link>

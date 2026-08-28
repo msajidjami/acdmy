@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 
 export type UserRole =
   | "user"
+  | "teacher"
   | "admin"
   | "education-admin"
   | "darul-ifta-admin"
@@ -63,6 +64,7 @@ const UserSchema = new Schema(
       type: String,
       enum: [
         "user",
+        "teacher",
         "admin",
         "education-admin",
         "darul-ifta-admin",
@@ -91,20 +93,28 @@ const UserSchema = new Schema(
       type: Date,
       default: null,
     },
+
     profileCompleted: {
-  type: Boolean,
-  default: false,
-},
-accountType: {
-    type: String,
-    enum: ["student", "parent"],
-    default: undefined,
-},
+      type: Boolean,
+      default: false,
+    },
+
+    accountType: {
+      type: String,
+      enum: ["student", "parent"],
+      default: undefined,
+    },
+
+    // ✅ Assigned Teacher field
+    assignedTeacher: {
+      type: Schema.Types.ObjectId,
+      ref: "Teacher",
+      default: null,
+    },
   },
   {
     timestamps: true,
-  },
-  
+  }
 );
 
 export type IUser = InferSchemaType<typeof UserSchema>;
@@ -117,18 +127,14 @@ export type UserDocument = HydratedDocument<IUser, IUserMethods>;
 
 UserSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
-
   if (!this.password) return;
-
   this.password = await bcrypt.hash(this.password, 12);
 });
-
 
 UserSchema.method(
   "comparePassword",
   async function (password: string): Promise<boolean> {
     if (!this.password) return false;
-
     return bcrypt.compare(password, this.password);
   }
 );

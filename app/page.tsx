@@ -40,7 +40,6 @@ async function getUserEnrollments(email: string) {
   const user = await User.findOne({ email });
   if (!user) return [];
   const enrollments = await Enrollment.find({ studentId: user._id.toString() }).lean();
-  // Convert any ObjectId to string and return plain array
   return enrollments.map(e => ({
     ...e,
     _id: e._id.toString(),
@@ -53,7 +52,6 @@ async function getTeacherByEmail(email: string) {
   await connectDB();
   const teacher = await Teacher.findOne({ email }).lean();
   if (!teacher) return null;
-  // Serialize to plain object (Mongoose ObjectId, dates become strings automatically)
   return JSON.parse(JSON.stringify(teacher));
 }
 
@@ -78,11 +76,10 @@ export default async function Home() {
           {...guestData}
           user={session || undefined}
           enrollments={enrollments}
-          teacher={teacher}
-          isAdmin={isAdmin}
+          teacher={teacher}      // ✅ ٹیچر آبجیکٹ پاس کیا
+          isAdmin={isAdmin}      // ✅ ایڈمن فلگ پاس کیا
         />
       </Suspense>
     </div>
   );
 }
-//mian
