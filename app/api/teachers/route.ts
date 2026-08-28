@@ -6,26 +6,32 @@ import Teacher from "@/app/models/Teacher";
 // GET ALL TEACHERS
 // =======================
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await connectDB();
 
-    const teachers = await Teacher.find().sort({
-      createdAt: -1,
-    });
+    // Get query parameters
+    const url = new URL(req.url);
+    const active = url.searchParams.get('active') === 'true';
 
-    return NextResponse.json({
-      success: true,
-      teachers,
-    });
+    // Build filter
+    const filter: any = {};
+    if (active) {
+      filter.active = true;
+    }
+
+    // Fetch teachers
+    const teachers = await Teacher.find(filter)
+      .select('_id fullName email avatar qualification experience rating totalStudents bio')
+      .sort({ fullName: 1 })
+      .lean();
+
+    // Return as array directly (not wrapped in { teachers: ... })
+    return NextResponse.json(teachers);
   } catch (error) {
-    console.error(error);
-
+    console.error('Error fetching teachers:', error);
     return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to fetch teachers",
-      },
+      { error: 'Failed to fetch teachers' },
       { status: 500 }
     );
   }

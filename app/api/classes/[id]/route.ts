@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 
 import dbConnect from "@/app/lib/dbConnect";
 import Class from "@/app/models/Class";
-import User from "@/app/models/User";
+import User from "@/app/models/User"; // ✅ User import کیا گیا
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -50,7 +50,7 @@ export async function GET(
       );
     }
 
-    const { id } = await params;
+    const { id } = await params; // ✅ params کو await کیا گیا
 
     const classData = await Class.findById(id)
       .populate("student", "name email")
@@ -130,7 +130,7 @@ export async function PUT(
       );
     }
 
-    const { id } = await params;
+    const { id } = await params; // ✅ params کو await کیا گیا
 
     const body = await req.json();
 
@@ -214,7 +214,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = await params;
+    const { id } = await params; // ✅ params کو await کیا گیا
 
     const deleted = await Class.findByIdAndDelete(id);
 

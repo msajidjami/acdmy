@@ -1,84 +1,76 @@
-// app/api/enroll/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
 import Enrollment from '@/app/models/Enrollment';
-import User from '@/app/models/User';
 import Course from '@/app/models/Course';
-import Progress from '@/app/models/Progress';  // ✅ شامل کریں
-import crypto from 'crypto';
+import User from '@/app/models/User';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token')?.value;
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const studentId = decoded.id || decoded.userId || decoded._id || decoded.sub;
+    if (!studentId) {
+      return NextResponse.json({ error: 'Student ID not found' }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const { courseId, teacherId } = body;
+
+    if (!courseId) {
+      return NextResponse.json({ error: 'Course ID required' }, { status: 400 });
+    }
+
     await connectDB();
-    const body = await request.json();
 
-    const { fullName, email, phone, courseTitle, message } = body;
+    // Check if course exists and is active
+    const course = await Course.findOne({ _id: courseId, isActive: true });
+    if (!course) {
+      return NextResponse.json({ error: 'Course not found or inactive' }, { status: 404 });
+    }
 
-    if (!fullName || !email || !phone || !courseTitle) {
+    // Check if already enrolled
+    const existing = await Enrollment.findOne({ studentId, courseId });
+    if (existing) {
       return NextResponse.json(
-        { success: false, message: 'All required fields must be filled.' },
+        { error: 'Already enrolled in this course' },
         { status: 400 }
       );
     }
 
-    // ─── کورس تلاش کریں ──────────────────────────────
-    const course = await Course.findOne({ title: courseTitle });
-    if (!course) {
-      return NextResponse.json(
-        { success: false, message: 'Course not found. Please select a valid course.' },
-        { status: 404 }
-      );
+    // اگر teacherId دیا گیا ہے تو اسے student کے assignedTeacher میں سیٹ کریں
+    if (teacherId) {
+      const teacher = await User.findById(teacherId);
+      if (!teacher || (teacher as any).role !== 'teacher') { // ✅ as any کا استعمال
+        return NextResponse.json({ error: 'Invalid teacher' }, { status: 400 });
+      }
+      // صارف کو اپ ڈیٹ کریں
+      await User.findByIdAndUpdate(studentId, { assignedTeacher: teacherId });
     }
 
-    // ─── صارف تلاش کریں یا بنائیں ────────────────────
-    let user = await User.findOne({ email });
-    if (!user) {
-      const tempPassword = crypto.randomBytes(16).toString('hex');
-      user = await User.create({
-        name: fullName,
-        email,
-        role: 'user',
-        isVerified: false,
-        password: tempPassword,
-      });
-    }
-
-    // ─── انرولمنٹ بنائیں ──────────────────────────────
-    const enrollment = await Enrollment.create({
-      studentId: user._id,
-      courseId: course._id,
-      status: 'pending',
+    // Enrollment تخلیق کریں
+    const enrollment = new Enrollment({
+      studentId,
+      courseId,
+      status: 'active',
       progress: 0,
       enrolledAt: new Date(),
     });
+    await enrollment.save();
 
-    // ─── پروگریس ڈاکیومنٹ بنائیں (نصاب کی بنیاد پر) ──
-    if (course.syllabus && course.syllabus.length > 0) {
-      const unitProgress = course.syllabus.map((unit: any) => ({
-        unitNumber: unit.unitNumber,
-        completed: false,
-      }));
+    // Course میں studentsEnrolled بڑھائیں
+    course.studentsEnrolled = (course.studentsEnrolled || 0) + 1;
+    await course.save();
 
-      await Progress.create({
-        studentId: user._id,
-        courseId: course._id,
-        unitProgress,
-      });
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Enrollment submitted successfully!',
-        enrollmentId: enrollment._id,
-      },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error('Enrollment error:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'Server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, enrollment });
+  } catch (error) {
+    console.error('Enroll error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
