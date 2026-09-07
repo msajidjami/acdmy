@@ -4,8 +4,8 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import connectDB from '@/app/lib/dbConnect';
-import Enrollment from '@/app/models/Enrollment';
-import Course from '@/app/models/Course';
+import Enrollment from '@/models/Enrollment';
+import Course from '@/models/Course';
 
 const ADMIN_ROLES = [
   'admin',

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
-import Enrollment from '@/app/models/Enrollment';
+import Enrollment from '@/models/Enrollment';
 
 export async function GET() {
   const cookieStore = await cookies();

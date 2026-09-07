@@ -1,7 +1,7 @@
 // app/api/counter/increment/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Counter from '@/app/models/Counter';
+import Counter from '@/models/Counter';
 
 type IncrementRequestBody = {
   field: 'enrolled' | 'completed' | 'teachers';

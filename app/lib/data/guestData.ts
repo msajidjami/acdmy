@@ -1,7 +1,7 @@
 import connectDB from '@/app/lib/dbConnect';
-import Review from '@/app/models/Review';
-import Article from '@/app/models/Article';
-import Admission from '@/app/models/Admission';
+import Review from '@/models/Review';
+import Article from '@/models/Article';
+import Admission from '@/models/Admission';
 
 export async function fetchGuestData() {
   await connectDB();

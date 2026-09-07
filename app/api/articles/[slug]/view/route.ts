@@ -1,7 +1,7 @@
 // app/api/articles/[slug]/view/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Article from '@/app/models/Article';
+import Article from '@/models/Article';
 import mongoose from 'mongoose';
 
 let ArticleViewModel: any = null;

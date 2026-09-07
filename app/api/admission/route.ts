@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/app/lib/dbConnect';
-import Admission from '@/app/models/Admission';
+import Admission from '@/models/Admission';
 import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';

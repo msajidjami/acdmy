@@ -1,9 +1,9 @@
 // scripts/migrate-enrollment-ids.ts
 import mongoose from 'mongoose';
 import connectDB from '../app/lib/dbConnect';
-import Enrollment from '../app/models/Enrollment';
-import User from '../app/models/User';
-import Course from '../app/models/Course';
+import Enrollment from '../models/Enrollment';
+import User from '../models/User';
+import Course from '../models/Course';
 
 async function migrate() {
   try {

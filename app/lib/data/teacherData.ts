@@ -1,11 +1,11 @@
 // app/lib/data/teacherData.ts
 import connectDB from '../dbConnect';
-import Teacher from '@/app/models/Teacher';
-import Course from '@/app/models/Course';
-import Enrollment from '@/app/models/Enrollment';
-import Assignment from '@/app/models/Assignment';
-import Attendance from '@/app/models/Attendance';
-import Message from '@/app/models/Message';
+import Teacher from '@/models/Teacher';
+import Course from '@/models/Course';
+import Enrollment from '@/models/Enrollment';
+import Assignment from '@/models/Assignment';
+import Attendance from '@/models/Attendance';
+import Message from '@/models/Message';
 
 export async function fetchTeacherData(userId: string) {
   await connectDB();

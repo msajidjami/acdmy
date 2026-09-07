@@ -1,7 +1,7 @@
 // app/components/ArticleSidebar.tsx (optional)
 import Link from 'next/link';
 import connectDB from '@/app/lib/dbConnect';
-import Article from '@/app/models/Article';
+import Article from '@/models/Article';
 
 export async function ArticleSidebar() {
   await connectDB();

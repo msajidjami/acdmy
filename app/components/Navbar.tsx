@@ -10,20 +10,21 @@ import {
   Menu,
   X,
   Mail,
+  Compass, // ✅ Explore کے لیے آئیکن
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth'; // ✅ ہمارا کسٹم ہک
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 export default function Navbar() {
   const router = useRouter();
-  const { user, loading, logout } = useAuth(); // ✅ صحیح نام
+  const { user, loading, logout } = useAuth();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
 
-  const isAdmin = user?.role === 'admin'; // یا جیسے آپ چیک کرتے ہیں
+  const isAdmin = user?.role === 'admin';
 
   // Close mobile menu on outside click
   useEffect(() => {
@@ -60,7 +61,6 @@ export default function Navbar() {
     }
   };
 
-  // Poll for unread count when admin
   useEffect(() => {
     if (isAdmin) {
       fetchUnreadCount();
@@ -75,15 +75,35 @@ export default function Navbar() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  // ✅ لاگ آؤٹ کو مکمل طور پر درست کریں
   const handleLogout = async () => {
-    await logout();
+    // 1. سرور پر لاگ آؤٹ API کال کریں (اگر موجود ہے)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      // اگر API موجود نہ ہو تو خاموشی سے آگے بڑھیں
+    }
+
+    // 2. تمام کوکیز کو ڈیلیٹ کریں (کلائنٹ سائیڈ)
+    document.cookie.split(';').forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, '')
+        .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+    });
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 3. اگر useAuth میں logout فنکشن ہے تو اسے کال کریں
+    if (logout) await logout();
+
+    // 4. لاگ ان پیج پر ری ڈائریکٹ کریں
     router.push('/login');
   };
 
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-lg shadow-lg z-50 border-b border-slate-200">
       <div className="container mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
-        {/* Logo / Brand */}
+        {/* Logo */}
         <Link href="/" className="flex items-center space-x-3 hover:opacity-90 transition-opacity">
           <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-teal-600 to-emerald-500 rounded-xl flex items-center justify-center">
             <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -95,38 +115,28 @@ export default function Navbar() {
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex items-center space-x-8">
-          <Link
-            href="/"
-            className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105"
-          >
+          <Link href="/" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105">
             Home
           </Link>
-          <Link
-            href="/courses"
-            className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105"
-          >
+          {/* ✅ Explore لنک شامل کیا */}
+          <Link href="/explore" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105 flex items-center gap-1">
+            <Compass className="w-5 h-5" />
+            Explore
+          </Link>
+          <Link href="/courses" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105">
             Courses
           </Link>
-          <Link
-            href="/articles"
-            className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105"
-          >
+          <Link href="/articles" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105">
             Articles
           </Link>
-          <Link
-            href="/about"
-            className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105"
-          >
+          <Link href="/about" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105">
             About
           </Link>
-          <Link
-            href="/contact"
-            className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105"
-          >
+          <Link href="/contact" className="text-slate-700 hover:text-teal-700 font-medium text-lg transition-all duration-300 hover:scale-105">
             Contact
           </Link>
 
-          {/* Admin Messages Link with Badge */}
+          {/* Admin Messages Link */}
           {isAdmin && (
             <Link
               href="/admin/messages"
@@ -142,7 +152,7 @@ export default function Navbar() {
             </Link>
           )}
 
-          {/* User Section - Desktop */}
+          {/* User Section */}
           {loading ? (
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-teal-600"></div>
@@ -199,43 +209,27 @@ export default function Navbar() {
           className="lg:hidden absolute top-full left-0 right-0 bg-white/95 backdrop-blur-lg shadow-lg border-t border-slate-200 z-40"
         >
           <div className="container mx-auto px-4 py-6 space-y-4">
-            <Link
-              href="/"
-              className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
+            <Link href="/" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
               Home
             </Link>
-            <Link
-              href="/courses"
-              className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
+            {/* ✅ Mobile میں Explore لنک */}
+            <Link href="/explore" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100 flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
+              <Compass className="w-5 h-5" />
+              Explore
+            </Link>
+            <Link href="/courses" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
               Courses
             </Link>
-            <Link
-              href="/articles"
-              className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
+            <Link href="/articles" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
               Articles
             </Link>
-            <Link
-              href="/about"
-              className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
+            <Link href="/about" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
               About
             </Link>
-            <Link
-              href="/contact"
-              className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
+            <Link href="/contact" className="block text-slate-700 hover:text-teal-700 font-medium text-lg py-3 border-b border-slate-100" onClick={() => setIsMobileMenuOpen(false)}>
               Contact
             </Link>
 
-            {/* Admin Messages Link - Mobile with Badge */}
             {isAdmin && (
               <Link
                 href="/admin/messages"

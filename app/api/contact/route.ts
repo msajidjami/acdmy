@@ -2,7 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Message from '@/app/models/Message';
+import Message from '@/models/Message';
 
 export async function POST(request: Request) {
   try {

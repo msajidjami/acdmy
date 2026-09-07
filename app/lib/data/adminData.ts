@@ -1,13 +1,13 @@
 // app/lib/data/adminData.ts
 import connectDB from '../dbConnect';
-import User from '@/app/models/User';
-import Teacher from '@/app/models/Teacher';
-import Course from '@/app/models/Course';
-import Admission from '@/app/models/Admission';
-import Payment from '@/app/models/Payment';
-import Article from '@/app/models/Article';
-import Review from '@/app/models/Review';
-import Activity from '@/app/models/Activity';
+import User from '@/models/User';
+import Teacher from '@/models/Teacher';
+import Course from '@/models/Course';
+import Admission from '@/models/Admission';
+import Payment from '@/models/Payment';
+import Article from '@/models/Article';
+import Review from '@/models/Review';
+import Activity from '@/models/Activity';
 
 export async function fetchAdminData() {
   await connectDB();

@@ -1,8 +1,8 @@
 import connectDB from '@/app/lib/dbConnect';
-import Course from '@/app/models/Course';
-import Enrollment from '@/app/models/Enrollment';
-import Assignment from '@/app/models/Assignment';
-import Attendance from '@/app/models/Attendance';
+import Course from '@/models/Course';
+import Enrollment from '@/models/Enrollment';
+import Assignment from '@/models/Assignment';
+import Attendance from '@/models/Attendance';
 
 export async function fetchStudentData(userId: string) {
   await connectDB();

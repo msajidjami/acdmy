@@ -1,7 +1,7 @@
 // app/api/counter/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Counter from '@/app/models/Counter';
+import Counter from '@/models/Counter';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {

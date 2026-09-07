@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Script from 'next/script';
 import connectDB from '@/app/lib/dbConnect';
-import Article from '@/app/models/Article';
+import Article from '@/models/Article';
 import { Metadata } from 'next';
 import { Calendar, User, Tag } from 'lucide-react';
 import ArticleShareButtons from '@/app/components/ArticleShareButtons';

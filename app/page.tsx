@@ -1,85 +1,37 @@
-// app/page.tsx
-import { Suspense } from 'react';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import jwt from 'jsonwebtoken';
-import connectDB from '@/app/lib/dbConnect';
-import GuestHome from '@/app/components/home/GuestHome';
-import { fetchGuestData } from '@/app/lib/data/guestData';
-import Enrollment from '@/app/models/Enrollment';
-import Teacher from '@/app/models/Teacher';
-import User from '@/app/models/User';
 
-interface SessionUser {
-  userId: string;
-  email: string;
-  role: string;
-  name: string;
-  isVerified: boolean;
-}
+export default async function RootPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token')?.value;
 
-async function getSession(): Promise<SessionUser | null> {
+  // اگر ٹوکن نہیں ہے تو پبلک ہوم پیج دکھائیں
+  if (!token) {
+    const { default: HomePage } = await import('./(public)/page');
+    return <HomePage />;
+  }
+
+  // ٹوکن کو ڈی کوڈ کریں
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    if (!token) return null;
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    return {
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role,
-      name: decoded.name || decoded.email.split('@')[0] || 'User',
-      isVerified: decoded.isVerified ?? false,
-    };
-  } catch {
-    return null;
+    const role = decoded.role;
+
+    // کردار کے مطابق ری ڈائریکٹ
+    if (role === 'admin') {
+      redirect('/admin');
+    } else if (role === 'owner') {
+      redirect('/owner/dashboard');
+    } else if (role === 'teacher') {
+      redirect('/teacher/dashboard');
+    } else if (role === 'student') {
+      redirect('/student/dashboard');
+    } else {
+      redirect('/dashboard');
+    }
+  } catch (error) {
+    // غلط ٹوکن - پبلک پیج دکھائیں
+    const { default: HomePage } = await import('./(public)/page');
+    return <HomePage />;
   }
-}
-
-async function getUserEnrollments(email: string) {
-  await connectDB();
-  const user = await User.findOne({ email });
-  if (!user) return [];
-  const enrollments = await Enrollment.find({ studentId: user._id.toString() }).lean();
-  return enrollments.map(e => ({
-    ...e,
-    _id: e._id.toString(),
-    studentId: e.studentId.toString(),
-    courseId: e.courseId.toString(),
-  }));
-}
-
-async function getTeacherByEmail(email: string) {
-  await connectDB();
-  const teacher = await Teacher.findOne({ email }).lean();
-  if (!teacher) return null;
-  return JSON.parse(JSON.stringify(teacher));
-}
-
-export default async function Home() {
-  const session = await getSession();
-  const guestData = await fetchGuestData();
-
-  let enrollments: any[] = [];
-  let teacher: any = null;
-  let isAdmin = false;
-
-  if (session) {
-    enrollments = await getUserEnrollments(session.email);
-    teacher = await getTeacherByEmail(session.email);
-    isAdmin = ['admin', 'owner', 'super-admin', 'education-admin', 'darul-ifta-admin', 'section1-admin', 'section2-admin'].includes(session.role);
-  }
-
-  return (
-    <div className="min-h-screen bg-white">
-      <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
-        <GuestHome
-          {...guestData}
-          user={session || undefined}
-          enrollments={enrollments}
-          teacher={teacher}      // ✅ ٹیچر آبجیکٹ پاس کیا
-          isAdmin={isAdmin}      // ✅ ایڈمن فلگ پاس کیا
-        />
-      </Suspense>
-    </div>
-  );
 }

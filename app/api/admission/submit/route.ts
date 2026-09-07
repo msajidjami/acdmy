@@ -2,9 +2,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/app/lib/dbConnect';
-import Admission from '@/app/models/Admission';
-import Owner from '@/app/models/Owner';
-import Teacher from '@/app/models/Teacher';
+import Admission from '@/models/Admission';
+import Owner from '@/models/Owner';
+import Teacher from '@/models/Teacher';
 import { sendAdmissionConfirmationEmail } from '@/app/lib/emailService';
 
 export async function POST(request: NextRequest) {
