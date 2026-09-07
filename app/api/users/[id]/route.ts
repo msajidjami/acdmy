@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import User from '@/app/models/User';
+import User from '@/models/User';
 
 export async function GET(
   req: Request,

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
-import TeacherAvailability from '@/app/models/TeacherAvailability';
-import Teacher from '@/app/models/Teacher';
+import TeacherAvailability from '@/models/TeacherAvailability';
+import Teacher from '@/models/Teacher';
 
 // ─── Auth Helper ──────────────────────────────────────────────
 async function getSession() {

@@ -1,7 +1,7 @@
 // app/api/reviews/toggle-visibility/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Review from '@/app/models/Review';
+import Review from '@/models/Review';
 import { getSession } from '@/app/lib/session';
 
 export async function POST(request: NextRequest) {

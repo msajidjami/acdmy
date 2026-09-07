@@ -1,8 +1,8 @@
 'use client';
 
 import { dbConnect } from '@/app/lib/dbConnect';
-import Review from '@/app/models/Review';
-import Counter from '@/app/models/Counter';
+import Review from '@/models/Review';
+import Counter from '@/models/Counter';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 

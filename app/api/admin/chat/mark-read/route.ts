@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import ChatMessage from '@/app/models/ChatMessage';
+import ChatMessage from '@/models/ChatMessage';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 

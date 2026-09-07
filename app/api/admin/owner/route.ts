@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/app/lib/dbConnect';
-import Owner from '@/app/models/Owner';
+import Owner from '@/models/Owner';
 import jwt from 'jsonwebtoken';
 
 // ✅ ایڈمن تصدیق – بالکل وہی جو /api/admission میں ہے

@@ -5,8 +5,8 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import mongoose from 'mongoose';
 
 import connectDB from '@/app/lib/dbConnect';
-import User from '@/app/models/User';
-import Teacher from '@/app/models/Teacher';
+import User from '@/models/User';
+import Teacher from '@/models/Teacher';
 
 interface DecodedToken extends JwtPayload {
   userId?: string;

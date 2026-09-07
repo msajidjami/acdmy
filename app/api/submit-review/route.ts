@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';  // ✅ NextRequest add
 import connectDB from '@/app/lib/dbConnect';
-import Review from '@/app/models/Review';
+import Review from '@/models/Review';
 
 export async function POST(request: NextRequest) {  // ✅ Type ٹھیک
   try {

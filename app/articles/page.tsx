@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import Script from 'next/script'; // ✅ Next.js Script import کیا گیا ہے
 import connectDB from '@/app/lib/dbConnect';
-import Article from '@/app/models/Article';
+import Article from '@/models/Article';
 import { Metadata } from 'next';
 
 // ─── Types ────────────────────────────────────────────────────────────────

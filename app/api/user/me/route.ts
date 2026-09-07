@@ -3,8 +3,8 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
 import connectDB from '@/app/lib/dbConnect';
-import User from '@/app/models/User';
-import '@/app/models/Teacher';
+import User from '@/models/User';
+import '@/models/Teacher';
 
 interface DecodedToken {
   userId?: string;

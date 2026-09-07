@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/app/lib/dbConnect";
-import Teacher from "@/app/models/Teacher";
+import Teacher from "@/models/Teacher";
 
 // =======================
 // GET ALL TEACHERS

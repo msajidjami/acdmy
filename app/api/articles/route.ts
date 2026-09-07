@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
-import Article from '@/app/models/Article';
+import Article from '@/models/Article';
 import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
-import Progress from '@/app/models/Progress';
-import Course from '@/app/models/Course';
+import Progress from '@/models/Progress';
+import Course from '@/models/Course';
 
 async function getSession() {
   const cookieStore = await cookies();

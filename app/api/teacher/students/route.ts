@@ -3,9 +3,9 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import connectDB from '@/app/lib/dbConnect';
-import User from '@/app/models/User';
-import Teacher from '@/app/models/Teacher';
-import Class from '@/app/models/Class';
+import User from '@/models/User';
+import Teacher from '@/models/Teacher';
+import Class from '@/models/Class';
 
 export async function GET() {
   try {

@@ -1,7 +1,7 @@
 // app/api/reviews/submit/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/app/lib/dbConnect";
-import Review from "@/app/models/Review";
+import Review from "@/models/Review";
 
 export async function POST(req: NextRequest) {
   try {

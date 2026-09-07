@@ -1,7 +1,7 @@
 // app/api/teachers/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect'; // اپنی DB کنکشن کے مطابق تبدیل کریں
-import Teacher from '@/app/models/Teacher'; // اپنے ماڈل کے مطابق
+import Teacher from '@/models/Teacher'; // اپنے ماڈل کے مطابق
 
 // ============ GET (Fetch single teacher) ============
 export async function GET(

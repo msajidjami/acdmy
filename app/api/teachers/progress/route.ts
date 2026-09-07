@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
-import Progress from '@/app/models/Progress';
+import Progress from '@/models/Progress';
 
 async function getSession() {
   const cookieStore = await cookies();

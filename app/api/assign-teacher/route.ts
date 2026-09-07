@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
-import User from '@/app/models/User';
-import Teacher from '@/app/models/Teacher';
+import User from '@/models/User';
+import Teacher from '@/models/Teacher';
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies();

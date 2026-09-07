@@ -2,8 +2,8 @@
 'use server'; // یہ server action بناتا ہے
 
 import { dbConnect } from '@/app/lib/dbConnect';
-import Review from '@/app/models/Review';
-import Counter from '@/app/models/Counter';
+import Review from '@/models/Review';
+import Counter from '@/models/Counter';
 
 export async function getHomeData() {
   await dbConnect();

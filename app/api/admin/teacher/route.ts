@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/app/lib/dbConnect';
-import Owner from '@/app/models/Teacher';
+import Owner from '@/models/Teacher';
 import jwt from 'jsonwebtoken';
 
 // ✅ بالکل وہی verifyAdminAccess فنکشن جو /api/admission میں ہے
