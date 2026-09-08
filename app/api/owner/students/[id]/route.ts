@@ -20,10 +20,9 @@ async function getUserFromRequest(req: NextRequest) {
   }
 }
 
-// PUT: update student
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // ✅ changed type
 ) {
   try {
     const user = await getUserFromRequest(req);
@@ -37,7 +36,9 @@ export async function PUT(
       return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    const student = await Student.findOne({ _id: params.id, academyId: academy._id });
+    const { id } = await params; // ✅ await the promise
+
+    const student = await Student.findOne({ _id: id, academyId: academy._id });
     if (!student) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
@@ -55,7 +56,6 @@ export async function PUT(
       notes,
     } = body;
 
-    // اگر email تبدیل ہو رہا ہے تو چیک کریں کہ کوئی اور اس email سے موجود تو نہیں
     if (email && email !== student.email) {
       const existing = await Student.findOne({ email, academyId: academy._id });
       if (existing) {
@@ -84,10 +84,9 @@ export async function PUT(
   }
 }
 
-// DELETE: remove student
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // ✅ changed type
 ) {
   try {
     const user = await getUserFromRequest(req);
@@ -101,8 +100,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
+    const { id } = await params; // ✅ await the promise
+
     const student = await Student.findOneAndDelete({
-      _id: params.id,
+      _id: id,
       academyId: academy._id,
     });
     if (!student) {
