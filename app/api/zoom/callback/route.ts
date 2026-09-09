@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
@@ -8,807 +9,569 @@ import ZoomConnection from '@/models/ZoomConnection';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// ======================================================
-// Environment helper
-// ======================================================
+type ZoomOAuthState = {
+  userId: string;
+  teacherId: string;
+  email: string;
+  academyId: string;
+  purpose: 'zoom_oauth';
+};
 
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`${name} is not configured`);
-  }
-
-  return value.trim();
+function getEnv(name: string): string {
+  return String(process.env[name] || '').trim();
 }
-
-// ======================================================
-// Zoom OAuth credentials
-// ======================================================
-//
-// Recommended environment variables:
-//
-// ZOOM_OAUTH_CLIENT_ID
-// ZOOM_OAUTH_CLIENT_SECRET
-//
-// Existing SDK variables are kept as fallback so that
-// the current project can continue working while you
-// migrate the environment variables.
-// ======================================================
-
-function getZoomOAuthClientId(): string {
-  return (
-    process.env.ZOOM_OAUTH_CLIENT_ID?.trim() ||
-    process.env.ZOOM_MEETING_SDK_CLIENT_ID?.trim() ||
-    getRequiredEnv('ZOOM_OAUTH_CLIENT_ID')
-  );
-}
-
-function getZoomOAuthClientSecret(): string {
-  return (
-    process.env.ZOOM_OAUTH_CLIENT_SECRET?.trim() ||
-    process.env.ZOOM_MEETING_SDK_CLIENT_SECRET?.trim() ||
-    getRequiredEnv('ZOOM_OAUTH_CLIENT_SECRET')
-  );
-}
-
-// ======================================================
-// Error redirect
-// ======================================================
 
 function redirectWithError(
   request: NextRequest,
-  error: string
+  message: string
 ) {
-  const url = new URL(
-    '/teacher/settings',
-    request.url
-  );
+  const url = new URL('/teacher/settings', request.url);
 
-  url.searchParams.set(
-    'zoom',
-    'error'
-  );
+  url.searchParams.set('zoom', 'error');
+  url.searchParams.set('message', message);
 
-  url.searchParams.set(
-    'message',
-    error
-  );
-
-  return NextResponse.redirect(
-    url
-  );
+  return NextResponse.redirect(url);
 }
 
-// ======================================================
-// Success redirect
-// ======================================================
+function redirectWithSuccess(request: NextRequest) {
+  const url = new URL('/teacher/settings', request.url);
 
-function redirectWithSuccess(
-  request: NextRequest
-) {
-  const url = new URL(
-    '/teacher/settings',
-    request.url
-  );
+  url.searchParams.set('zoom', 'connected');
 
-  url.searchParams.set(
-    'zoom',
-    'connected'
-  );
-
-  return NextResponse.redirect(
-    url
-  );
+  return NextResponse.redirect(url);
 }
 
-// ======================================================
-// GET /api/zoom/callback
-// ======================================================
+export async function GET(request: NextRequest) {
+  console.log('==========================================');
+  console.log('Starting Teacher Zoom OAuth Callback');
+  console.log('==========================================');
 
-export async function GET(
-  request: NextRequest
-) {
   try {
-    // ==================================================
-    // 1. Connect database
-    // ==================================================
+    const { searchParams } = new URL(request.url);
+
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+
+    const zoomError = searchParams.get('error');
+    const zoomErrorDescription =
+      searchParams.get('error_description');
+
+    // --------------------------------------------------
+    // Zoom returned an OAuth error
+    // --------------------------------------------------
+
+    if (zoomError) {
+      console.error('Zoom OAuth error:', {
+        error: zoomError,
+        description: zoomErrorDescription,
+      });
+
+      return redirectWithError(
+        request,
+        zoomErrorDescription || zoomError
+      );
+    }
+
+    // --------------------------------------------------
+    // Validate code
+    // --------------------------------------------------
+
+    if (!code) {
+      console.error('Missing OAuth code');
+
+      return redirectWithError(
+        request,
+        'Zoom authorization code موصول نہیں ہوا۔'
+      );
+    }
+
+    // --------------------------------------------------
+    // Validate state
+    // --------------------------------------------------
+
+    if (!state) {
+      console.error('Missing OAuth state');
+
+      return redirectWithError(
+        request,
+        'Zoom OAuth state موجود نہیں ہے۔'
+      );
+    }
+
+    const jwtSecret = getEnv('JWT_SECRET');
+
+    if (!jwtSecret) {
+      console.error('JWT_SECRET is missing');
+
+      return redirectWithError(
+        request,
+        'Server configuration میں JWT_SECRET موجود نہیں ہے۔'
+      );
+    }
+
+    let stateData: ZoomOAuthState;
+
+    try {
+      stateData = jwt.verify(
+        state,
+        jwtSecret
+      ) as ZoomOAuthState;
+    } catch (error) {
+      console.error('Invalid OAuth state:', error);
+
+      return redirectWithError(
+        request,
+        'Zoom OAuth state invalid یا expired ہے۔ دوبارہ Connect کریں۔'
+      );
+    }
+
+    // --------------------------------------------------
+    // Validate state structure
+    // --------------------------------------------------
+
+    if (
+      !stateData.userId ||
+      !stateData.teacherId ||
+      !stateData.email ||
+      !stateData.academyId ||
+      stateData.purpose !== 'zoom_oauth'
+    ) {
+      console.error('Invalid OAuth state payload:', stateData);
+
+      return redirectWithError(
+        request,
+        'Zoom OAuth state کی معلومات درست نہیں ہیں۔'
+      );
+    }
+
+    // --------------------------------------------------
+    // Environment variables
+    // --------------------------------------------------
+
+    const clientId =
+      getEnv('ZOOM_OAUTH_CLIENT_ID') ||
+      getEnv('ZOOM_MEETING_SDK_KEY');
+
+    const clientSecret =
+      getEnv('ZOOM_OAUTH_CLIENT_SECRET') ||
+      getEnv('ZOOM_MEETING_SDK_SECRET');
+
+    const redirectUri = getEnv(
+      'ZOOM_OAUTH_REDIRECT_URI'
+    );
+
+    if (!clientId) {
+      console.error('ZOOM_OAUTH_CLIENT_ID missing');
+
+      return redirectWithError(
+        request,
+        'Zoom Client ID configure نہیں ہے۔'
+      );
+    }
+
+    if (!clientSecret) {
+      console.error('ZOOM_OAUTH_CLIENT_SECRET missing');
+
+      return redirectWithError(
+        request,
+        'Zoom Client Secret configure نہیں ہے۔'
+      );
+    }
+
+    if (!redirectUri) {
+      console.error('ZOOM_OAUTH_REDIRECT_URI missing');
+
+      return redirectWithError(
+        request,
+        'Zoom Redirect URI configure نہیں ہے۔'
+      );
+    }
+
+    if (!redirectUri.includes('/api/zoom/callback')) {
+      console.error(
+        'Unexpected Zoom redirect URI:',
+        redirectUri
+      );
+
+      return redirectWithError(
+        request,
+        'Zoom Redirect URI غلط configure ہے۔'
+      );
+    }
+
+    // --------------------------------------------------
+    // Database
+    // --------------------------------------------------
 
     await connectDB();
 
-    // ==================================================
-    // 2. Read OAuth parameters
-    // ==================================================
+    // --------------------------------------------------
+    // Find teacher
+    // --------------------------------------------------
 
-    const { searchParams } =
-      new URL(request.url);
-
-    const code =
-      searchParams.get('code');
-
-    const state =
-      searchParams.get('state');
-
-    const zoomError =
-      searchParams.get('error');
-
-    const zoomErrorDescription =
-      searchParams.get(
-        'error_description'
-      );
-
-    // ==================================================
-    // 3. Handle Zoom authorization error
-    // ==================================================
-
-    if (zoomError) {
-      console.error(
-        'Zoom authorization error:',
-        {
-          error: zoomError,
-          description:
-            zoomErrorDescription,
-        }
-      );
-
-      return redirectWithError(
-        request,
-        zoomErrorDescription ||
-          zoomError ||
-          'Zoom authorization failed'
-      );
-    }
-
-    // ==================================================
-    // 4. Validate code + state
-    // ==================================================
-
-    if (!code) {
-      return redirectWithError(
-        request,
-        'Zoom authorization code موجود نہیں ہے'
-      );
-    }
-
-    if (!state) {
-      return redirectWithError(
-        request,
-        'Zoom authorization state موجود نہیں ہے'
-      );
-    }
-
-    // ==================================================
-    // 5. Verify OAuth state
-    // ==================================================
-
-    const jwtSecret =
-      getRequiredEnv('JWT_SECRET');
-
-    let stateData: {
-      userId?: string;
-      email?: string;
-      purpose?: string;
-    };
-
-    try {
-      stateData =
-        jwt.verify(
-          state,
-          jwtSecret
-        ) as {
-          userId?: string;
-          email?: string;
-          purpose?: string;
-        };
-    } catch (error) {
-      console.error(
-        'Zoom state verification error:',
-        error
-      );
-
-      return redirectWithError(
-        request,
-        'Zoom state invalid یا expired ہے، دوبارہ Connect Zoom کریں'
-      );
-    }
-
-    // ==================================================
-    // 6. Validate OAuth state purpose
-    // ==================================================
-
-    if (
-      stateData?.purpose &&
-      stateData.purpose !== 'zoom_oauth'
-    ) {
-      console.error(
-        'Invalid Zoom OAuth state purpose:',
-        stateData.purpose
-      );
-
-      return redirectWithError(
-        request,
-        'Zoom authorization state invalid ہے'
-      );
-    }
-
-    // ==================================================
-    // 7. Extract authenticated user information
-    // ==================================================
-
-    const stateUserId =
-      String(
-        stateData?.userId || ''
-      ).trim();
-
-    const teacherEmail =
-      String(
-        stateData?.email || ''
-      )
-        .trim()
-        .toLowerCase();
-
-    if (!stateUserId) {
-      return redirectWithError(
-        request,
-        'Authorization state میں user ID موجود نہیں ہے'
-      );
-    }
-
-    if (!teacherEmail) {
-      return redirectWithError(
-        request,
-        'Authorization state میں email موجود نہیں ہے'
-      );
-    }
-
-    // ==================================================
-    // 8. Find Teacher
-    // ==================================================
-    //
-    // اہم:
-    //
-    // JWT User._id
-    // اور
-    // Teacher._id
-    //
-    // الگ IDs ہیں۔
-    //
-    // اس لیے یہاں Teacher کو email سے تلاش کیا جا رہا ہے۔
-    // ==================================================
-
-    const teacher =
-      await Teacher.findOne({
-        email: teacherEmail,
-      }).select(
-        '_id academyId name email'
-      );
+    const teacher = await Teacher.findById(
+      stateData.teacherId
+    ).lean();
 
     if (!teacher) {
       console.error(
-        'Teacher not found during Zoom callback:',
-        {
-          stateUserId,
-          teacherEmail,
-        }
+        'Teacher not found:',
+        stateData.teacherId
       );
 
       return redirectWithError(
         request,
-        'آپ کے account کے ساتھ teacher record نہیں ملا'
+        'Teacher record نہیں ملا۔'
       );
     }
 
-    // ==================================================
-    // 9. Validate academy
-    // ==================================================
+    const teacherEmail = String(
+      teacher.email || ''
+    )
+      .trim()
+      .toLowerCase();
 
-    if (!teacher.academyId) {
-      console.error(
-        'Teacher academyId missing:',
-        {
-          teacherId:
-            String(
-              teacher._id
-            ),
-          teacherEmail,
-        }
-      );
+    const stateEmail = String(
+      stateData.email || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!teacherEmail || teacherEmail !== stateEmail) {
+      console.error('Teacher email mismatch:', {
+        teacherEmail,
+        stateEmail,
+      });
 
       return redirectWithError(
         request,
-        'Teacher کے ساتھ academy موجود نہیں ہے'
+        'Teacher email verification ناکام ہوگئی۔'
       );
     }
 
-    // ==================================================
-    // 10. Log resolved Teacher
-    // ==================================================
-
-    console.log(
-      '=========================================='
+    const teacherAcademyId = String(
+      teacher.academyId || ''
     );
 
-    console.log(
-      'Zoom callback Teacher resolved'
+    if (
+      !teacherAcademyId ||
+      teacherAcademyId !== stateData.academyId
+    ) {
+      console.error('Academy mismatch:', {
+        teacherAcademyId,
+        stateAcademyId: stateData.academyId,
+      });
+
+      return redirectWithError(
+        request,
+        'Teacher academy verification ناکام ہوگئی۔'
+      );
+    }
+
+    // --------------------------------------------------
+    // Exchange authorization code for access token
+    // --------------------------------------------------
+
+    console.log('Exchanging Zoom authorization code...');
+
+    const basicAuth = Buffer.from(
+      `${clientId}:${clientSecret}`
+    ).toString('base64');
+
+    const tokenResponse = await fetch(
+      'https://zoom.us/oauth/token',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          'Content-Type':
+            'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+        }).toString(),
+        cache: 'no-store',
+      }
     );
 
-    console.log({
-      jwtUserId:
-        stateUserId,
+    const tokenText = await tokenResponse.text();
 
-      teacherId:
-        String(
-          teacher._id
-        ),
-
-      email:
-        teacher.email,
-
-      academyId:
-        String(
-          teacher.academyId
-        ),
-    });
-
-    console.log(
-      '=========================================='
-    );
-
-    // ==================================================
-    // 11. Zoom OAuth credentials
-    // ==================================================
-
-    const clientId =
-      getZoomOAuthClientId();
-
-    const clientSecret =
-      getZoomOAuthClientSecret();
-
-    const redirectUri =
-      getRequiredEnv(
-        'ZOOM_OAUTH_REDIRECT_URI'
-      );
-
-    // ==================================================
-    // 12. Basic authentication
-    // ==================================================
-
-    const basicAuth =
-      Buffer.from(
-        `${clientId}:${clientSecret}`
-      ).toString(
-        'base64'
-      );
-
-    // ==================================================
-    // 13. Exchange authorization code
-    // ==================================================
-
-    const tokenResponse =
-      await fetch(
-        'https://zoom.us/oauth/token',
-        {
-          method: 'POST',
-
-          headers: {
-            Authorization:
-              `Basic ${basicAuth}`,
-
-            'Content-Type':
-              'application/x-www-form-urlencoded',
-
-            Accept:
-              'application/json',
-          },
-
-          body:
-            new URLSearchParams({
-              grant_type:
-                'authorization_code',
-
-              code,
-
-              redirect_uri:
-                redirectUri,
-            }).toString(),
-
-          cache:
-            'no-store',
-        }
-      );
-
-    // ==================================================
-    // 14. Parse token response
-    // ==================================================
-
-    let tokenData: any = {};
+    let tokenData: any;
 
     try {
-      tokenData =
-        await tokenResponse.json();
+      tokenData = JSON.parse(tokenText);
     } catch {
       tokenData = {};
     }
 
-    // ==================================================
-    // 15. Check token response
-    // ==================================================
-
     if (!tokenResponse.ok) {
-      console.error(
-        'Zoom token exchange failed:',
-        {
-          status:
-            tokenResponse.status,
-
-          statusText:
-            tokenResponse.statusText,
-
-          data:
-            tokenData,
-
-          redirectUri,
-        }
-      );
+      console.error('Zoom token exchange failed:', {
+        status: tokenResponse.status,
+        error: tokenData?.error,
+        reason: tokenData?.reason,
+      });
 
       return redirectWithError(
         request,
         tokenData?.reason ||
-          tokenData?.message ||
           tokenData?.error ||
-          'Zoom access token حاصل نہیں ہو سکا'
+          'Zoom access token حاصل نہیں ہوسکا۔'
       );
     }
 
-    // ==================================================
-    // 16. Extract access token
-    // ==================================================
+    const accessToken = String(
+      tokenData?.access_token || ''
+    ).trim();
 
-    const accessToken =
-      String(
-        tokenData?.access_token ||
-          ''
-      ).trim();
+    const refreshToken = String(
+      tokenData?.refresh_token || ''
+    ).trim();
 
-    const refreshToken =
-      String(
-        tokenData?.refresh_token ||
-          ''
-      ).trim();
+    const expiresIn = Number(
+      tokenData?.expires_in || 0
+    );
 
-    const expiresIn =
-      Number(
-        tokenData?.expires_in ||
-          3600
-      );
+    const zoomScope = String(
+      tokenData?.scope || ''
+    ).trim();
+
+    // --------------------------------------------------
+    // IMPORTANT: Never log tokens
+    // --------------------------------------------------
+
+    console.log('Zoom OAuth token received:', {
+      tokenType: tokenData?.token_type,
+      expiresIn,
+      scope: zoomScope || 'none',
+      hasAccessToken: Boolean(accessToken),
+      hasRefreshToken: Boolean(refreshToken),
+    });
 
     if (!accessToken) {
       console.error(
-        'Zoom callback: access token missing',
-        tokenData
+        'Zoom did not return an access token'
       );
 
       return redirectWithError(
         request,
-        'Zoom access token نہیں ملا'
+        'Zoom نے access token واپس نہیں کیا۔'
       );
     }
 
-    // ==================================================
-    // 17. Get Zoom user information
-    // ==================================================
+    // --------------------------------------------------
+    // Check required scope
+    // --------------------------------------------------
 
-    const userResponse =
-      await fetch(
-        'https://api.zoom.us/v2/users/me',
+    const scopes = zoomScope
+      .split(/\s+/)
+      .map((scope: string) => scope.trim())
+      .filter(Boolean);
+
+    const hasUserReadScope =
+      scopes.includes('user:read:user');
+
+    if (!hasUserReadScope) {
+      console.error(
+        'Required Zoom scope missing:',
         {
-          method: 'GET',
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            Accept:
-              'application/json',
-          },
-
-          cache:
-            'no-store',
+          receivedScope: zoomScope || 'none',
+          requiredScope: 'user:read:user',
         }
       );
 
-    // ==================================================
-    // 18. Parse Zoom user response
-    // ==================================================
+      return redirectWithError(
+        request,
+        `Zoom token میں مطلوبہ user:read:user scope موجود نہیں ہے۔ موجودہ scope: ${
+          zoomScope || 'none'
+        }`
+      );
+    }
 
-    let zoomUser: any = {};
+    // --------------------------------------------------
+    // Get Zoom user information
+    // --------------------------------------------------
+
+    console.log(
+      'Getting Zoom user information from /v2/users/me...'
+    );
+
+    const meResponse = await fetch(
+      'https://api.zoom.us/v2/users/me',
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      }
+    );
+
+    const meText = await meResponse.text();
+
+    let meData: any;
 
     try {
-      zoomUser =
-        await userResponse.json();
+      meData = JSON.parse(meText);
     } catch {
-      zoomUser = {};
+      meData = {};
     }
 
-    // ==================================================
-    // 19. Validate Zoom user response
-    // ==================================================
-
-    if (!userResponse.ok) {
-      console.error(
-        'Zoom user information error:',
-        {
-          status:
-            userResponse.status,
-
-          data:
-            zoomUser,
-        }
-      );
+    if (!meResponse.ok) {
+      console.error('Zoom /users/me failed:', {
+        status: meResponse.status,
+        code: meData?.code,
+        message: meData?.message,
+      });
 
       return redirectWithError(
         request,
-        zoomUser?.message ||
-          zoomUser?.reason ||
-          'Zoom user information حاصل نہیں ہو سکی'
+        meData?.message ||
+          'Zoom user information حاصل نہیں ہوسکی۔'
       );
     }
 
-    // ==================================================
-    // 20. Zoom user ID
-    // ==================================================
+    // --------------------------------------------------
+    // Extract Zoom user data
+    // --------------------------------------------------
 
-    const zoomUserId =
-      String(
-        zoomUser?.id ||
-          ''
-      ).trim();
+    const zoomUserId = String(
+      meData?.id || ''
+    ).trim();
+
+    const zoomEmail = String(
+      meData?.email || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    const zoomAccountId = String(
+      meData?.account_id || ''
+    ).trim();
 
     if (!zoomUserId) {
       console.error(
-        'Zoom user ID missing:',
-        zoomUser
+        'Zoom user ID missing from /users/me response'
       );
 
       return redirectWithError(
         request,
-        'Zoom user ID حاصل نہیں ہو سکی'
+        'Zoom user ID حاصل نہیں ہوئی۔'
       );
     }
 
-    // ==================================================
-    // 21. Zoom email
-    // ==================================================
-
-    const zoomEmail =
-      String(
-        zoomUser?.email ||
-          ''
-      )
-        .trim()
-        .toLowerCase();
-
-    // ==================================================
-    // 22. Token expiry
-    // ==================================================
-
-    const safeExpiresIn =
-      Number.isFinite(
-        expiresIn
-      ) &&
-      expiresIn > 0
-        ? expiresIn
-        : 3600;
-
-    const expiresAt =
-      new Date(
-        Date.now() +
-          Math.max(
-            safeExpiresIn - 60,
-            60
-          ) *
-            1000
-      );
-
-    // ==================================================
-    // 23. Prepare connection data
-    // ==================================================
-
-    const connectionData: Record<
-      string,
-      unknown
-    > = {
-      academyId:
-        teacher.academyId,
-
-      teacherId:
-        teacher._id,
-
-      zoomConnected:
-        true,
-
+    console.log('Zoom user verified:', {
       zoomUserId,
-
-      zoomAccountId:
-        String(
-          zoomUser?.account_id ||
-            ''
-        ).trim(),
-
       zoomEmail,
+      zoomAccountId,
+    });
 
-      zoomAccessToken:
-        accessToken,
+    // --------------------------------------------------
+    // Calculate token expiry
+    // --------------------------------------------------
 
-      zoomTokenExpiresAt:
-        expiresAt,
+    const tokenExpiresAt =
+      expiresIn > 0
+        ? new Date(
+            Date.now() +
+              Math.max(
+                expiresIn - 60,
+                60
+              ) *
+                1000
+          )
+        : null;
 
-      zoomScope:
-        String(
-          tokenData?.scope ||
-            ''
-        ).trim(),
+    // --------------------------------------------------
+    // Save Zoom connection
+    // --------------------------------------------------
+
+    const query = {
+      academyId: teacherAcademyId,
+      teacherId: String(teacher._id),
     };
 
-    // ==================================================
-    // 24. Refresh token handling
-    // ==================================================
-    //
-    // Zoom بعض حالات میں refresh token response میں
-    // دے گا، بعض update flows میں نہیں۔
-    //
-    // اگر نیا refresh token ملا ہے تو update کریں۔
-    // اگر نہیں ملا تو پرانا محفوظ رہنے دیں۔
-    // ==================================================
+    const update: any = {
+      academyId: teacherAcademyId,
+      teacherId: String(teacher._id),
 
+      zoomConnected: true,
+
+      zoomUserId,
+      zoomAccountId,
+      zoomEmail,
+
+      zoomAccessToken: accessToken,
+
+      zoomTokenExpiresAt: tokenExpiresAt,
+
+      zoomScope,
+
+      updatedAt: new Date(),
+    };
+
+    // Zoom may not return a refresh token every time.
+    // Only replace the existing one when a new one exists.
     if (refreshToken) {
-      connectionData.zoomRefreshToken =
-        refreshToken;
+      update.zoomRefreshToken = refreshToken;
     }
 
-    // ==================================================
-    // 25. Save ZoomConnection
-    // ==================================================
-    //
-    // Unique identity:
-    //
-    // academyId + teacherId
-    //
-    // Teacher._id استعمال ہو رہا ہے۔
-    // JWT User ID نہیں۔
-    // ==================================================
+    console.log(
+      'Saving Zoom connection to MongoDB...'
+    );
 
     const savedConnection =
       await ZoomConnection.findOneAndUpdate(
+        query,
         {
-          academyId:
-            teacher.academyId,
-
-          teacherId:
-            teacher._id,
+          $set: update,
         },
-
         {
-          $set:
-            connectionData,
-        },
-
-        {
-          upsert:
-            true,
-
-          new:
-            true,
-
-          setDefaultsOnInsert:
-            true,
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
         }
       );
 
-    // ==================================================
-    // 26. Verify save
-    // ==================================================
-
     if (!savedConnection) {
       console.error(
-        'ZoomConnection was not saved'
+        'Zoom connection could not be saved'
       );
 
       return redirectWithError(
         request,
-        'Zoom connection database میں save نہیں ہو سکا'
+        'Zoom connection database میں save نہیں ہوسکی۔'
       );
     }
 
-    // ==================================================
-    // 27. Final database verification
-    // ==================================================
-
-    const verifiedConnection =
-      await ZoomConnection.findOne({
-        academyId:
-          teacher.academyId,
-
-        teacherId:
-          teacher._id,
-
-        zoomConnected:
-          true,
-      }).select(
-        '_id academyId teacherId zoomConnected zoomUserId zoomEmail'
-      );
-
-    if (!verifiedConnection) {
-      console.error(
-        'ZoomConnection save verification failed'
-      );
-
-      return redirectWithError(
-        request,
-        'Zoom connection save ہونے کے بعد database verification ناکام ہو گئی'
-      );
-    }
-
-    // ==================================================
-    // 28. Success logs
-    // ==================================================
-
-    console.log(
-      '=========================================='
-    );
-
-    console.log(
-      'ZOOM CONNECTION SAVED SUCCESSFULLY'
-    );
-
-    console.log({
-      connectionId:
-        String(
-          verifiedConnection._id
-        ),
-
-      teacherId:
-        String(
-          verifiedConnection.teacherId
-        ),
-
-      academyId:
-        String(
-          verifiedConnection.academyId
-        ),
-
-      zoomUserId:
-        verifiedConnection.zoomUserId,
-
-      zoomEmail:
-        verifiedConnection.zoomEmail,
-
-      zoomConnected:
-        verifiedConnection.zoomConnected,
+    console.log('Zoom connection saved successfully:', {
+      teacherId: String(teacher._id),
+      academyId: teacherAcademyId,
+      zoomUserId,
+      zoomEmail,
+      scope: zoomScope,
+      connected: savedConnection.zoomConnected,
     });
 
-    console.log(
-      '=========================================='
-    );
+    console.log('==========================================');
+    console.log('Teacher Zoom OAuth Completed Successfully');
+    console.log('==========================================');
 
-    // ==================================================
-    // 29. Redirect to Teacher Settings
-    // ==================================================
+    return redirectWithSuccess(request);
 
-    return redirectWithSuccess(
-      request
-    );
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error(
-      'Zoom callback error:',
+      'Teacher Zoom OAuth Callback Error:',
       error
     );
 
     return redirectWithError(
       request,
-      error instanceof Error
-        ? error.message
-        : 'Zoom callback میں خرابی پیش آئی'
+      error?.message ||
+        'Zoom connection کے دوران غیر متوقع مسئلہ پیش آیا۔'
     );
   }
 }
+
