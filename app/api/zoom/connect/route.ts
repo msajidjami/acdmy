@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
+import dbConnect from '@/app/lib/dbConnect';
+import Teacher from '@/models/Teacher';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,27 +21,21 @@ function getRequiredEnv(name: string): string {
 }
 
 // ======================================================
-// OAuth credential helpers
+// OAuth credential helper
 // ======================================================
 //
-// OAuth کے لیے dedicated credentials استعمال کریں۔
-// پرانے SDK credentials کو fallback رکھا گیا ہے تاکہ
-// موجودہ deployment فوراً نہ ٹوٹے۔
+// OAuth کے لیے پہلے والے environment variable names
+// ہی استعمال کیے جا رہے ہیں:
 //
-// Recommended:
 // ZOOM_OAUTH_CLIENT_ID
 // ZOOM_OAUTH_CLIENT_SECRET
 //
-// Fallback:
-// ZOOM_MEETING_SDK_CLIENT_ID
-// ZOOM_MEETING_SDK_CLIENT_SECRET
+// یہاں Meeting SDK Client ID استعمال نہیں ہوگی۔
 // ======================================================
 
 function getZoomOAuthClientId(): string {
-  return (
-    process.env.ZOOM_OAUTH_CLIENT_ID?.trim() ||
-    process.env.ZOOM_MEETING_SDK_CLIENT_ID?.trim() ||
-    getRequiredEnv('ZOOM_OAUTH_CLIENT_ID')
+  return getRequiredEnv(
+    'ZOOM_OAUTH_CLIENT_ID'
   );
 }
 
@@ -51,7 +47,10 @@ function redirectToLogin(
   request: NextRequest,
   message: string
 ) {
-  const url = new URL('/login', request.url);
+  const url = new URL(
+    '/login',
+    request.url
+  );
 
   url.searchParams.set(
     'message',
@@ -86,6 +85,30 @@ function redirectToSettings(
 // ======================================================
 // GET /api/zoom/connect
 // ======================================================
+//
+// Teacher اپنے ہی Zoom account کو connect کرے گا.
+//
+// Flow:
+//
+// Teacher Login
+//      ↓
+// Login JWT
+//      ↓
+// Logged-in Email
+//      ↓
+// Teacher database میں Email تلاش
+//      ↓
+// Teacher verify
+//      ↓
+// Zoom OAuth
+//      ↓
+// Teacher اپنے Zoom account سے authorize کرے گا
+//      ↓
+// /api/zoom/callback
+//      ↓
+// اسی Teacher کے ساتھ Zoom account save ہوگا
+//
+// ======================================================
 
 export async function GET(
   request: NextRequest
@@ -96,7 +119,9 @@ export async function GET(
     // ==================================================
 
     const token =
-      request.cookies.get('token')?.value;
+      request.cookies.get(
+        'token'
+      )?.value;
 
     if (!token) {
       return redirectToLogin(
@@ -110,7 +135,9 @@ export async function GET(
     // ==================================================
 
     const jwtSecret =
-      getRequiredEnv('JWT_SECRET');
+      getRequiredEnv(
+        'JWT_SECRET'
+      );
 
     // ==================================================
     // 3. Verify login JWT
@@ -125,16 +152,17 @@ export async function GET(
     };
 
     try {
-      userData = jwt.verify(
-        token,
-        jwtSecret
-      ) as {
-        userId?: string;
-        email?: string;
-        role?: string;
-        name?: string;
-        isVerified?: boolean;
-      };
+      userData =
+        jwt.verify(
+          token,
+          jwtSecret
+        ) as {
+          userId?: string;
+          email?: string;
+          role?: string;
+          name?: string;
+          isVerified?: boolean;
+        };
     } catch (error) {
       console.error(
         'Zoom connect JWT verification error:',
@@ -178,7 +206,47 @@ export async function GET(
     }
 
     // ==================================================
-    // 5. Zoom OAuth credentials
+    // 5. Connect MongoDB
+    // ==================================================
+
+    await dbConnect();
+
+    // ==================================================
+    // 6. Find Teacher by logged-in email
+    // ==================================================
+    //
+    // ہم JWT کے role پر depend نہیں کریں گے۔
+    //
+    // اصل Teacher record database سے verify ہوگا۔
+    // ==================================================
+
+    const teacher =
+      await Teacher.findOne({
+        email: email,
+      }).select(
+        '_id academyId name email status'
+      );
+
+    if (!teacher) {
+      return redirectToSettings(
+        request,
+        'اس login email کے ساتھ Teacher account موجود نہیں ہے'
+      );
+    }
+
+    // ==================================================
+    // 7. Verify Teacher Academy
+    // ==================================================
+
+    if (!teacher.academyId) {
+      return redirectToSettings(
+        request,
+        'آپ کے Teacher account کے ساتھ Academy موجود نہیں ہے'
+      );
+    }
+
+    // ==================================================
+    // 8. OAuth credentials
     // ==================================================
 
     const clientId =
@@ -190,23 +258,49 @@ export async function GET(
       );
 
     // ==================================================
-    // 6. Create signed OAuth state
+    // 9. Validate redirect URI
+    // ==================================================
+
+    if (
+      !redirectUri.includes(
+        '/api/zoom/callback'
+      )
+    ) {
+      throw new Error(
+        'ZOOM_OAUTH_REDIRECT_URI غلط ہے۔ اسے /api/zoom/callback پر point کرنا چاہیے۔'
+      );
+    }
+
+    // ==================================================
+    // 10. Create signed OAuth state
     // ==================================================
     //
-    // userId یہاں صرف logged-in User کو identify
-    // کرنے کے لیے ہے۔
+    // Teacher کی اصل شناخت state میں محفوظ ہوگی۔
     //
-    // اسے Teacher._id نہیں سمجھا جائے گا۔
-    //
-    // Callback میں Teacher email کے ذریعے resolve ہوگا۔
+    // Callback میں اسی Teacher کے ساتھ Zoom account
+    // attach کیا جائے گا۔
     // ==================================================
 
     const state =
       jwt.sign(
         {
           userId,
-          email,
-          purpose: 'zoom_oauth',
+          teacherId:
+            String(
+              teacher._id
+            ),
+          email:
+            String(
+              teacher.email
+            )
+              .trim()
+              .toLowerCase(),
+          academyId:
+            String(
+              teacher.academyId
+            ),
+          purpose:
+            'zoom_oauth',
         },
         jwtSecret,
         {
@@ -215,7 +309,12 @@ export async function GET(
       );
 
     // ==================================================
-    // 7. Build Zoom OAuth URL
+    // 11. Build Zoom OAuth URL
+    // ==================================================
+    //
+    // صرف Zoom OAuth authorization endpoint استعمال ہوگا۔
+    //
+    // Marketplace dashboard کا URL یہاں نہیں ہے۔
     // ==================================================
 
     const zoomUrl =
@@ -244,7 +343,7 @@ export async function GET(
     );
 
     // ==================================================
-    // 8. Logging
+    // 12. Logging
     // ==================================================
 
     console.log(
@@ -252,14 +351,23 @@ export async function GET(
     );
 
     console.log(
-      'Starting Zoom OAuth'
+      'Starting Teacher Zoom OAuth'
     );
 
     console.log({
       userId,
+      teacherId:
+        String(
+          teacher._id
+        ),
       email,
+      academyId:
+        String(
+          teacher.academyId
+        ),
       redirectUri,
-      clientIdConfigured: Boolean(clientId),
+      clientIdConfigured:
+        Boolean(clientId),
     });
 
     console.log(
@@ -267,7 +375,7 @@ export async function GET(
     );
 
     // ==================================================
-    // 9. Redirect to Zoom
+    // 13. Redirect Teacher to Zoom
     // ==================================================
 
     return NextResponse.redirect(
@@ -275,7 +383,7 @@ export async function GET(
     );
   } catch (error: unknown) {
     console.error(
-      'Zoom connect error:',
+      'Teacher Zoom connect error:',
       error
     );
 
