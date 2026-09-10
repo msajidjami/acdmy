@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 
 import dbConnect from "@/app/lib/dbConnect";
 import Class from "@/models/Class";
-import User from "@/models/User"; // ✅ User import کیا گیا
+import User from "@/models/User";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -25,7 +25,7 @@ async function getCurrentUser(req: NextRequest) {
 
 /*
 |--------------------------------------------------------------------------
-| GET Single Class
+| GET Single Class (classes1)
 |--------------------------------------------------------------------------
 */
 
@@ -40,17 +40,12 @@ export async function GET(
 
     if (!user) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
       );
     }
 
-    const { id } = await params; // ✅ params کو await کیا گیا
+    const { id } = await params;
 
     const classData = await Class.findById(id)
       .populate("student", "name email")
@@ -59,13 +54,21 @@ export async function GET(
 
     if (!classData) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Class not found.",
-        },
-        {
-          status: 404,
-        }
+        { success: false, message: "Class not found." },
+        { status: 404 }
+      );
+    }
+
+    // ✅ صرف وہی roles جو schema میں ہیں
+    const isAuthorized =
+      user.role === "admin" ||
+      classData.student._id.toString() === user._id.toString() ||
+      classData.teacher._id.toString() === user._id.toString();
+
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { success: false, message: "Permission denied." },
+        { status: 403 }
       );
     }
 
@@ -77,174 +80,15 @@ export async function GET(
     console.error(error);
 
     return NextResponse.json(
-      {
-        success: false,
-        message: "Server Error",
-      },
-      {
-        status: 500,
-      }
+      { success: false, message: "Server Error" },
+      { status: 500 }
     );
   }
 }
 
 /*
 |--------------------------------------------------------------------------
-| UPDATE Class
+| PUT / DELETE (اگر آپ کی فائل میں موجود ہیں تو وہ بھی ویسے ہی رکھیں)
 |--------------------------------------------------------------------------
+| ان میں بھی اگر کہیں "education-admin" لکھا ہو تو مکمل ہٹا دیں۔
 */
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    await dbConnect();
-
-    const user = await getCurrentUser(req);
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    if (
-      user.role !== "admin" &&
-      user.role !== "education-admin"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Permission denied.",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    const { id } = await params; // ✅ params کو await کیا گیا
-
-    const body = await req.json();
-
-    const updated = await Class.findByIdAndUpdate(
-      id,
-      body,
-      {
-        new: true,
-        runValidators: true,
-      }
-    );
-
-    if (!updated) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Class not found.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Class Updated Successfully",
-      class: updated,
-    });
-  } catch (error) {
-    console.error(error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Server Error",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-/*
-|--------------------------------------------------------------------------
-| DELETE Class
-|--------------------------------------------------------------------------
-*/
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    await dbConnect();
-
-    const user = await getCurrentUser(req);
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    if (user.role !== "admin") {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Only Admin can delete classes.",
-        },
-        {
-          status: 403,
-        }
-      );
-    }
-
-    const { id } = await params; // ✅ params کو await کیا گیا
-
-    const deleted = await Class.findByIdAndDelete(id);
-
-    if (!deleted) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Class not found.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Class Deleted Successfully",
-    });
-  } catch (error) {
-    console.error(error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Server Error",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}

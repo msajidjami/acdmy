@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+
 import connectDB from '@/app/lib/dbConnect';
 import User from '@/models/User';
 import Academy from '@/models/Academy';
@@ -8,52 +9,74 @@ import Student from '@/models/Student';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
+interface DecodedToken extends JwtPayload {
+  userId?: string;
+  id?: string;
+  _id?: string;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('token')?.value;
+
     if (!token) {
       return NextResponse.json({ roles: [], user: null }, { status: 200 });
     }
 
-    let decoded: { userId: string };
+    let decoded: DecodedToken;
+
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const verified = jwt.verify(token, JWT_SECRET);
+
+      if (typeof verified === 'string') {
+        return NextResponse.json({ roles: [], user: null }, { status: 200 });
+      }
+
+      decoded = verified as DecodedToken;
     } catch {
+      return NextResponse.json({ roles: [], user: null }, { status: 200 });
+    }
+
+    // ✅ userId, id, _id — تینوں میں سے کوئی ایک
+    const userId = decoded.userId || decoded.id || decoded._id;
+
+    if (!userId) {
       return NextResponse.json({ roles: [], user: null }, { status: 200 });
     }
 
     await connectDB();
 
-    // صارف کو userId سے ڈھونڈیں
-    const user = await User.findById(decoded.userId).select('-password');
+    const user = await User.findById(userId).select('-password');
+
     if (!user) {
       return NextResponse.json({ roles: [], user: null }, { status: 200 });
     }
 
     const roles: string[] = [];
-    const userId = user._id;
-    const email = user.email?.toLowerCase(); // ✅ کیس انسینسیٹو
+    const userObjectId = user._id;
+    const email = user.email?.toLowerCase();
 
-    // 1. Admin
+    // 1. Admin (صرف schema والا role)
     if (user.role === 'admin') {
       roles.push('admin');
     }
 
-    // 2. Owner
-    const academy = await Academy.findOne({ ownerId: userId });
+    // 2. Owner — academy کا مالک ہو
+    const academy = await Academy.findOne({ ownerId: userObjectId });
     if (academy) {
       roles.push('owner');
     }
 
-    // 3. Teacher - email سے ڈھونڈیں (کیس انسینسیٹو)
+    // 3 & 4. Teacher اور Student — email سے (case-insensitive)
     if (email) {
-      const teacher = await Teacher.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+      const emailRegex = new RegExp(`^${email}$`, 'i');
+
+      const teacher = await Teacher.findOne({ email: emailRegex });
       if (teacher) {
         roles.push('teacher');
       }
 
-      // 4. Student - email سے ڈھونڈیں (کیس انسینسیٹو)
-      const student = await Student.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+      const student = await Student.findOne({ email: emailRegex });
       if (student) {
         roles.push('student');
       }
@@ -68,6 +91,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ roles, user: userData });
   } catch (error) {
     console.error('Error fetching user roles:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
