@@ -5,6 +5,11 @@ import bcrypt from 'bcryptjs';
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
+// ✅ Role کی type محفوظ طریقے سے define کریں
+type UserRole = 'admin' | 'owner' | 'teacher' | 'user' | 'student';
+
+const PUBLIC_ROLES: UserRole[] = ['user', 'student', 'owner'];
+
 // ----- Helper to check MongoDB duplicate key error -----
 function isDuplicateKeyError(error: unknown): boolean {
   return (
@@ -20,7 +25,6 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-
     const { name, email, password, role, secretCode } = body;
 
     if (!name || !email || !password || !role) {
@@ -32,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const cleanName = String(name).trim();
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanRole = String(role).trim().toLowerCase();
+    const cleanRole = String(role).trim().toLowerCase() as UserRole;
 
     if (!cleanName) {
       return NextResponse.json(
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const PUBLIC_ROLES = ['user', 'student', 'owner'];
+    // ✅ public roles صرف یہی 3 ہیں
     if (!PUBLIC_ROLES.includes(cleanRole)) {
       return NextResponse.json(
         { message: 'Invalid account type.' },
@@ -71,7 +75,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let finalRole = cleanRole;
+    // ✅ finalRole کو UserRole type دیں
+    let finalRole: UserRole = cleanRole;
 
     if (secretCode) {
       if (!ADMIN_SECRET) {
@@ -94,11 +99,13 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
 
+    // ✅ اب User.create کو صحیح type ملے گی
     const user = await User.create({
       name: cleanName,
       email: cleanEmail,
       password: hashedPassword,
       role: finalRole,
+      provider: 'credentials',       // ✅ یہ بھی شامل کریں
       isVerified: false,
     });
 
@@ -117,7 +124,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Signup error:', error);
 
-    // Check for MongoDB duplicate key error (code 11000)
     if (isDuplicateKeyError(error)) {
       return NextResponse.json(
         { message: 'Email already registered.' },
