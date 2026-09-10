@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt, { JwtPayload } from 'jsonwebtoken';
@@ -71,10 +70,7 @@ export async function PUT(req: NextRequest) {
     // ==================================================
     // 4. Get User ID from token
     // ==================================================
-    const studentId =
-      decoded.userId ||
-      decoded.id ||
-      decoded._id;
+    const studentId = decoded.userId || decoded.id || decoded._id;
 
     if (!studentId) {
       return NextResponse.json(
@@ -118,6 +114,9 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    // ✅ schema چھیڑے بغیر — any میں cast کریں
+    const s = student as any;
+
     // ==================================================
     // 9. UNASSIGN TEACHER
     // ==================================================
@@ -126,7 +125,7 @@ export async function PUT(req: NextRequest) {
       teacherId === undefined ||
       teacherId === ''
     ) {
-      const oldTeacherId = student.assignedTeacher;
+      const oldTeacherId = s.assignedTeacher;
 
       // پہلے سے teacher assigned نہیں
       if (!oldTeacherId) {
@@ -138,18 +137,15 @@ export async function PUT(req: NextRequest) {
       }
 
       // User سے teacher remove کریں
-      student.assignedTeacher = undefined;
+      s.assignedTeacher = undefined;
       await student.save();
 
       // پرانے teacher کا count کم کریں
-      await Teacher.findByIdAndUpdate(
-        oldTeacherId,
-        {
-          $inc: {
-            totalStudents: -1,
-          },
-        }
-      );
+      await Teacher.findByIdAndUpdate(oldTeacherId, {
+        $inc: {
+          totalStudents: -1,
+        },
+      });
 
       const updatedStudent = await User.findById(studentId)
         .select('_id name email assignedTeacher')
@@ -185,9 +181,7 @@ export async function PUT(req: NextRequest) {
 
     if (!teacher) {
       return NextResponse.json(
-        {
-          error: 'Teacher not found or inactive',
-        },
+        { error: 'Teacher not found or inactive' },
         { status: 404 }
       );
     }
@@ -195,15 +189,12 @@ export async function PUT(req: NextRequest) {
     // ==================================================
     // 12. Get old teacher
     // ==================================================
-    const oldTeacherId = student.assignedTeacher;
+    const oldTeacherId = s.assignedTeacher;
 
     // ==================================================
     // 13. Same teacher already assigned
     // ==================================================
-    if (
-      oldTeacherId &&
-      oldTeacherId.toString() === teacherId
-    ) {
+    if (oldTeacherId && oldTeacherId.toString() === teacherId) {
       const currentStudent = await User.findById(studentId)
         .select('_id name email assignedTeacher')
         .lean();
@@ -218,9 +209,7 @@ export async function PUT(req: NextRequest) {
     // ==================================================
     // 14. Assign new teacher
     // ==================================================
-    student.assignedTeacher = new mongoose.Types.ObjectId(
-      teacherId
-    );
+    s.assignedTeacher = new mongoose.Types.ObjectId(teacherId);
 
     await student.save();
 
@@ -228,27 +217,21 @@ export async function PUT(req: NextRequest) {
     // 15. Decrease old teacher count
     // ==================================================
     if (oldTeacherId) {
-      await Teacher.findByIdAndUpdate(
-        oldTeacherId,
-        {
-          $inc: {
-            totalStudents: -1,
-          },
-        }
-      );
+      await Teacher.findByIdAndUpdate(oldTeacherId, {
+        $inc: {
+          totalStudents: -1,
+        },
+      });
     }
 
     // ==================================================
     // 16. Increase new teacher count
     // ==================================================
-    await Teacher.findByIdAndUpdate(
-      teacherId,
-      {
-        $inc: {
-          totalStudents: 1,
-        },
-      }
-    );
+    await Teacher.findByIdAndUpdate(teacherId, {
+      $inc: {
+        totalStudents: 1,
+      },
+    });
 
     // ==================================================
     // 17. Get updated student
@@ -267,16 +250,13 @@ export async function PUT(req: NextRequest) {
         : 'Teacher assigned successfully',
       student: updatedStudent,
     });
-
   } catch (error) {
     console.error('Assign teacher error:', error);
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'Server error',
+          error instanceof Error ? error.message : 'Server error',
       },
       {
         status: 500,
@@ -284,4 +264,3 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
-

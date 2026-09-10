@@ -53,10 +53,7 @@ export async function GET() {
       );
     }
 
-    const userId =
-      decoded.userId ||
-      decoded.id ||
-      decoded._id;
+    const userId = decoded.userId || decoded.id || decoded._id;
 
     if (!userId) {
       return NextResponse.json(
@@ -82,12 +79,15 @@ export async function GET() {
       );
     }
 
-    const assignedTeacher = user.assignedTeacher as any;
+    // ✅ schema چھیڑے بغیر — any میں cast کریں
+    const u = user as any;
+
+    const assignedTeacher = u.assignedTeacher;
 
     return NextResponse.json({
-      id: user._id.toString(),
-      name: user.name,
-      email: user.email,
+      id: u._id.toString(),
+      name: u.name,
+      email: u.email,
 
       assignedTeacher: assignedTeacher
         ? assignedTeacher._id.toString()
@@ -103,16 +103,13 @@ export async function GET() {
           }
         : null,
     });
-
   } catch (error) {
     console.error('Error fetching user:', error);
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'Server error',
+          error instanceof Error ? error.message : 'Server error',
       },
       { status: 500 }
     );
