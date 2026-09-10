@@ -10,9 +10,9 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const JWT_SECRET = process.env.JWT_SECRET!;
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI ||
-  "http://localhost:3000/api/auth/google/callback";
+  process.env.GOOGLE_REDIRECT_URI || `${APP_URL}/api/auth/google/callback`;
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,114 +22,90 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=NoCode", req.url));
     }
 
-    // Exchange code for access token
-    const tokenResponse = await fetch(
-      "https://oauth2.googleapis.com/token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          code,
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          redirect_uri: REDIRECT_URI,
-          grant_type: "authorization_code",
-        }),
-      }
-    );
+    // 1. code → access token
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
 
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
       console.error("Google Token Error:", tokenData);
-
-      return NextResponse.redirect(
-        new URL("/login?error=TokenError", req.url)
-      );
+      return NextResponse.redirect(new URL("/login?error=TokenError", req.url));
     }
 
-    // Get user profile
+    // 2. access token → profile
     const profileResponse = await fetch(
       "https://www.googleapis.com/oauth2/v2/userinfo",
-      {
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
     );
-
     const profile = await profileResponse.json();
 
     if (!profileResponse.ok) {
       console.error("Google Profile Error:", profile);
-
-      return NextResponse.redirect(
-        new URL("/login?error=ProfileError", req.url)
-      );
+      return NextResponse.redirect(new URL("/login?error=ProfileError", req.url));
     }
 
-    const {
-      id: googleId,
-      email,
-      name,
-      picture,
-    } = profile;
+    const { id: googleId, email, name, picture } = profile;
 
     if (!email) {
-      return NextResponse.redirect(
-        new URL("/login?error=NoEmail", req.url)
-      );
+      return NextResponse.redirect(new URL("/login?error=NoEmail", req.url));
     }
 
     await dbConnect();
 
-    let user = await User.findOne({
-      email: email.toLowerCase(),
-    });
+    const user = await User.findOne({ email: email.toLowerCase() });
 
+    // ═══════════════════════════════════════════════════════
+    // ✅ نیا user — Role انتخاب کرنے کے لیے بھیجیں
+    // ═══════════════════════════════════════════════════════
     if (!user) {
-      user = await User.create({
-        name: name || email.split("@")[0],
+      // عارضی JWT بنائیں جس میں Google کی info ہو
+      const tempToken = jwt.sign(
+        {
+          type: "google-signup",
+          googleId,
+          email: email.toLowerCase(),
+          name: name || email.split("@")[0],
+          avatar: picture || "",
+        },
+        JWT_SECRET,
+        { expiresIn: "15m" }
+      );
 
-        email: email.toLowerCase(),
-
-        provider: "google",
-
-        googleId,
-
-        avatar: picture || "",
-
-        role: "user",
-
-        isVerified: true,
-
-        emailVerified: true,
-
-        loginCount: 1,
-
-        lastLogin: new Date(),
+      const response = NextResponse.redirect(new URL("/choose-role", req.url));
+      response.cookies.set({
+        name: "google_temp",
+        value: tempToken,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 15, // 15 منٹ
       });
-    } else {
-      user.provider = "google";
-
-      user.googleId = googleId;
-
-      user.avatar = picture || user.avatar;
-
-      user.isVerified = true;
-
-      user.emailVerified = true;
-
-      user.lastLogin = new Date();
-
-      user.loginCount = (user.loginCount || 0) + 1;
-
-      await user.save();
+      return response;
     }
 
-    // JWT
+    // ═══════════════════════════════════════════════════════
+    // ✅ پرانا user — سیدھا لاگ ان
+    // ═══════════════════════════════════════════════════════
+    user.provider = user.provider || "google";
+    user.googleId = googleId;
+    user.avatar = picture || user.avatar;
+    user.isVerified = true;
+    user.lastLogin = new Date();
+    user.loginCount = (user.loginCount || 0) + 1;
+    await user.save();
+
+    // JWT بنائیں
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -139,15 +115,10 @@ export async function GET(req: NextRequest) {
         provider: user.provider,
       },
       JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
+      { expiresIn: "7d" }
     );
 
-    const response = NextResponse.redirect(
-      new URL("/dashboard", req.url)
-    );
-
+    const response = NextResponse.redirect(new URL("/dashboard", req.url));
     response.cookies.set({
       name: "token",
       value: token,
@@ -157,13 +128,9 @@ export async function GET(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
-
     return response;
   } catch (error) {
     console.error("Google Callback Error:", error);
-
-    return NextResponse.redirect(
-      new URL("/login?error=ServerError", req.url)
-    );
+    return NextResponse.redirect(new URL("/login?error=ServerError", req.url));
   }
 }

@@ -3,11 +3,16 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export interface IUser extends Document {
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: 'admin' | 'owner' | 'teacher' | 'user' | 'student';
   isVerified: boolean;
+  provider: 'credentials' | 'google';
+  googleId?: string | null;
+  avatar?: string | null;
   resetToken?: string | null;
   resetTokenExpiry?: Date | null;
+  lastLogin?: Date | null;      // ✅ نیا
+  loginCount: number;           // ✅ نیا
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,7 +35,9 @@ const UserSchema = new Schema<IUser>(
 
     password: {
       type: String,
-      required: true,
+      required: function (this: IUser) {
+        return this.provider === 'credentials';
+      },
     },
 
     role: {
@@ -45,7 +52,22 @@ const UserSchema = new Schema<IUser>(
       default: false,
     },
 
-    // ✅ پاس ورڈ ری سیٹ کے لیے فیلڈز
+    provider: {
+      type: String,
+      enum: ['credentials', 'google'],
+      default: 'credentials',
+    },
+
+    googleId: {
+      type: String,
+      default: null,
+    },
+
+    avatar: {
+      type: String,
+      default: null,
+    },
+
     resetToken: {
       type: String,
       default: null,
@@ -55,14 +77,26 @@ const UserSchema = new Schema<IUser>(
       type: Date,
       default: null,
     },
+
+    // ✅ نیا — آخری لاگ ان کا وقت
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
+
+    // ✅ نیا — کتنی بار لاگ ان ہوا
+    loginCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Optional: index for fast token lookup
 UserSchema.index({ resetToken: 1 });
+UserSchema.index({ googleId: 1 }, { sparse: true });
 
 export default (mongoose.models.User as Model<IUser>) ||
   mongoose.model<IUser>('User', UserSchema);
