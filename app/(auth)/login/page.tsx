@@ -63,7 +63,6 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // ✅ کردار کی بنیاد پر ری ڈائریکٹ
         const role = data.user?.role;
         if (role === 'admin') {
           router.push('/admin');
@@ -130,7 +129,16 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-black/80 mb-1">Password</label>
+              {/* ✅ Forgot Password لنک یہاں شامل */}
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-black/80">Password</label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <LockClosedIcon className="absolute left-3 top-3 h-5 w-5 text-black/40" />
                 <input
@@ -176,7 +184,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* چھوٹا فوٹر نوٹ */}
         <p className="mt-6 text-center text-xs text-black/30">
           Secured with 🔒 Islamic Academy Platform
         </p>
