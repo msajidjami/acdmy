@@ -1,4 +1,5 @@
 'use client';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -14,26 +15,54 @@ import {
   CalendarIcon,
   Menu,
   X,
+  GraduationCap,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
+
+/* ------------------ Types ------------------ */
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
+  badge?: string;
 }
 
-const navItems: NavItem[] = [
+/* ----------------------------------------------------------
+   🎯 SITE NAVBAR HEIGHT
+   ----------------------------------------------------------
+   اپنی ویب سائٹ کی navbar کی height کے مطابق تبدیل کریں:
+   • h-16 (64px)  →  '4rem'
+   • h-20 (80px)  →  '5rem'
+   • h-24 (96px)  →  '6rem'
+---------------------------------------------------------- */
+const NAVBAR_H = '4rem'; // 64px
+
+const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/owner/dashboard', icon: LayoutDashboard },
   { name: 'My Academy', href: '/owner/academy', icon: School },
   { name: 'Teachers', href: '/owner/teachers', icon: Users },
   { name: 'Students', href: '/owner/students', icon: User },
+];
+
+const contentNavItems: NavItem[] = [
   { name: 'Courses', href: '/owner/courses', icon: BookOpen },
   { name: 'Assignments', href: '/owner/assignments', icon: CalendarIcon },
-  { name: 'Inquiries', href: '/owner/inquiries', icon: Mail },
+];
+
+const systemNavItems: NavItem[] = [
+  { name: 'Inquiries', href: '/owner/inquiries', icon: Mail, badge: '3' },
   { name: 'Settings', href: '/owner/settings', icon: Settings },
 ];
 
-export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+/* ------------------ Layout ------------------ */
+
+interface OwnerLayoutProps {
+  children: React.ReactNode;
+}
+
+export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -45,22 +74,104 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
     window.location.href = '/login';
   };
 
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+
+  /* ---- Shared Nav Item renderer ---- */
+  const renderNavItem = (item: NavItem, onClick?: () => void) => {
+    const active = isActive(item.href);
+    const Icon = item.icon;
+
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        onClick={onClick}
+        className={`
+          group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl
+          text-sm font-medium transition-all duration-200
+          ${
+            active
+              ? 'bg-gradient-to-r from-emerald-50 to-emerald-50/40 text-emerald-700 shadow-sm'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }
+        `}
+      >
+        {/* Active left indicator */}
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-emerald-600 rounded-r-full" />
+        )}
+
+        <span
+          className={`
+            flex items-center justify-center h-8 w-8 rounded-lg transition-colors
+            ${
+              active
+                ? 'bg-emerald-100 text-emerald-600'
+                : 'bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-emerald-600'
+            }
+          `}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+
+        <span className="flex-1">{item.name}</span>
+
+        {item.badge && (
+          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-600">
+            {item.badge}
+          </span>
+        )}
+
+        {active && <ChevronRight className="h-4 w-4 text-emerald-500" />}
+      </Link>
+    );
+  };
+
+  /* ---- Section renderer ---- */
+  const renderSection = (
+    label: string,
+    items: NavItem[],
+    onClick?: () => void
+  ) => (
+    <>
+      <p className="px-3 pt-4 first:pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+        {label}
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => renderNavItem(item, onClick))}
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen pt-20 bg-slate-50">
+    <div className="min-h-screen bg-slate-50" style={{ paddingTop: NAVBAR_H }}>
       {/* =========================================
           MOBILE HEADER
       ========================================= */}
       <header
         className="
-          fixed top-1 left-0 right-0 h-16
-          bg-white border-b border-slate-200 shadow-sm
-          z-[100] lg:hidden
+          fixed left-0 right-0 h-14
+          bg-white/95 backdrop-blur-md border-b border-slate-200
+          z-40 lg:hidden
           flex items-center justify-between px-4
         "
+        style={{ top: NAVBAR_H }}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-bold text-indigo-700">🎓 Owner</span>
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/20">
+            <GraduationCap className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900 leading-tight">
+              Owner Panel
+            </p>
+            <p className="text-[10px] text-slate-500 leading-tight">
+              Academy Manager
+            </p>
+          </div>
         </div>
+
         <button
           type="button"
           onClick={toggleSidebar}
@@ -73,136 +184,144 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
           aria-label="Toggle menu"
         >
           {isSidebarOpen ? (
-            <X className="h-6 w-6 text-slate-700" />
+            <X className="h-5 w-5 text-slate-700" />
           ) : (
-            <Menu className="h-6 w-6 text-slate-700" />
+            <Menu className="h-5 w-5 text-slate-700" />
           )}
         </button>
       </header>
 
       {/* =========================================
-          MOBILE OVERLAY + DROPDOWN MENU
+          MOBILE MENU + OVERLAY
       ========================================= */}
       {isSidebarOpen && (
         <>
           {/* Overlay */}
           <div
-            className="fixed top-16 left-0 right-0 bottom-0 bg-black/30 z-[80] lg:hidden"
+            className="fixed left-0 right-0 bottom-0 bg-slate-900/40 backdrop-blur-[2px] z-30 lg:hidden"
+            style={{ top: `calc(${NAVBAR_H} + 3.5rem)` }}
             onClick={closeSidebar}
           />
-          {/* Dropdown Menu */}
+
+          {/* Dropdown */}
           <div
             className="
-              fixed top-16 left-0 right-0
-              bg-white border-b border-slate-200 shadow-xl
-              z-[90] lg:hidden
+              fixed left-0 right-0
+              bg-white border-b border-slate-200 shadow-2xl
+              z-40 lg:hidden
             "
+            style={{ top: `calc(${NAVBAR_H} + 3.5rem)` }}
           >
-            <nav className="p-4 space-y-2 max-h-[calc(100vh-4rem)] overflow-y-auto">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    onClick={closeSidebar}
-                    className={`
-                      flex items-center gap-3 px-4 py-3 rounded-xl
-                      text-sm font-medium transition
-                      ${
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                          : 'text-slate-600 hover:bg-slate-100'
-                      }
-                    `}
-                  >
-                    <Icon className={`h-5 w-5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                    {item.name}
-                  </Link>
-                );
-              })}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="
-                  flex items-center gap-3 px-4 py-3 w-full rounded-xl
-                  text-sm font-medium text-red-600 hover:bg-red-50 transition
-                "
-              >
-                <LogOut className="h-5 w-5" />
-                Logout
-              </button>
+            <nav className="p-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
+              {renderSection('Main Menu', mainNavItems, closeSidebar)}
+              {renderSection('Content', contentNavItems, closeSidebar)}
+              {renderSection('System', systemNavItems, closeSidebar)}
+
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="
+                    flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl
+                    text-sm font-medium text-rose-600 hover:bg-rose-50 transition
+                  "
+                >
+                  <span className="flex items-center justify-center h-8 w-8 rounded-lg bg-rose-100 text-rose-600">
+                    <LogOut className="h-4 w-4" />
+                  </span>
+                  Logout
+                </button>
+              </div>
             </nav>
           </div>
         </>
       )}
 
       {/* =========================================
-          DESKTOP SIDEBAR
+          LAYOUT WRAPPER
       ========================================= */}
-      <aside
-        className="
-          hidden lg:flex fixed top-0 left-0 bottom-0 w-72
-          bg-white border-r border-slate-200 flex-col z-50
-        "
-      >
-        <div className="p-6 border-b border-slate-100">
-          <h1 className="text-2xl font-bold text-indigo-700">🎓 Owner Panel</h1>
-          <p className="text-xs text-slate-500 mt-1">Manage your academy</p>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl
-                  text-sm font-medium transition
-                  ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }
-                `}
-              >
-                <Icon className={`h-5 w-5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-100">
-          <button
-            onClick={handleLogout}
+      <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
+        {/* =========================================
+            DESKTOP SIDEBAR — sticky (no footer overlap)
+        ========================================= */}
+        <aside className="hidden lg:block w-72 shrink-0">
+          <div
             className="
-              flex items-center gap-3 px-4 py-3 w-full rounded-xl
-              text-sm font-medium text-red-600 hover:bg-red-50 transition
+              sticky bg-white border-r border-slate-200
+              flex flex-col
             "
+            style={{
+              top: NAVBAR_H,
+              height: `calc(100vh - ${NAVBAR_H})`,
+            }}
           >
-            <LogOut className="h-5 w-5" />
-            Logout
-          </button>
-        </div>
-      </aside>
+            {/* Brand */}
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                  <GraduationCap className="h-5 w-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-base font-bold text-slate-900 leading-tight">
+                    Owner Panel
+                  </h1>
+                  <p className="text-[11px] text-slate-500 leading-tight flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-emerald-500" />
+                    Academy Manager
+                  </p>
+                </div>
+              </div>
+            </div>
 
-      {/* =========================================
-          MAIN CONTENT
-      ========================================= */}
-      <main
-        className="
-          min-h-screen w-full bg-slate-50/50
-          pt-20 px-4 sm:px-6
-          lg:ml-72 lg:pt-8 lg:px-8
-        "
-      >
-        <div className="max-w-7xl mx-auto">{children}</div>
-      </main>
+            {/* Navigation */}
+            <nav className="flex-1 p-3 overflow-y-auto">
+              {renderSection('Main Menu', mainNavItems)}
+              {renderSection('Content', contentNavItems)}
+              {renderSection('System', systemNavItems)}
+            </nav>
+
+            {/* User / Logout */}
+            <div className="p-3 border-t border-slate-100">
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 mb-2">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md">
+                  <User className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    Academy Owner
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    Manage your academy
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="
+                  flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl
+                  text-sm font-medium text-rose-600 hover:bg-rose-50 transition
+                "
+              >
+                <span className="flex items-center justify-center h-8 w-8 rounded-lg bg-rose-100 text-rose-600">
+                  <LogOut className="h-4 w-4" />
+                </span>
+                Logout
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* =========================================
+            MAIN CONTENT
+        ========================================= */}
+        <main className="flex-1 min-w-0">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 lg:pt-8 pb-10">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
