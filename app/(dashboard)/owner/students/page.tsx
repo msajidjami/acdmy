@@ -1,8 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
-import { PencilIcon, TrashIcon, UserPlus, X, CheckCircle, Clock, User, Mail, Phone, MapPin, Users, BookOpen } from 'lucide-react';
+import {
+  UserPlusIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  XMarkIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  XCircleIcon,
+  UserIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  MapPinIcon,
+  UserGroupIcon,
+  BookOpenIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon,
+  SparklesIcon,
+  UsersIcon,
+  DocumentTextIcon,
+} from '@heroicons/react/24/outline';
+
+/* ------------------ Types ------------------ */
 
 interface Student {
   _id: string;
@@ -20,11 +41,36 @@ interface Student {
   updatedAt: string;
 }
 
+/* ------------------ Helpers ------------------ */
+
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+function formatDate(date: string): string {
+  try {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+/* ------------------ Component ------------------ */
+
 export default function OwnerStudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -37,6 +83,8 @@ export default function OwnerStudentsPage() {
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  /* ------------------ Data ------------------ */
 
   const fetchStudents = async () => {
     try {
@@ -54,6 +102,8 @@ export default function OwnerStudentsPage() {
   useEffect(() => {
     fetchStudents();
   }, []);
+
+  /* ------------------ Actions ------------------ */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +134,7 @@ export default function OwnerStudentsPage() {
       toast.success(editingStudent ? 'Student updated' : 'Student added');
       setShowModal(false);
       setEditingStudent(null);
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        parentName: '',
-        parentPhone: '',
-        address: '',
-        subjects: '',
-        status: 'active',
-        notes: '',
-      });
+      resetForm();
       fetchStudents();
     } catch (error: any) {
       toast.error(error.message || 'Error saving student');
@@ -115,6 +155,20 @@ export default function OwnerStudentsPage() {
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      parentName: '',
+      parentPhone: '',
+      address: '',
+      subjects: '',
+      status: 'active',
+      notes: '',
+    });
+  };
+
   const openEditModal = (student: Student) => {
     setEditingStudent(student);
     setFormData({
@@ -133,395 +187,873 @@ export default function OwnerStudentsPage() {
 
   const openAddModal = () => {
     setEditingStudent(null);
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      parentName: '',
-      parentPhone: '',
-      address: '',
-      subjects: '',
-      status: 'active',
-      notes: '',
-    });
+    resetForm();
     setShowModal(true);
   };
 
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      pending: 'bg-amber-50 text-amber-700 border-amber-200',
-      inactive: 'bg-gray-50 text-gray-700 border-gray-200',
-    };
-    const icons = {
-      active: <CheckCircle className="h-3 w-3" />,
-      pending: <Clock className="h-3 w-3" />,
-      inactive: <X className="h-3 w-3" />,
-    };
-    return (
-      <span className={`px-3 py-1 inline-flex items-center gap-1.5 text-xs font-medium rounded-full border ${styles[status as keyof typeof styles]}`}>
-        {icons[status as keyof typeof icons]}
-        {status}
-      </span>
-    );
-  };
+  /* ------------------ Derived ------------------ */
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchesSearch =
+        searchQuery === '' ||
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.parentName && s.parentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        s.subjects.some((sub) => sub.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchesFilter = filterStatus === 'all' || s.status === filterStatus;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [students, searchQuery, filterStatus]);
+
+  const stats = useMemo(
+    () => ({
+      total: students.length,
+      active: students.filter((s) => s.status === 'active').length,
+      pending: students.filter((s) => s.status === 'pending').length,
+      inactive: students.filter((s) => s.status === 'inactive').length,
+    }),
+    [students]
+  );
+
+  /* ------------------ Loading ------------------ */
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-gray-500 font-medium">Loading students...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-emerald-600 mx-auto" />
+          <p className="text-slate-500 mt-4 text-sm font-medium">Loading students...</p>
         </div>
       </div>
     );
   }
 
+  /* ------------------ Render ------------------ */
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-0 pt-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <span className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-2 rounded-xl">
-              <Users className="h-6 w-6" />
-            </span>
-            Students
-            <span className="text-sm font-normal text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-              {students.length} {students.length === 1 ? 'student' : 'students'}
-            </span>
-          </h1>
-          <p className="text-gray-500 text-sm mt-1 ml-1">Manage all students enrolled in your academy</p>
+    <div className="space-y-6 sm:space-y-8">
+      {/* ============================================
+          HERO HEADER
+      ============================================ */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-700 to-cyan-700 p-6 sm:p-8 shadow-xl">
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <div className="absolute -top-16 -right-10 w-64 h-64 bg-white rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-teal-300 rounded-full blur-3xl" />
         </div>
-        <button
-          onClick={openAddModal}
-          className="bg-gradient-to-r from-emerald-600 mt-30 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-6 py-2.5 rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 transform hover:-translate-y-0.5"
-        >
-          <UserPlus className="h-5 w-5" />
-          <span className="font-semibold">Add Student</span>
-        </button>
+
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="h-14 w-14 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0 shadow-lg">
+              <UsersIcon className="h-7 w-7 text-white" />
+            </div>
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-white/90 text-xs font-semibold">
+                <SparklesIcon className="h-3 w-3" />
+                Student Management
+              </div>
+              <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-white leading-tight">
+                Students
+              </h1>
+              <p className="mt-1 text-white/80 text-sm sm:text-base max-w-lg">
+                Manage all students enrolled in your academy.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white text-emerald-700 hover:bg-emerald-50 font-semibold text-sm rounded-xl shadow-lg transition whitespace-nowrap shrink-0"
+          >
+            <UserPlusIcon className="h-4 w-4" />
+            Add Student
+          </button>
+        </div>
       </div>
 
-      {/* Students Table */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Student</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Parent</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Subjects</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Enrolled</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {students.map((student, index) => (
-                <tr key={student._id} className={`hover:bg-gray-50/80 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white font-semibold text-sm shadow-md">
-                        {student.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{student.name}</div>
-                        {student.notes && (
-                          <div className="text-xs text-gray-400 truncate max-w-[150px]">{student.notes}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-600 flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5 text-gray-400" />
-                      <span className="truncate max-w-[150px]">{student.email}</span>
-                    </div>
-                    {student.phone && (
-                      <div className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
-                        <Phone className="h-3 w-3" />
-                        <span>{student.phone}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {student.parentName ? (
-                      <>
-                        <div className="text-sm font-medium text-gray-700">{student.parentName}</div>
-                        {student.parentPhone && (
-                          <div className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
-                            <Phone className="h-3 w-3" />
-                            <span>{student.parentPhone}</span>
+      {/* ============================================
+          STATS CARDS
+      ============================================ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-50 flex items-center justify-center">
+              <UsersIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.total}</p>
+          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">
+            Total Students
+          </p>
+        </div>
+
+        {/* Active */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <CheckCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.active}</p>
+          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Active</p>
+        </div>
+
+        {/* Pending */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-50 flex items-center justify-center">
+              <ClockIcon className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.pending}</p>
+          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Pending</p>
+        </div>
+
+        {/* Inactive */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-400 to-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex items-start justify-between mb-3">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-slate-100 flex items-center justify-center">
+              <XCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
+            </div>
+          </div>
+          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.inactive}</p>
+          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Inactive</p>
+        </div>
+      </div>
+
+      {/* ============================================
+          SEARCH + FILTER BAR
+      ============================================ */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, email, parent, or subject..."
+              className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+            />
+          </div>
+
+          {/* Filter pills */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 overflow-x-auto">
+            <FunnelIcon className="h-4 w-4 text-slate-400 ml-2 shrink-0" />
+            {(
+              [
+                { key: 'all', label: 'All' },
+                { key: 'active', label: 'Active' },
+                { key: 'pending', label: 'Pending' },
+                { key: 'inactive', label: 'Inactive' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setFilterStatus(opt.key)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
+                  filterStatus === opt.key
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(searchQuery || filterStatus !== 'all') && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+            <p className="text-xs text-slate-500">
+              Showing{' '}
+              <span className="font-semibold text-slate-700">
+                {filteredStudents.length}
+              </span>{' '}
+              of {students.length} students
+            </p>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setFilterStatus('all');
+              }}
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ============================================
+          EMPTY STATES
+      ============================================ */}
+      {students.length === 0 ? (
+        <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border-2 border-dashed border-emerald-200 shadow-sm">
+          <div className="h-16 w-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+            <UsersIcon className="h-8 w-8 text-emerald-600" />
+          </div>
+          <h3 className="text-xl sm:text-2xl font-bold text-slate-800">
+            No Students Yet
+          </h3>
+          <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm sm:text-base">
+            Start growing your academy by enrolling your first student.
+          </p>
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center gap-2 mt-6 px-7 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-600/20 transition"
+          >
+            <UserPlusIcon className="h-5 w-5" />
+            Add Your First Student
+          </button>
+        </div>
+      ) : filteredStudents.length === 0 ? (
+        <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 shadow-sm">
+          <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
+            <MagnifyingGlassIcon className="h-6 w-6 text-slate-400" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800">No matches found</h3>
+          <p className="text-slate-500 mt-1 text-sm">
+            Try adjusting your search or filters.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* ============================================
+              DESKTOP TABLE
+          ============================================ */}
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50/70">
+                  <tr>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Student
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Contact
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Parent
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Subjects
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Enrolled
+                    </th>
+                    <th className="px-5 py-3.5 text-right text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredStudents.map((student) => (
+                    <tr
+                      key={student._id}
+                      className="hover:bg-slate-50/50 transition-colors"
+                    >
+                      {/* Student */}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm">
+                            {getInitials(student.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">
+                              {student.name}
+                            </p>
+                            {student.notes && (
+                              <p className="text-xs text-slate-400 truncate max-w-[180px]">
+                                {student.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Contact */}
+                      <td className="px-5 py-4">
+                        <div className="text-xs text-slate-600 flex items-center gap-1.5">
+                          <EnvelopeIcon className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[160px]">
+                            {student.email}
+                          </span>
+                        </div>
+                        {student.phone && (
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
+                            <PhoneIcon className="h-3 w-3 shrink-0" />
+                            <span>{student.phone}</span>
                           </div>
                         )}
-                      </>
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {student.subjects.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {student.subjects.slice(0, 2).map((subject) => (
-                          <span key={subject} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded-full font-medium border border-emerald-100">
-                            {subject}
-                          </span>
-                        ))}
-                        {student.subjects.length > 2 && (
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
-                            +{student.subjects.length - 2}
+                      </td>
+
+                      {/* Parent */}
+                      <td className="px-5 py-4">
+                        {student.parentName ? (
+                          <>
+                            <p className="text-xs font-semibold text-slate-700">
+                              {student.parentName}
+                            </p>
+                            {student.parentPhone && (
+                              <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1">
+                                <PhoneIcon className="h-3 w-3 shrink-0" />
+                                {student.parentPhone}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Subjects */}
+                      <td className="px-5 py-4">
+                        {student.subjects.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {student.subjects.slice(0, 2).map((subject) => (
+                              <span
+                                key={subject}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100"
+                              >
+                                {subject}
+                              </span>
+                            ))}
+                            {student.subjects.length > 2 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+                                +{student.subjects.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-5 py-4">
+                        {student.status === 'active' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <CheckCircleIcon className="h-3 w-3" />
+                            Active
                           </span>
                         )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">{getStatusBadge(student.status)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(student.enrollmentDate).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openEditModal(student)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteStudent(student._id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {students.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                        <Users className="h-10 w-10 text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="text-gray-600 font-medium">No students enrolled yet</p>
-                        <p className="text-gray-400 text-sm mt-1">Start by adding your first student to the academy</p>
-                      </div>
-                      <button
-                        onClick={openAddModal}
-                        className="mt-2 px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
-                      >
-                        <UserPlus className="h-4 w-4" />
-                        Add Your First Student
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                        {student.status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                            <ClockIcon className="h-3 w-3" />
+                            Pending
+                          </span>
+                        )}
+                        {student.status === 'inactive' && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            <XCircleIcon className="h-3 w-3" />
+                            Inactive
+                          </span>
+                        )}
+                      </td>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-6 py-4 rounded-t-3xl flex items-center justify-between z-10">
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-center">
-                  {editingStudent ? <PencilIcon className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />}
-                </span>
-                {editingStudent ? 'Edit Student' : 'Add New Student'}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                      {/* Enrolled */}
+                      <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
+                        {formatDate(student.enrollmentDate)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditModal(student)}
+                            className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                            aria-label="Edit student"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteStudent(student._id)}
+                            className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+                            aria-label="Delete student"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ============================================
+              MOBILE CARDS
+          ============================================ */}
+          <div className="md:hidden space-y-3">
+            {filteredStudents.map((student) => (
+              <div
+                key={student._id}
+                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"
               >
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
+                {/* Header */}
+                <div className="flex items-start gap-3">
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-base font-bold shrink-0 shadow-sm">
+                    {getInitials(student.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">
+                      {student.name}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
+                      <EnvelopeIcon className="h-3 w-3 shrink-0" />
+                      {student.email}
+                    </p>
+                  </div>
+                  {student.status === 'active' && (
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                      Active
+                    </span>
+                  )}
+                  {student.status === 'pending' && (
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                      Pending
+                    </span>
+                  )}
+                  {student.status === 'inactive' && (
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+
+                {/* Details grid */}
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                  {student.phone && (
+                    <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2">
+                      <PhoneIcon className="h-3 w-3 text-slate-400 shrink-0" />
+                      <span className="truncate">{student.phone}</span>
+                    </div>
+                  )}
+                  {student.parentName && (
+                    <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2 col-span-2 sm:col-span-1">
+                      <UsersIcon className="h-3 w-3 text-slate-400 shrink-0" />
+                      <span className="truncate">{student.parentName}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Subjects */}
+                {student.subjects.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {student.subjects.slice(0, 3).map((subject) => (
+                      <span
+                        key={subject}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      >
+                        {subject}
+                      </span>
+                    ))}
+                    {student.subjects.length > 3 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                        +{student.subjects.length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <p className="text-[11px] text-slate-400">
+                    Enrolled {formatDate(student.enrollmentDate)}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditModal(student)}
+                      className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                      aria-label="Edit student"
+                    >
+                      <PencilSquareIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteStudent(student._id)}
+                      className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+                      aria-label="Delete student"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ============================================
+          MODAL
+      ============================================ */}
+      {showModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-in fade-in duration-200"
+          onClick={() => !submitting && setShowModal(false)}
+        >
+          <div
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-5 sm:px-6 py-4 z-10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center ${
+                      editingStudent
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : 'bg-indigo-50 text-indigo-600'
+                    }`}
+                  >
+                    {editingStudent ? (
+                      <PencilSquareIcon className="h-5 w-5" />
+                    ) : (
+                      <UserPlusIcon className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-slate-800">
+                      {editingStudent ? 'Edit Student' : 'Add New Student'}
+                    </h2>
+                    <p className="text-[11px] text-slate-500">
+                      {editingStudent
+                        ? 'Update student information'
+                        : 'Fill in the details below'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => !submitting && setShowModal(false)}
+                  disabled={submitting}
+                  className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+                  aria-label="Close"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
-            <div className="px-6 py-6">
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5">
+              {/* Section: Basic Info */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <UserIcon className="h-3.5 w-3.5" />
+                  Student Information
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <User className="h-4 w-4 text-emerald-600" />
-                      Full Name <span className="text-red-500">*</span>
+                  <div className="space-y-2 sm:col-span-2">
+                    <label
+                      htmlFor="student-name"
+                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      Full Name
+                      <span className="text-rose-500">*</span>
                     </label>
                     <input
+                      id="student-name"
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                       required
                       placeholder="e.g. Muhammad Ali"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                     />
                   </div>
 
                   {/* Email */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <Mail className="h-4 w-4 text-emerald-600" />
-                      Email <span className="text-red-500">*</span>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="student-email"
+                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <EnvelopeIcon className="h-3.5 w-3.5 text-slate-400" />
+                      Email
+                      <span className="text-rose-500">*</span>
                     </label>
                     <input
+                      id="student-email"
                       type="email"
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
                       required
                       placeholder="student@example.com"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                     />
                   </div>
 
                   {/* Phone */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <Phone className="h-4 w-4 text-emerald-600" />
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="student-phone"
+                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <PhoneIcon className="h-3.5 w-3.5 text-slate-400" />
                       Phone
                     </label>
                     <input
+                      id="student-phone"
                       type="text"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
                       placeholder="+92 300 1234567"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                     />
                   </div>
+                </div>
+              </div>
 
+              {/* Section: Guardian */}
+              <div className="pt-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <UsersIcon className="h-3.5 w-3.5" />
+                  Guardian Information
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Parent Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <Users className="h-4 w-4 text-emerald-600" />
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="parent-name"
+                      className="text-sm font-semibold text-slate-700"
+                    >
                       Parent Name
                     </label>
                     <input
+                      id="parent-name"
                       type="text"
                       value={formData.parentName}
-                      onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, parentName: e.target.value })
+                      }
                       placeholder="e.g. Ahmed Khan"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                     />
                   </div>
 
                   {/* Parent Phone */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <Phone className="h-4 w-4 text-emerald-600" />
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="parent-phone"
+                      className="text-sm font-semibold text-slate-700"
+                    >
                       Parent Phone
                     </label>
                     <input
+                      id="parent-phone"
                       type="text"
                       value={formData.parentPhone}
-                      onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, parentPhone: e.target.value })
+                      }
                       placeholder="+92 300 7654321"
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                     />
                   </div>
-
-                  {/* Status */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                      <CheckCircle className="h-4 w-4 text-emerald-600" />
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none appearance-none"
-                    >
-                      <option value="active">✅ Active</option>
-                      <option value="pending">⏳ Pending</option>
-                      <option value="inactive">❌ Inactive</option>
-                    </select>
-                  </div>
                 </div>
+              </div>
 
-                {/* Address */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                    <MapPin className="h-4 w-4 text-emerald-600" />
-                    Address
+              {/* Section: Academic */}
+              <div className="pt-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <BookOpenIcon className="h-3.5 w-3.5" />
+                  Academic Details
+                </p>
+
+                {/* Status */}
+                <div className="space-y-2 mb-4">
+                  <label
+                    htmlFor="student-status"
+                    className="text-sm font-semibold text-slate-700"
+                  >
+                    Status
                   </label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="e.g. House #12, Street 5, Islamabad"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
-                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'active',
+                          label: 'Active',
+                          Icon: CheckCircleIcon,
+                          color: 'emerald',
+                        },
+                        {
+                          key: 'pending',
+                          label: 'Pending',
+                          Icon: ClockIcon,
+                          color: 'amber',
+                        },
+                        {
+                          key: 'inactive',
+                          label: 'Inactive',
+                          Icon: XCircleIcon,
+                          color: 'slate',
+                        },
+                      ] as const
+                    ).map(({ key, label, Icon, color }) => {
+                      const isSelected = formData.status === key;
+                      const colorClasses = {
+                        emerald: isSelected
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/30',
+                        amber: isSelected
+                          ? 'border-amber-500 bg-amber-50 text-amber-700'
+                          : 'border-slate-200 text-slate-600 hover:border-amber-200 hover:bg-amber-50/30',
+                        slate: isSelected
+                          ? 'border-slate-500 bg-slate-100 text-slate-700'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                      }[color];
+
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() =>
+                            setFormData({ ...formData, status: key })
+                          }
+                          className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition text-xs font-semibold ${colorClasses}`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Subjects */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                    <BookOpen className="h-4 w-4 text-emerald-600" />
-                    Subjects <span className="text-xs text-gray-400 font-normal">(comma separated)</span>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="student-subjects"
+                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <BookOpenIcon className="h-3.5 w-3.5 text-slate-400" />
+                    Subjects
                   </label>
                   <input
+                    id="student-subjects"
                     type="text"
                     value={formData.subjects}
-                    onChange={(e) => setFormData({ ...formData, subjects: e.target.value })}
-                    placeholder="e.g. Quran, Math, English"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none"
+                    onChange={(e) =>
+                      setFormData({ ...formData, subjects: e.target.value })
+                    }
+                    placeholder="Quran, Math, English"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Separate multiple subjects with commas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Section: Additional */}
+              <div className="pt-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <DocumentTextIcon className="h-3.5 w-3.5" />
+                  Additional Information
+                </p>
+
+                {/* Address */}
+                <div className="space-y-2 mb-4">
+                  <label
+                    htmlFor="student-address"
+                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <MapPinIcon className="h-3.5 w-3.5 text-slate-400" />
+                    Address
+                  </label>
+                  <input
+                    id="student-address"
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                    placeholder="House #12, Street 5, Islamabad"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
                   />
                 </div>
 
                 {/* Notes */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    📝 Notes <span className="text-xs text-gray-400 font-normal">(optional)</span>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="student-notes"
+                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <SparklesIcon className="h-3.5 w-3.5 text-slate-400" />
+                    Notes
+                    <span className="text-slate-400 text-xs font-normal">
+                      (optional)
+                    </span>
                   </label>
                   <textarea
+                    id="student-notes"
                     value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
                     rows={3}
                     placeholder="Any additional information about the student..."
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all outline-none resize-none"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm resize-none placeholder:text-slate-400 leading-relaxed"
                   />
                 </div>
+              </div>
 
-                {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-gray-100">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Saving...
-                      </span>
-                    ) : (
-                      editingStudent ? 'Update Student' : 'Add Student'
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all duration-300 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircleIcon className="h-5 w-5" />
+                      {editingStudent ? 'Save Changes' : 'Add Student'}
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  disabled={submitting}
+                  className="flex-1 px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-200 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
