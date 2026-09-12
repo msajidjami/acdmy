@@ -7,7 +7,6 @@ import User from '@/models/User';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
-// Helper: extract user from request (cookie)
 async function getUserFromRequest(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
   if (!token) return null;
@@ -22,7 +21,8 @@ async function getUserFromRequest(req: NextRequest) {
   }
 }
 
-// GET: fetch teachers of owner's academy
+/* ---------------- GET ---------------- */
+
 export async function GET(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req);
@@ -36,7 +36,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    const teachers = await Teacher.find({ academyId: academy._id }).lean();
+    const teachers = await Teacher.find({ academyId: academy._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
     return NextResponse.json(teachers);
   } catch (error) {
     console.error('GET /api/owner/teachers error:', error);
@@ -44,7 +47,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST: add a new teacher (referralCode خودکار جنریٹ ہوگا)
+/* ---------------- POST ---------------- */
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req);
@@ -59,24 +63,65 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, email, subjects, bio, audioUrl } = body;
+    const { name, email, gender, subjects, bio, audioUrl, profileImage } = body;
 
-    // ✅ نیا ٹیچر بنائیں – referralCode ماڈل کے ڈیفالٹ سے آئے گا
+    /* ✅ Validation */
+    if (!name || !email) {
+      return NextResponse.json(
+        { error: 'Name and email are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!gender || !['male', 'female'].includes(gender)) {
+      return NextResponse.json(
+        { error: 'Gender must be male or female' },
+        { status: 400 }
+      );
+    }
+
+    /* 🎤 Audio لازمی */
+    if (!audioUrl || typeof audioUrl !== 'string' || !audioUrl.trim()) {
+      return NextResponse.json(
+        { error: 'Voice introduction is required' },
+        { status: 400 }
+      );
+    }
+
+    /* Duplicate email check */
+    const existing = await Teacher.findOne({
+      email: String(email).trim().toLowerCase(),
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: 'A teacher with this email already exists' },
+        { status: 400 }
+      );
+    }
+
     const newTeacher = new Teacher({
-      name,
-      email,
-      subjects: subjects || [],
-      bio: bio || '',
-      audioUrl: audioUrl || '',
+      name: String(name).trim(),
+      email: String(email).trim().toLowerCase(),
+      gender,
+      subjects: Array.isArray(subjects) ? subjects : [],
+      bio: String(bio || '').trim(),
+      audioUrl: String(audioUrl).trim(),
+      /* 👨 Image صرف male کے لیے */
+      profileImage: gender === 'male' ? String(profileImage || '') : '',
       academyId: academy._id,
       isAvailable: true,
-      // referralCode خودکار جنریٹ ہوگا (مذکورہ ڈیفالٹ فنکشن سے)
     });
 
     await newTeacher.save();
     return NextResponse.json(newTeacher, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('POST /api/owner/teachers error:', error);
+    if (error?.code === 11000) {
+      return NextResponse.json(
+        { error: 'Duplicate email or referral code' },
+        { status: 400 }
+      );
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
