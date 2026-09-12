@@ -1,3 +1,4 @@
+// app/teacher/dashboard/page.tsx
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import jwt, { JwtPayload } from 'jsonwebtoken';
@@ -14,6 +15,17 @@ import {
   BookOpenIcon,
   CalendarIcon,
   UserIcon,
+  SparklesIcon,
+  AcademicCapIcon,
+  ClockIcon,
+  ArrowRightIcon,
+  CheckBadgeIcon,
+  XCircleIcon,
+  EnvelopeIcon,
+  MusicalNoteIcon,
+  DocumentTextIcon,
+  HomeIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
 export const dynamic = 'force-dynamic';
@@ -50,9 +62,7 @@ function normalizeEmail(value: unknown): string {
 /* Get Teacher Data                                                           */
 /* -------------------------------------------------------------------------- */
 
-async function getTeacherData(
-  email: string
-): Promise<TeacherData | null> {
+async function getTeacherData(email: string): Promise<TeacherData | null> {
   await connectDB();
 
   const normalizedEmail = normalizeEmail(email);
@@ -142,10 +152,7 @@ export default async function TeacherDashboardPage() {
   let decoded: JwtUserPayload;
 
   try {
-    const result = jwt.verify(
-      token,
-      jwtSecret
-    );
+    const result = jwt.verify(token, jwtSecret);
 
     if (typeof result === 'string') {
       redirect('/login');
@@ -164,30 +171,36 @@ export default async function TeacherDashboardPage() {
 
   const data = await getTeacherData(userEmail);
 
+  /* ------------------ No Profile State ------------------ */
+
   if (!data) {
     return (
-      <div className="mx-auto max-w-7xl">
-        <div className="rounded-3xl border-2 border-dashed border-blue-200 bg-white p-12 text-center shadow-sm">
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-10 sm:p-16 text-center shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-purple-50/50 pointer-events-none" />
 
-          <div className="mb-4 text-6xl">
-            👨‍🏫
+          <div className="relative">
+            <div className="h-20 w-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <AcademicCapIcon className="h-10 w-10 text-white" />
+            </div>
+
+            <h3 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              No Teacher Profile Found
+            </h3>
+
+            <p className="mt-3 text-slate-500 max-w-md mx-auto">
+              You are not registered as a teacher in any academy yet. Please
+              contact your academy administrator to get started.
+            </p>
+
+            <Link
+              href="/"
+              className="mt-8 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-3.5 font-semibold text-white shadow-lg shadow-blue-500/25 transition hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5"
+            >
+              <HomeIcon className="h-5 w-5" />
+              Go to Home
+            </Link>
           </div>
-
-          <h3 className="text-2xl font-bold text-black">
-            No Teacher Profile Found
-          </h3>
-
-          <p className="mt-2 text-black/60">
-            You are not registered as a teacher in any academy yet.
-          </p>
-
-          <Link
-            href="/"
-            className="mt-6 inline-block rounded-2xl bg-blue-600 px-8 py-3 font-semibold text-white transition hover:bg-blue-700"
-          >
-            Go to Home
-          </Link>
-
         </div>
       </div>
     );
@@ -201,358 +214,381 @@ export default async function TeacherDashboardPage() {
     upcomingClasses,
   } = data;
 
+  const teacherName = teacher.name || 'Teacher';
+  const initials = teacherName
+    .split(' ')
+    .map((n: string) => n.charAt(0))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const isActive = teacher.isAvailable;
+
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8 px-4 py-6 sm:py-8">
+      {/* ============================================================ */}
+      {/* HERO SECTION                                                  */}
+      {/* ============================================================ */}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Hero Section                                                       */}
-      {/* ------------------------------------------------------------------ */}
-
-      <div className="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-600 p-8 text-white shadow-xl">
-
-        <div className="absolute inset-0 opacity-10">
-
-          <div className="absolute right-0 top-0 h-96 w-96 -translate-y-1/2 translate-x-1/2 rounded-full bg-white blur-3xl" />
-
-          <div className="absolute bottom-0 left-0 h-96 w-96 -translate-x-1/2 translate-y-1/2 rounded-full bg-white blur-3xl" />
-
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 sm:p-8 lg:p-10 text-white shadow-2xl shadow-purple-500/20">
+        {/* Decorative blur circles */}
+        <div className="absolute inset-0 opacity-30 pointer-events-none">
+          <div className="absolute -top-24 -right-16 h-80 w-80 rounded-full bg-white/40 blur-3xl" />
+          <div className="absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-fuchsia-300/50 blur-3xl" />
         </div>
 
-        <div className="relative z-10 flex flex-col items-center justify-between md:flex-row">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          {/* Left: Text */}
+          <div className="flex-1 min-w-0">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-xs font-semibold">
+              <SparklesIcon className="h-3.5 w-3.5" />
+              Teacher Dashboard
+            </div>
 
-          <div>
-
-            <h1 className="text-3xl font-bold md:text-4xl">
-              Welcome back,{' '}
-              {teacher.name || 'Teacher'}! 👋
+            <h1 className="mt-4 text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+              Welcome back, {teacherName}! 👋
             </h1>
 
-            <p className="mt-2 text-lg text-indigo-100">
+            <p className="mt-2 text-base sm:text-lg text-indigo-100 max-w-2xl">
               {academy?.name
                 ? `Teaching at ${academy.name}`
                 : 'Manage your classes and students'}
             </p>
 
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
-
-              <span className="flex items-center gap-1 rounded-full bg-white/20 px-4 py-1.5 backdrop-blur-sm">
+            {/* Stat pills */}
+            <div className="mt-5 flex flex-wrap gap-2 sm:gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 px-3.5 py-1.5 text-xs sm:text-sm font-medium">
                 <UserGroupIcon className="h-4 w-4" />
                 {studentCount} Students
               </span>
 
-              <span className="flex items-center gap-1 rounded-full bg-white/20 px-4 py-1.5 backdrop-blur-sm">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 px-3.5 py-1.5 text-xs sm:text-sm font-medium">
                 <BookOpenIcon className="h-4 w-4" />
                 {totalAssignments} Classes
               </span>
 
-              <span className="flex items-center gap-1 rounded-full bg-white/20 px-4 py-1.5 backdrop-blur-sm">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 px-3.5 py-1.5 text-xs sm:text-sm font-medium">
                 <CalendarIcon className="h-4 w-4" />
-                {upcomingClasses} Upcoming Today
+                {upcomingClasses} Today
               </span>
-
             </div>
-
           </div>
 
-          <div className="mt-4 md:mt-0">
-
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 text-4xl shadow-lg backdrop-blur-sm">
-              {teacher.name?.charAt(0) || 'T'}
+          {/* Right: Avatar */}
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="relative">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center text-3xl sm:text-4xl font-bold shadow-xl">
+                {initials}
+              </div>
+              <span
+                className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-indigo-600 ${
+                  isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'
+                }`}
+                title={isActive ? 'Active' : 'Inactive'}
+              />
             </div>
-
           </div>
-
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Stats Cards                                                        */}
-      {/* ------------------------------------------------------------------ */}
+      {/* ============================================================ */}
+      {/* STATS CARDS                                                   */}
+      {/* ============================================================ */}
 
-      <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md">
-
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-blue-100 p-3">
-              <UserGroupIcon className="h-6 w-6 text-blue-600" />
-            </div>
-
-            <div>
-
-              <p className="text-sm text-gray-500">
-                Total Students
-              </p>
-
-              <p className="text-2xl font-bold text-gray-900">
-                {studentCount}
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
+        <StatCard
+          title="Total Students"
+          value={studentCount}
+          icon={<UserGroupIcon className="h-6 w-6" />}
+          gradient="from-blue-500 to-indigo-600"
+          bg="bg-blue-50"
+          text="text-blue-600"
+        />
 
         {/* Total Classes */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md">
-
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-green-100 p-3">
-              <BookOpenIcon className="h-6 w-6 text-green-600" />
-            </div>
-
-            <div>
-
-              <p className="text-sm text-gray-500">
-                Total Classes
-              </p>
-
-              <p className="text-2xl font-bold text-gray-900">
-                {totalAssignments}
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
+        <StatCard
+          title="Total Classes"
+          value={totalAssignments}
+          icon={<BookOpenIcon className="h-6 w-6" />}
+          gradient="from-emerald-500 to-teal-600"
+          bg="bg-emerald-50"
+          text="text-emerald-600"
+        />
 
         {/* Today's Classes */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md">
+        <StatCard
+          title="Today's Classes"
+          value={upcomingClasses}
+          icon={<CalendarIcon className="h-6 w-6" />}
+          gradient="from-amber-500 to-orange-600"
+          bg="bg-amber-50"
+          text="text-amber-600"
+        />
 
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-yellow-100 p-3">
-              <CalendarIcon className="h-6 w-6 text-yellow-600" />
+        {/* Status */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-xl hover:border-transparent transition-all duration-300 overflow-hidden">
+          <div
+            className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${
+              isActive
+                ? 'from-emerald-500 to-teal-600'
+                : 'from-slate-400 to-slate-500'
+            } opacity-0 group-hover:opacity-100 transition-opacity`}
+          />
+          <div className="flex items-start justify-between mb-3">
+            <div
+              className={`h-11 w-11 rounded-xl flex items-center justify-center ${
+                isActive ? 'bg-emerald-50' : 'bg-slate-100'
+              }`}
+            >
+              {isActive ? (
+                <CheckBadgeIcon className="h-5 w-5 text-emerald-600" />
+              ) : (
+                <XCircleIcon className="h-5 w-5 text-slate-500" />
+              )}
             </div>
-
-            <div>
-
-              <p className="text-sm text-gray-500">
-                Today's Classes
-              </p>
-
-              <p className="text-2xl font-bold text-gray-900">
-                {upcomingClasses}
-              </p>
-
-            </div>
-
           </div>
-
+          <p
+            className={`text-2xl font-bold ${
+              isActive ? 'text-emerald-600' : 'text-slate-600'
+            }`}
+          >
+            {isActive ? 'Active' : 'Inactive'}
+          </p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold uppercase tracking-wider">
+            Status
+          </p>
         </div>
-
-        {/* Teacher Status */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md">
-
-          <div className="flex items-center gap-3">
-
-            <div className="rounded-xl bg-purple-100 p-3">
-              <UserIcon className="h-6 w-6 text-purple-600" />
-            </div>
-
-            <div>
-
-              <p className="text-sm text-gray-500">
-                Status
-              </p>
-
-              <p className="text-2xl font-bold text-gray-900">
-                {teacher.isAvailable
-                  ? '✅ Active'
-                  : '⛔ Inactive'}
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Quick Actions                                                      */}
-      {/* ------------------------------------------------------------------ */}
+      {/* ============================================================ */}
+      {/* QUICK ACTIONS                                                 */}
+      {/* ============================================================ */}
 
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-        {/* Schedule */}
-        <Link
-          href="/teacher/schedule"
-          className="group flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 transition hover:shadow-lg"
-        >
-
-          <div className="rounded-xl bg-indigo-100 p-3 transition group-hover:bg-indigo-200">
-            <CalendarIcon className="h-6 w-6 text-indigo-600" />
-          </div>
-
-          <div>
-
-            <h3 className="font-semibold text-gray-900">
-              View Schedule
-            </h3>
-
-            <p className="text-sm text-gray-500">
-              Check your upcoming classes
-            </p>
-
-          </div>
-
-        </Link>
-
-        {/* Classes */}
-        <Link
-          href="/teacher/classes"
-          className="group flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 transition hover:shadow-lg"
-        >
-
-          <div className="rounded-xl bg-green-100 p-3 transition group-hover:bg-green-200">
-            <BookOpenIcon className="h-6 w-6 text-green-600" />
-          </div>
-
-          <div>
-
-            <h3 className="font-semibold text-gray-900">
-              My Classes
-            </h3>
-
-            <p className="text-sm text-gray-500">
-              Open your assigned classes
-            </p>
-
-          </div>
-
-        </Link>
-
-        {/* Profile */}
-        <Link
-          href="/teacher/profile"
-          className="group flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-5 transition hover:shadow-lg"
-        >
-
-          <div className="rounded-xl bg-purple-100 p-3 transition group-hover:bg-purple-200">
-            <UserIcon className="h-6 w-6 text-purple-600" />
-          </div>
-
-          <div>
-
-            <h3 className="font-semibold text-gray-900">
-              Update Profile
-            </h3>
-
-            <p className="text-sm text-gray-500">
-              Edit your bio and subjects
-            </p>
-
-          </div>
-
-        </Link>
-
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Profile Summary                                                    */}
-      {/* ------------------------------------------------------------------ */}
-
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-
-        <div className="border-b border-gray-100 bg-gray-50 p-5">
-
-          <h2 className="font-semibold text-gray-900">
-            📋 Your Profile
-          </h2>
-
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <SparklesIcon className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-lg font-bold text-slate-900">Quick Actions</h2>
         </div>
 
-        <div className="space-y-3 p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <QuickActionCard
+            href="/teacher/schedule"
+            title="View Schedule"
+            description="Check your upcoming classes"
+            icon={<CalendarIcon className="h-6 w-6" />}
+            gradient="from-indigo-500 to-purple-600"
+            bg="bg-indigo-50"
+            text="text-indigo-600"
+          />
 
-          {/* Name */}
-          <div className="flex justify-between gap-4">
+          <QuickActionCard
+            href="/teacher/classes"
+            title="My Classes"
+            description="Open your assigned classes"
+            icon={<BookOpenIcon className="h-6 w-6" />}
+            gradient="from-emerald-500 to-teal-600"
+            bg="bg-emerald-50"
+            text="text-emerald-600"
+          />
 
-            <span className="text-gray-500">
-              Name
-            </span>
+          <QuickActionCard
+            href="/teacher/profile"
+            title="Update Profile"
+            description="Edit your bio and subjects"
+            icon={<UserIcon className="h-6 w-6" />}
+            gradient="from-fuchsia-500 to-pink-600"
+            bg="bg-fuchsia-50"
+            text="text-fuchsia-600"
+          />
+        </div>
+      </div>
 
-            <span className="font-medium text-gray-900">
-              {teacher.name || 'Not provided'}
-            </span>
+      {/* ============================================================ */}
+      {/* PROFILE SUMMARY                                               */}
+      {/* ============================================================ */}
 
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="p-5 border-b border-slate-100 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+            <UserIcon className="h-5 w-5 text-white" />
           </div>
-
-          {/* Email */}
-          <div className="flex justify-between gap-4">
-
-            <span className="text-gray-500">
-              Email
-            </span>
-
-            <span className="break-all font-medium text-gray-900">
-              {teacher.email || 'Not provided'}
-            </span>
-
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Your Profile
+            </h2>
+            <p className="text-xs text-slate-500">
+              Personal information and preferences
+            </p>
           </div>
+        </div>
 
-          {/* Subjects */}
-          <div className="flex justify-between gap-4">
+        {/* Content */}
+        <div className="p-5 sm:p-6 space-y-4">
+          <ProfileRow
+            label="Name"
+            value={teacher.name || 'Not provided'}
+            icon={<UserIcon className="h-4 w-4" />}
+          />
 
-            <span className="text-gray-500">
-              Subjects
-            </span>
+          <ProfileRow
+            label="Email"
+            value={teacher.email || 'Not provided'}
+            icon={<EnvelopeIcon className="h-4 w-4" />}
+            breakAll
+          />
 
-            <span className="text-right font-medium text-gray-900">
-              {Array.isArray(teacher.subjects) &&
-              teacher.subjects.length > 0
+          <ProfileRow
+            label="Subjects"
+            value={
+              Array.isArray(teacher.subjects) && teacher.subjects.length > 0
                 ? teacher.subjects.join(', ')
-                : 'None'}
-            </span>
+                : 'None'
+            }
+            icon={<BookOpenIcon className="h-4 w-4" />}
+          />
 
-          </div>
-
-          {/* Bio */}
-          <div className="flex justify-between gap-4">
-
-            <span className="text-gray-500">
-              Bio
-            </span>
-
-            <span className="max-w-xl text-right font-medium text-gray-900">
-              {teacher.bio || 'No bio'}
-            </span>
-
-          </div>
+          <ProfileRow
+            label="Bio"
+            value={teacher.bio || 'No bio'}
+            icon={<DocumentTextIcon className="h-4 w-4" />}
+          />
 
           {/* Audio Introduction */}
           {teacher.audioUrl && (
-            <div className="flex items-center justify-between gap-4">
-
-              <span className="text-gray-500">
-                Audio Introduction
-              </span>
-
-              <audio
-                controls
-                className="h-8 w-48"
-              >
-                <source
-                  src={teacher.audioUrl}
-                  type="audio/mpeg"
-                />
-
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 mb-3">
+                <MusicalNoteIcon className="h-4 w-4 text-purple-600" />
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Audio Introduction
+                </p>
+              </div>
+              <audio controls className="w-full h-10">
+                <source src={teacher.audioUrl} type="audio/mpeg" />
                 Your browser does not support audio playback.
-
               </audio>
-
             </div>
           )}
-
         </div>
       </div>
+    </div>
+  );
+}
 
+/* -------------------------------------------------------------------------- */
+/* Reusable Components                                                        */
+/* -------------------------------------------------------------------------- */
+
+function StatCard({
+  title,
+  value,
+  icon,
+  gradient,
+  bg,
+  text,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  gradient: string;
+  bg: string;
+  text: string;
+}) {
+  return (
+    <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-xl hover:border-transparent transition-all duration-300 overflow-hidden">
+      <div
+        className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient} opacity-0 group-hover:opacity-100 transition-opacity`}
+      />
+      <div className="flex items-start justify-between mb-3">
+        <div
+          className={`h-11 w-11 rounded-xl ${bg} flex items-center justify-center ${text}`}
+        >
+          {icon}
+        </div>
+      </div>
+      <p className="text-2xl sm:text-3xl font-bold text-slate-900">{value}</p>
+      <p className="text-xs text-slate-500 mt-1 font-semibold uppercase tracking-wider">
+        {title}
+      </p>
+    </div>
+  );
+}
+
+function QuickActionCard({
+  href,
+  title,
+  description,
+  icon,
+  gradient,
+  bg,
+  text,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  gradient: string;
+  bg: string;
+  text: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative flex items-center gap-4 p-5 rounded-2xl bg-white border border-slate-200 hover:shadow-xl hover:border-transparent transition-all duration-300 overflow-hidden"
+    >
+      <div
+        className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient} opacity-0 group-hover:opacity-100 transition-opacity`}
+      />
+
+      <div
+        className={`h-12 w-12 rounded-xl ${bg} flex items-center justify-center shrink-0 ${text} group-hover:scale-110 transition-transform`}
+      >
+        {icon}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-slate-900 group-hover:text-slate-800">
+          {title}
+        </h3>
+        <p className="text-xs text-slate-500 mt-0.5 truncate">
+          {description}
+        </p>
+      </div>
+
+      <ArrowRightIcon
+        className={`h-5 w-5 shrink-0 ${text} group-hover:translate-x-1 transition-transform`}
+      />
+    </Link>
+  );
+}
+
+function ProfileRow({
+  label,
+  value,
+  icon,
+  breakAll,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  breakAll?: boolean;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4 py-2">
+      <div className="flex items-center gap-2 sm:w-40 shrink-0">
+        <span className="text-slate-400">{icon}</span>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          {label}
+        </span>
+      </div>
+      <span
+        className={`text-sm font-medium text-slate-800 sm:flex-1 ${
+          breakAll ? 'break-all' : ''
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

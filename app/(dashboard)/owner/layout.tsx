@@ -18,6 +18,8 @@ import {
   GraduationCap,
   ChevronRight,
   Sparkles,
+  MessageSquare,
+  Inbox,
 } from 'lucide-react';
 
 /* ------------------ Types ------------------ */
@@ -31,13 +33,14 @@ interface NavItem {
 
 /* ----------------------------------------------------------
    🎯 SITE NAVBAR HEIGHT
-   ----------------------------------------------------------
    اپنی ویب سائٹ کی navbar کی height کے مطابق تبدیل کریں:
    • h-16 (64px)  →  '4rem'
    • h-20 (80px)  →  '5rem'
    • h-24 (96px)  →  '6rem'
 ---------------------------------------------------------- */
 const NAVBAR_H = '4rem'; // 64px
+
+/* ------------------ Navigation ------------------ */
 
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/owner/dashboard', icon: LayoutDashboard },
@@ -52,7 +55,8 @@ const contentNavItems: NavItem[] = [
 ];
 
 const systemNavItems: NavItem[] = [
-  { name: 'Inquiries', href: '/owner/inquiries', icon: Mail, badge: '3' },
+  { name: 'Messages', href: '/owner/messages', icon: MessageSquare }, // ✅ نیا
+  { name: 'Inquiries', href: '/owner/inquiries', icon: Inbox },
   { name: 'Settings', href: '/owner/settings', icon: Settings },
 ];
 
@@ -242,7 +246,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       ========================================= */}
       <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
         {/* =========================================
-            DESKTOP SIDEBAR — sticky (no footer overlap)
+            DESKTOP SIDEBAR — sticky
         ========================================= */}
         <aside className="hidden lg:block w-72 shrink-0">
           <div

@@ -7,19 +7,22 @@ import Academy from '@/models/Academy';
 
 import Link from 'next/link';
 import DeleteAcademyButton from '@/app/components/DeleteAcademyButton';
+import AcademyForm from './AcademyForm';
+
 import {
   BuildingOfficeIcon,
   PencilSquareIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   VideoCameraIcon,
-  EnvelopeIcon,
-  PhotoIcon,
-  LinkIcon,
+  InformationCircleIcon,
   ArrowRightIcon,
   SparklesIcon,
-  InformationCircleIcon,
+  UserGroupIcon,
+  StarIcon,
 } from '@heroicons/react/24/outline';
+
+import StarDisplay from '@/app/components/StarDisplay';
 
 type JwtPayload = {
   userId?: string;
@@ -35,12 +38,8 @@ type PageProps = {
   }>;
 };
 
-export default async function OwnerAcademyPage({
-  searchParams,
-}: PageProps) {
-  /* --------------------------------------------
-     1. Authentication
-  -------------------------------------------- */
+export default async function OwnerAcademyPage({ searchParams }: PageProps) {
+  /* ---------- AUTH ---------- */
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
 
@@ -60,16 +59,11 @@ export default async function OwnerAcademyPage({
     redirect('/login');
   }
 
-  /* --------------------------------------------
-     2. Authorization
-  -------------------------------------------- */
   if (userRole !== 'owner' && userRole !== 'admin') {
     redirect('/');
   }
 
-  /* --------------------------------------------
-     3. Database
-  -------------------------------------------- */
+  /* ---------- DB ---------- */
   await connectDB();
 
   const academy = await Academy.findOne({ ownerId: userId }).lean();
@@ -82,9 +76,24 @@ export default async function OwnerAcademyPage({
     academy?.zoomConnected === true && Boolean(academy?.zoomHostUserId);
   const zoomNotConfigured = params.zoom === 'not-configured';
 
-  /* --------------------------------------------
-     4. Page
-  -------------------------------------------- */
+  /* ---------- Serialize ---------- */
+  const academyData = academy
+    ? {
+        _id: String(academy._id),
+        name: String((academy as any).name || ''),
+        slug: String((academy as any).slug || ''),
+        description: String((academy as any).description || ''),
+        logo: String((academy as any).logo || ''),
+        thumbnail: String((academy as any).thumbnail || ''),
+        accentColor: String((academy as any).accentColor || '#10b981'),
+        address: String((academy as any).address || ''),
+        contactEmail: String((academy as any).contactEmail || ''),
+        followerCount: Number((academy as any).followerCount) || 0,
+        avgRating: Number((academy as any).avgRating) || 0,
+        ratingCount: Number((academy as any).ratingCount) || 0,
+      }
+    : null;
+
   return (
     <div className="space-y-6 sm:space-y-8 max-w-4xl mx-auto">
       {/* ============================================
@@ -97,7 +106,6 @@ export default async function OwnerAcademyPage({
             : 'bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700'
         }`}
       >
-        {/* Decorative blobs */}
         <div className="absolute inset-0 opacity-20 pointer-events-none">
           <div className="absolute -top-16 -right-10 w-64 h-64 bg-white rounded-full blur-3xl" />
           <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-teal-300 rounded-full blur-3xl" />
@@ -164,7 +172,76 @@ export default async function OwnerAcademyPage({
       )}
 
       {/* ============================================
-          ZOOM STATUS CARD
+          STATS — Followers + Rating (Editing Only)
+      ============================================ */}
+      {isEditing && academyData && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Followers */}
+          <div className="relative overflow-hidden rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-cyan-50/40 p-5 shadow-sm">
+            <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-sky-200/40 blur-3xl pointer-events-none" />
+
+            <div className="relative flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-sky-500/30 shrink-0">
+                <UserGroupIcon className="h-7 w-7 text-white" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">
+                  Followers
+                </p>
+                <p className="text-3xl font-bold text-slate-900 mt-0.5">
+                  {academyData.followerCount}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {academyData.followerCount === 0
+                    ? 'No followers yet'
+                    : 'People following your academy'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Rating */}
+          <div className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 shadow-sm">
+            <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-amber-200/40 blur-3xl pointer-events-none" />
+
+            <div className="relative flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0">
+                <StarIcon className="h-7 w-7 text-white" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                  Average Rating
+                </p>
+
+                <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-3xl font-bold text-slate-900">
+                    {academyData.avgRating.toFixed(1)}
+                  </p>
+                  <span className="text-sm font-semibold text-slate-400">
+                    / 5
+                  </span>
+                </div>
+
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <StarDisplay rating={academyData.avgRating} size={14} />
+                  <span className="text-[11px] text-slate-500">
+                    {academyData.ratingCount === 0
+                      ? 'No ratings yet'
+                      : `${academyData.ratingCount} rating${
+                          academyData.ratingCount !== 1 ? 's' : ''
+                        }`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================
+          ZOOM STATUS
       ============================================ */}
       {isEditing && (
         <div
@@ -221,7 +298,7 @@ export default async function OwnerAcademyPage({
                       Host Email
                     </p>
                     <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {academy?.zoomHostEmail || 'Not available'}
+                      {(academy as any)?.zoomHostEmail || 'Not available'}
                     </p>
                   </div>
 
@@ -230,7 +307,7 @@ export default async function OwnerAcademyPage({
                       Zoom Host ID
                     </p>
                     <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {academy?.zoomHostUserId || 'Not available'}
+                      {(academy as any)?.zoomHostUserId || 'Not available'}
                     </p>
                   </div>
 
@@ -239,7 +316,7 @@ export default async function OwnerAcademyPage({
                       Account ID
                     </p>
                     <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {academy?.zoomAccountId || 'Not available'}
+                      {(academy as any)?.zoomAccountId || 'Not available'}
                     </p>
                   </div>
                 </div>
@@ -274,187 +351,17 @@ export default async function OwnerAcademyPage({
       )}
 
       {/* ============================================
-          FORM
+          FORM — Client Component
       ============================================ */}
-      <form
-        action="/api/owner/academy"
-        method="POST"
-        className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
-      >
-        {/* Form header */}
-        <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-              <BuildingOfficeIcon className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-800">
-                Academy Details
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Fields marked with{' '}
-                <span className="text-rose-500 font-semibold">*</span> are required
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 sm:p-8 space-y-6">
-          {/* Academy Name */}
-          <div className="space-y-2">
-            <label
-              htmlFor="name"
-              className="flex items-center gap-2 text-sm font-semibold text-slate-700"
-            >
-              <BuildingOfficeIcon className="h-4 w-4 text-slate-400" />
-              Academy Name
-              <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="name"
-              type="text"
-              name="name"
-              defaultValue={academy?.name || ''}
-              required
-              placeholder="e.g., Al-Qalam Islamic Academy"
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <label
-              htmlFor="description"
-              className="flex items-center gap-2 text-sm font-semibold text-slate-700"
-            >
-              <SparklesIcon className="h-4 w-4 text-slate-400" />
-              Description
-              <span className="text-rose-500">*</span>
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              rows={4}
-              defaultValue={academy?.description || ''}
-              required
-              placeholder="Describe your academy, its vision, and what you offer..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm resize-none placeholder:text-slate-400 leading-relaxed"
-            />
-            <p className="text-[11px] text-slate-400">
-              This will be shown on your public academy page.
-            </p>
-          </div>
-
-          {/* Contact Email */}
-          <div className="space-y-2">
-            <label
-              htmlFor="contactEmail"
-              className="flex items-center gap-2 text-sm font-semibold text-slate-700"
-            >
-              <EnvelopeIcon className="h-4 w-4 text-slate-400" />
-              Contact Email
-              <span className="text-rose-500">*</span>
-            </label>
-            <input
-              id="contactEmail"
-              type="email"
-              name="contactEmail"
-              defaultValue={academy?.contactEmail || ''}
-              required
-              placeholder="academy@example.com"
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
-            />
-            <p className="text-[11px] text-slate-400">
-              Used for inquiries from prospective students.
-            </p>
-          </div>
-
-          {/* Row: Logo + Slug */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Logo */}
-            <div className="space-y-2">
-              <label
-                htmlFor="logo"
-                className="flex items-center gap-2 text-sm font-semibold text-slate-700"
-              >
-                <PhotoIcon className="h-4 w-4 text-slate-400" />
-                Logo URL
-                <span className="text-slate-400 text-xs font-normal">
-                  (optional)
-                </span>
-              </label>
-              <input
-                id="logo"
-                type="url"
-                name="logo"
-                defaultValue={academy?.logo || ''}
-                placeholder="https://example.com/logo.png"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
-              />
-            </div>
-
-            {/* Slug */}
-            <div className="space-y-2">
-              <label
-                htmlFor="slug"
-                className="flex items-center gap-2 text-sm font-semibold text-slate-700"
-              >
-                <LinkIcon className="h-4 w-4 text-slate-400" />
-                Slug
-                <span className="text-slate-400 text-xs font-normal">
-                  (URL)
-                </span>
-              </label>
-              <input
-                id="slug"
-                type="text"
-                name="slug"
-                defaultValue={academy?.slug || ''}
-                placeholder="al-qalam-academy"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
-              />
-            </div>
-          </div>
-
-          {/* Slug preview */}
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
-              Your public URL
-            </p>
-            <p className="text-xs sm:text-sm text-slate-600 truncate font-mono">
-              quranandislamic.com/academy/
-              <span className="text-emerald-600 font-semibold">
-                {academy?.slug || 'your-slug'}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {/* Form footer */}
-        <div className="p-5 sm:p-6 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              type="submit"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all duration-300 active:scale-[0.98]"
-            >
-              <CheckCircleIcon className="h-5 w-5" />
-              {isEditing ? 'Save Changes' : 'Create Academy'}
-            </button>
-
-            <Link
-              href="/owner/dashboard"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-200 transition-all duration-300"
-            >
-              Cancel
-            </Link>
-          </div>
-        </div>
-      </form>
+      <AcademyForm
+        academy={academyData}
+        isEditing={isEditing}
+      />
 
       {/* ============================================
-          DANGER ZONE — Delete Academy
+          DANGER ZONE
       ============================================ */}
-      {isEditing && (
+      {isEditing && academy && (
         <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-pink-50/40 p-5 sm:p-6">
           <div className="flex items-start gap-4">
             <div className="h-11 w-11 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
@@ -466,11 +373,11 @@ export default async function OwnerAcademyPage({
               </h3>
               <p className="text-xs sm:text-sm text-rose-700 mt-1 leading-relaxed">
                 Deleting your academy is permanent and cannot be undone. All
-                associated data — teachers, students, courses, and messages — will
-                also be removed.
+                associated data — teachers, students, courses, and messages —
+                will also be removed.
               </p>
               <div className="mt-4">
-                <DeleteAcademyButton academyId={academy!._id.toString()} />
+                <DeleteAcademyButton academyId={academy._id.toString()} />
               </div>
             </div>
           </div>

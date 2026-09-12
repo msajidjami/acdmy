@@ -5,16 +5,51 @@ import Teacher from '@/models/Teacher';
 import Course from '@/models/Course';
 import Student from '@/models/Student';
 
-/* ------------------ Data Fetching ------------------ */
+export const dynamic = 'force-dynamic';
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+
+function isImageUrl(value?: string): boolean {
+  if (!value) return false;
+  const v = value.trim();
+  if (!v) return false;
+  return (
+    v.startsWith('http://') ||
+    v.startsWith('https://') ||
+    v.startsWith('/') ||
+    v.startsWith('data:image')
+  );
+}
+
+function formatCount(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+}
+
+function getInitials(name: string): string {
+  if (!name) return 'T';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (
+    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
+}
+
+/* ============================================================
+   DATA FETCHING
+   ============================================================ */
 
 async function getAcademies() {
   await connectDB();
+
   const academies = await Academy.find({ isActive: true })
     .sort({ createdAt: -1 })
     .lean();
 
   const academiesWithCounts = await Promise.all(
-    academies.map(async (academy) => {
+    academies.map(async (academy: any) => {
       const [teacherCount, courseCount, studentCount] = await Promise.all([
         Teacher.countDocuments({ academyId: academy._id }),
         Course.countDocuments({ academyId: academy._id, isActive: true }),
@@ -22,8 +57,17 @@ async function getAcademies() {
       ]);
 
       return {
-        ...academy,
-        _id: academy._id.toString(),
+        _id: String(academy._id),
+        slug: String(academy.slug || ''),
+        name: String(academy.name || ''),
+        description: String(academy.description || ''),
+        logo: String(academy.logo || ''),
+        thumbnail: String(academy.thumbnail || ''),
+        accentColor: String(academy.accentColor || '#10b981'),
+        address: String(academy.address || ''),
+        followerCount: Number(academy.followerCount) || 0,
+        avgRating: Number(academy.avgRating) || 0,
+        ratingCount: Number(academy.ratingCount) || 0,
         teacherCount,
         courseCount,
         studentCount,
@@ -34,43 +78,92 @@ async function getAcademies() {
   return academiesWithCounts;
 }
 
-/* ------------------ Helpers ------------------ */
+async function getTeachers() {
+  await connectDB();
 
-const GRADIENTS = [
-  'from-emerald-500 via-teal-500 to-cyan-500',
-  'from-purple-500 via-pink-500 to-rose-500',
-  'from-amber-500 via-orange-500 to-red-500',
-  'from-blue-500 via-indigo-500 to-violet-500',
-  'from-fuchsia-500 via-pink-500 to-rose-500',
-  'from-lime-500 via-emerald-500 to-teal-500',
-];
+  const teachers = await Teacher.find({ isAvailable: true })
+    .sort({ createdAt: -1 })
+    .limit(12)
+    .lean();
 
-const CATEGORY_TAGS = [
-  { label: 'Quran', icon: '📖' },
-  { label: 'O/A Level', icon: '🎓' },
-  { label: 'Languages', icon: '🌍' },
-  { label: 'Tech', icon: '💻' },
-  { label: 'IELTS', icon: '🏅' },
-  { label: 'Islamic Studies', icon: '🕌' },
-  { label: 'Science', icon: '🔬' },
-  { label: 'Math', icon: '📐' },
-];
+  /* Academy names کے لیے batch query */
+  const academyIds = Array.from(
+    new Set(
+      teachers
+        .map((t: any) => String(t.academyId || ''))
+        .filter((id: string) => id.length > 0)
+    )
+  );
 
-function formatCount(n: number): string {
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return String(n);
+  const academies =
+    academyIds.length > 0
+      ? await Academy.find({ _id: { $in: academyIds } })
+          .select('_id name slug accentColor')
+          .lean()
+      : [];
+
+  const academyMap = new Map<string, any>(
+    academies.map((a: any) => [
+      String(a._id),
+      {
+        name: String(a.name || ''),
+        slug: String(a.slug || ''),
+        accentColor: String(a.accentColor || '#10b981'),
+      },
+    ])
+  );
+
+  return teachers
+    .filter((t: any) => t && t._id)
+    .map((t: any) => {
+      const academy = academyMap.get(String(t.academyId));
+      return {
+        _id: String(t._id),
+        name: String(t.name || 'Teacher'),
+        email: String(t.email || ''),
+        gender: String(t.gender || 'male'),
+        subjects: Array.isArray(t.subjects) ? t.subjects : [],
+        bio: String(t.bio || ''),
+        audioUrl: String(t.audioUrl || ''),
+        profileImage: String(t.profileImage || ''),
+        isAvailable: t.isAvailable ?? true,
+        academyName: academy?.name || '',
+        academySlug: academy?.slug || '',
+        academyAccent: academy?.accentColor || '#10b981',
+      };
+    });
 }
 
-/* ------------------ Page ------------------ */
+/* ============================================================
+   PAGE
+   ============================================================ */
 
 export default async function ExplorePage() {
-  const academies = await getAcademies();
+  const [academies, teachers] = await Promise.all([
+    getAcademies(),
+    getTeachers(),
+  ]);
+
+  const totalTeachers = academies.reduce(
+    (s, a) => s + (a.teacherCount || 0),
+    0
+  );
+  const totalCourses = academies.reduce(
+    (s, a) => s + (a.courseCount || 0),
+    0
+  );
+  const totalStudents = academies.reduce(
+    (s, a) => s + (a.studentCount || 0),
+    0
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/30">
-      {/* ===== HERO ===== */}
+      {/* ============================================
+          HERO
+      ============================================ */}
+
       <section className="relative overflow-hidden px-4 sm:px-6 lg:px-8 pt-24 pb-16">
-        {/* Background blobs */}
         <div className="absolute inset-0 -z-10 pointer-events-none">
           <div className="absolute -top-20 -right-20 w-96 h-96 bg-emerald-200/40 rounded-full blur-3xl" />
           <div className="absolute top-40 -left-20 w-96 h-96 bg-teal-200/30 rounded-full blur-3xl" />
@@ -83,7 +176,7 @@ export default async function ExplorePage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            {academies.length} Academies • Live now
+            {academies.length} Academies • {teachers.length} Teachers Live
           </span>
 
           <h1 className="mt-6 text-4xl md:text-6xl lg:text-7xl font-extrabold text-gray-950 tracking-tight leading-[1.05]">
@@ -94,7 +187,8 @@ export default async function ExplorePage() {
           </h1>
 
           <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Explore top-rated Islamic academies, meet inspiring teachers, and join thousands of learners on their journey — all in one place.
+            Explore top-rated Islamic academies, meet inspiring teachers, and
+            join thousands of learners on their journey — all in one place.
           </p>
 
           {/* Search bar */}
@@ -114,56 +208,39 @@ export default async function ExplorePage() {
               </div>
             </div>
           </div>
-
-          {/* Category chips */}
-          <div className="mt-8 flex flex-wrap justify-center gap-2">
-            {CATEGORY_TAGS.map((tag) => (
-              <button
-                key={tag.label}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 rounded-full text-sm font-medium text-gray-700 hover:text-emerald-700 transition shadow-sm"
-              >
-                <span>{tag.icon}</span>
-                {tag.label}
-              </button>
-            ))}
-          </div>
         </div>
       </section>
 
-      {/* ===== STATS STRIP ===== */}
+      {/* ============================================
+          STATS STRIP
+      ============================================ */}
+
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: 'Academies', value: academies.length, icon: '🏫' },
-            {
-              label: 'Teachers',
-              value: academies.reduce((s, a) => s + (a.teacherCount || 0), 0),
-              icon: '👨‍🏫',
-            },
-            {
-              label: 'Courses',
-              value: academies.reduce((s, a) => s + (a.courseCount || 0), 0),
-              icon: '📚',
-            },
-            {
-              label: 'Students',
-              value: academies.reduce((s, a) => s + (a.studentCount || 0), 0),
-              icon: '🎓',
-            },
+            { label: 'Teachers', value: totalTeachers, icon: '👨‍🏫' },
+            { label: 'Courses', value: totalCourses, icon: '📚' },
+            { label: 'Students', value: totalStudents, icon: '🎓' },
           ].map((s) => (
             <div
               key={s.label}
               className="bg-white/80 backdrop-blur-sm rounded-2xl border border-emerald-100/60 p-5 text-center shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
             >
               <div className="text-3xl mb-1">{s.icon}</div>
-              <p className="text-2xl font-bold text-gray-900">{formatCount(s.value)}+</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {formatCount(s.value)}+
+              </p>
               <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ===== MAIN GRID ===== */}
+      {/* ============================================
+          ACADEMIES GRID
+      ============================================ */}
+
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex items-end justify-between mb-10 flex-wrap gap-4">
           <div>
@@ -194,7 +271,9 @@ export default async function ExplorePage() {
         {academies.length === 0 ? (
           <div className="text-center py-24 bg-white/60 backdrop-blur rounded-3xl border-2 border-dashed border-emerald-200">
             <div className="text-6xl mb-4">🏜️</div>
-            <p className="text-gray-500 text-lg mb-2">No academies available yet.</p>
+            <p className="text-gray-500 text-lg mb-2">
+              No academies available yet.
+            </p>
             <Link
               href="/signup"
               className="inline-block mt-2 text-emerald-600 font-semibold hover:underline"
@@ -205,13 +284,15 @@ export default async function ExplorePage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {academies.map((academy, idx) => {
-              const gradient = GRADIENTS[idx % GRADIENTS.length];
+              const accent = academy.accentColor || '#10b981';
+              const hasThumbnail = isImageUrl(academy.thumbnail);
+              const hasLogo = isImageUrl(academy.logo);
               const isFeatured = idx < 3;
 
               return (
                 <div
                   key={academy._id}
-                  className="group relative bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300"
+                  className="group relative bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                 >
                   {/* Featured badge */}
                   {isFeatured && (
@@ -220,19 +301,48 @@ export default async function ExplorePage() {
                     </div>
                   )}
 
-                  {/* Cover */}
+                  {/* ============================================
+                      ✅ COVER — Real thumbnail یا gradient
+                  ============================================ */}
                   <div
-                    className={`h-40 bg-gradient-to-br ${gradient} relative flex items-center justify-center overflow-hidden`}
+                    className="h-44 relative flex items-center justify-center overflow-hidden"
+                    style={{
+                      background: hasThumbnail
+                        ? `url(${academy.thumbnail})`
+                        : `linear-gradient(135deg, ${accent}, ${accent}cc, ${accent}88)`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                    }}
                   >
-                    {/* decorative circles */}
-                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
-                    <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-white/10 rounded-full" />
-                    <div className="absolute top-6 right-10 w-3 h-3 bg-white/30 rounded-full" />
-                    <div className="absolute bottom-6 right-20 w-2 h-2 bg-white/30 rounded-full" />
+                    {/* Overlay for readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
 
-                    <span className="text-6xl relative z-10 drop-shadow-lg group-hover:scale-110 transition-transform duration-500">
-                      {academy.logo || '🏛️'}
-                    </span>
+                    {/* Decorative circles (only when no thumbnail) */}
+                    {!hasThumbnail && (
+                      <>
+                        <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
+                        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-white/10 rounded-full" />
+                        <div className="absolute top-6 right-10 w-3 h-3 bg-white/30 rounded-full" />
+                        <div className="absolute bottom-6 right-20 w-2 h-2 bg-white/30 rounded-full" />
+                      </>
+                    )}
+
+                    {/* Logo / Emoji — only if no thumbnail (thumbnail itself is enough) */}
+                    {!hasThumbnail && (
+                      <span className="text-6xl relative z-10 drop-shadow-lg group-hover:scale-110 transition-transform duration-500">
+                        {hasLogo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={academy.logo}
+                            alt={academy.name}
+                            className="w-20 h-20 rounded-2xl object-cover border-4 border-white/40 shadow-2xl"
+                          />
+                        ) : (
+                          academy.logo || '🏛️'
+                        )}
+                      </span>
+                    )}
 
                     {/* Verified pill */}
                     <div className="absolute top-4 right-4 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-bold text-emerald-700 shadow-sm">
@@ -245,29 +355,37 @@ export default async function ExplorePage() {
                       </svg>
                       Verified
                     </div>
+
+                    {/* Rating badge */}
+                    {academy.ratingCount > 0 && (
+                      <div className="absolute bottom-4 left-4 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full text-[10px] font-bold text-white shadow-sm">
+                        <span className="text-amber-400">★</span>
+                        {academy.avgRating.toFixed(1)}
+                        <span className="opacity-60">
+                          ({academy.ratingCount})
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Followers badge */}
+                    {academy.followerCount > 0 && (
+                      <div className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-1 px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-full text-[10px] font-bold text-slate-700 shadow-sm">
+                        <span className="text-violet-600">👥</span>
+                        {formatCount(academy.followerCount)}
+                      </div>
+                    )}
                   </div>
 
                   {/* Body */}
-                  <div className="p-6">
+                  <div className="p-6 flex flex-col flex-1">
                     <h3 className="text-xl font-bold text-gray-900 truncate group-hover:text-emerald-600 transition">
                       {academy.name}
                     </h3>
 
-                    <p className="text-gray-600 text-sm mt-2 line-clamp-2 min-h-[2.5rem] leading-relaxed">
-                      {academy.description || 'An educational academy on the platform.'}
+                    <p className="text-gray-600 text-sm mt-2 line-clamp-2 min-h-[2.5rem] leading-relaxed flex-1">
+                      {academy.description ||
+                        'An educational academy on the platform.'}
                     </p>
-
-                    {/* Rating row */}
-                    <div className="mt-3 flex items-center gap-2 text-sm">
-                      <div className="flex text-amber-400">
-                        {[...Array(5)].map((_, i) => (
-                          <svg key={i} viewBox="0 0 20 20" className="w-3.5 h-3.5 fill-current">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                          </svg>
-                        ))}
-                      </div>
-                      <span className="text-gray-500 text-xs font-medium">4.8 (120+)</span>
-                    </div>
 
                     {/* Stats row */}
                     <div className="mt-4 grid grid-cols-3 gap-2 py-3 border-y border-gray-100">
@@ -301,7 +419,10 @@ export default async function ExplorePage() {
                     <div className="mt-4 flex gap-2">
                       <Link
                         href={`/academy/${academy.slug}`}
-                        className="flex-1 text-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition shadow-md shadow-emerald-600/20"
+                        className="flex-1 text-center text-white font-semibold py-2.5 rounded-xl transition shadow-md"
+                        style={{
+                          background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                        }}
                       >
                         Visit Academy
                       </Link>
@@ -321,7 +442,43 @@ export default async function ExplorePage() {
         )}
       </section>
 
-      {/* ===== CTA STRIP ===== */}
+      {/* ============================================
+          ✅ TEACHERS SECTION — الگ الگ teachers
+      ============================================ */}
+
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="flex items-end justify-between mb-10 flex-wrap gap-4">
+          <div>
+            <span className="text-sm font-semibold text-emerald-600 uppercase tracking-wider">
+              Meet the Experts
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mt-1">
+              👨‍🏫 Featured Teachers
+            </h2>
+            <p className="text-gray-500 mt-1">
+              Connect with certified teachers from top academies.
+            </p>
+          </div>
+        </div>
+
+        {teachers.length === 0 ? (
+          <div className="text-center py-20 bg-white/60 backdrop-blur rounded-3xl border-2 border-dashed border-emerald-200">
+            <div className="text-5xl mb-4">👨‍🏫</div>
+            <p className="text-gray-500 text-lg">No teachers available yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {teachers.map((teacher) => (
+              <TeacherCard key={teacher._id} teacher={teacher} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ============================================
+          CTA STRIP
+      ============================================ */}
+
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-10 md:p-14 text-center shadow-2xl">
           <div className="absolute inset-0 opacity-20">
@@ -334,7 +491,8 @@ export default async function ExplorePage() {
               Can&apos;t find what you&apos;re looking for?
             </h2>
             <p className="mt-3 text-emerald-50 text-lg max-w-xl mx-auto">
-              Create your own academy and start teaching today. It only takes a few minutes.
+              Create your own academy and start teaching today. It only takes
+              a few minutes.
             </p>
 
             <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -355,6 +513,148 @@ export default async function ExplorePage() {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+/* ============================================================
+   TEACHER CARD COMPONENT
+   ============================================================ */
+
+function TeacherCard({ teacher }: { teacher: any }) {
+  const isFemale = teacher.gender === 'female';
+  const hasImage = !isFemale && isImageUrl(teacher.profileImage);
+  const accent = teacher.academyAccent || '#10b981';
+
+  return (
+    <div className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col">
+      {/* Cover / Header */}
+      <div
+        className="h-24 relative overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+        }}
+      >
+        {/* Decorative circles */}
+        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full" />
+        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-white/10 rounded-full" />
+
+        {/* Available badge */}
+        {teacher.isAvailable && (
+          <div className="absolute top-3 right-3 inline-flex items-center gap-1 px-2 py-0.5 bg-white/95 backdrop-blur-sm rounded-full text-[9px] font-bold text-emerald-700 shadow-sm">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </span>
+            Available
+          </div>
+        )}
+      </div>
+
+      {/* Avatar — overlapping */}
+      <div className="relative px-4">
+        <div className="absolute -top-10 left-4">
+          {hasImage ? (
+            <div className="h-20 w-20 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={teacher.profileImage}
+                alt={teacher.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : isFemale ? (
+            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-pink-400 via-pink-500 to-fuchsia-600 flex items-center justify-center text-white border-4 border-white shadow-lg">
+              <span className="text-3xl">✨</span>
+            </div>
+          ) : (
+            <div
+              className="h-20 w-20 rounded-2xl flex items-center justify-center text-white font-bold text-2xl border-4 border-white shadow-lg"
+              style={{
+                background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+              }}
+            >
+              {getInitials(teacher.name)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 pt-12 flex flex-col flex-1">
+        <h3 className="text-base font-bold text-gray-900 truncate">
+          {teacher.name}
+        </h3>
+
+        {teacher.academyName && (
+          <Link
+            href={`/academy/${teacher.academySlug}`}
+            className="text-[11px] text-emerald-600 hover:text-emerald-700 font-medium truncate mt-0.5 inline-flex items-center gap-1"
+          >
+            🏫 {teacher.academyName}
+          </Link>
+        )}
+
+        {teacher.subjects.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-3">
+            {teacher.subjects.slice(0, 3).map((subject: string) => (
+              <span
+                key={subject}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100"
+              >
+                {subject}
+              </span>
+            ))}
+            {teacher.subjects.length > 3 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">
+                +{teacher.subjects.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+
+        {teacher.bio && (
+          <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed flex-1">
+            {teacher.bio}
+          </p>
+        )}
+
+        {/* Audio preview */}
+        {teacher.audioUrl && (
+          <div className="mt-3 rounded-lg bg-purple-50 border border-purple-100 p-2">
+            <div className="flex items-center gap-2">
+              <span className="text-purple-600 text-sm">🎤</span>
+              <audio controls className="h-7 w-full">
+                <source src={teacher.audioUrl} type="audio/mpeg" />
+              </audio>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-4 pt-3 border-t border-gray-100 flex gap-2">
+          <a
+            href={`mailto:${teacher.email}?subject=Inquiry about classes`}
+            className="flex-1 text-center text-xs font-bold py-2.5 rounded-xl transition text-white shadow-md"
+            style={{
+              background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+            }}
+          >
+            Contact
+          </a>
+
+          {teacher.audioUrl && (
+            <button
+              type="button"
+              aria-label="Play intro"
+              className="px-3 py-2.5 bg-gray-100 hover:bg-purple-50 hover:text-purple-600 text-gray-700 rounded-xl transition"
+              title="Voice introduction available"
+            >
+              🎧
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

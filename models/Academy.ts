@@ -1,18 +1,43 @@
+import mongoose, { Schema, models, model, Model } from 'mongoose';
 
-import mongoose, {
-  Schema,
-  models,
-  model,
-} from 'mongoose';
+/* ============================================================
+   RATING SUB-SCHEMA
+   ============================================================ */
+
+const RatingSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    stars: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+    },
+    comment: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: true }
+);
+
+/* ============================================================
+   MAIN SCHEMA
+   ============================================================ */
 
 const AcademySchema = new Schema(
   {
-    /*
-     * ========================================================
-     * OWNER
-     * ========================================================
-     */
-
+    /* ---------- OWNER ---------- */
     ownerId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -20,17 +45,8 @@ const AcademySchema = new Schema(
       index: true,
     },
 
-    /*
-     * ========================================================
-     * BASIC ACADEMY INFORMATION
-     * ========================================================
-     */
-
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    /* ---------- BASIC ---------- */
+    name: { type: String, required: true, trim: true },
 
     slug: {
       type: String,
@@ -41,23 +57,21 @@ const AcademySchema = new Schema(
       index: true,
     },
 
-    description: {
+    description: { type: String, required: true, trim: true },
+
+    logo: { type: String, default: '', trim: true },
+
+    /* ✅ Cover / Hero image */
+    thumbnail: { type: String, default: '', trim: true },
+
+    /* ✅ Accent color */
+    accentColor: {
       type: String,
-      required: true,
+      default: '#10b981',
       trim: true,
     },
 
-    logo: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    address: {
-      type: String,
-      default: '',
-      trim: true,
-    },
+    address: { type: String, default: '', trim: true },
 
     contactEmail: {
       type: String,
@@ -72,62 +86,55 @@ const AcademySchema = new Schema(
       index: true,
     },
 
-    /*
-     * ========================================================
-     * ZOOM
-     * ========================================================
-     *
-     * IMPORTANT:
-     *
-     * Teacher کا email یہاں استعمال نہیں ہوگا۔
-     *
-     * Academy کے Zoom account میں جس user کے نام پر
-     * meetings بنانی ہیں، اس کا اصل Zoom user ID یہاں
-     * محفوظ ہوگا۔
-     *
-     * مثال:
-     *
-     * zoomHostUserId = "ZXY333"
-     *
-     */
+    /* ========================================================
+       FOLLOWERS
+       ======================================================== */
+    followers: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
 
-    zoomConnected: {
-      type: Boolean,
-      default: false,
+    followerCount: {
+      type: Number,
+      default: 0,
+      min: 0,
       index: true,
     },
 
-    /*
-     * Zoom Account ID
-     *
-     * یہ آپ کے Server-to-Server OAuth app کا
-     * Account ID ہے۔
-     */
-    zoomAccountId: {
-      type: String,
-      default: '',
-      trim: true,
+    /* ========================================================
+       RATINGS
+       ======================================================== */
+    ratings: {
+      type: [RatingSchema],
+      default: [],
     },
 
-    /*
-     * Zoom Host User ID
-     *
-     * یہی ID create-meeting API استعمال کرے گی:
-     *
-     * /users/{zoomHostUserId}/meetings
-     */
-    zoomHostUserId: {
-      type: String,
-      default: '',
-      trim: true,
+    avgRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
       index: true,
     },
 
-    /*
-     * Host کا email صرف معلومات کے لیے محفوظ ہے۔
-     *
-     * Meeting creation کے لیے email استعمال نہیں ہوگا۔
-     */
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      index: true,
+    },
+
+    /* ========================================================
+       ZOOM
+       ======================================================== */
+    zoomConnected: { type: Boolean, default: false, index: true },
+
+    zoomAccountId: { type: String, default: '', trim: true },
+
+    zoomHostUserId: { type: String, default: '', trim: true, index: true },
+
     zoomHostEmail: {
       type: String,
       default: '',
@@ -137,36 +144,58 @@ const AcademySchema = new Schema(
   },
   {
     timestamps: true,
+    /* ✅ Unknown fields کو preserve کریں — schema update کے بعد بھی */
+    strict: false,
   }
 );
 
-/*
- * ============================================================
- * INDEXES
- * ============================================================
- */
+/* ============================================================
+   INDEXES
+   ============================================================ */
 
-AcademySchema.index({
-  ownerId: 1,
-  isActive: 1,
-});
+AcademySchema.index({ ownerId: 1, isActive: 1 });
+AcademySchema.index({ zoomHostUserId: 1 });
+AcademySchema.index({ followerCount: -1 });
+AcademySchema.index({ avgRating: -1 });
 
-AcademySchema.index({
-  zoomHostUserId: 1,
-});
+/* ============================================================
+   METHODS
+   ============================================================ */
 
-/*
- * ============================================================
- * MODEL
- * ============================================================
- */
+AcademySchema.methods.recalculateStats = function () {
+  this.followerCount = Array.isArray(this.followers)
+    ? this.followers.length
+    : 0;
 
-const Academy =
-  models.Academy ||
-  model(
-    'Academy',
-    AcademySchema
-  );
+  const ratings = Array.isArray(this.ratings) ? this.ratings : [];
+  this.ratingCount = ratings.length;
+
+  if (ratings.length === 0) {
+    this.avgRating = 0;
+  } else {
+    const sum = ratings.reduce(
+      (acc: number, r: any) => acc + (Number(r.stars) || 0),
+      0
+    );
+    this.avgRating = Math.round((sum / ratings.length) * 10) / 10;
+  }
+};
+
+/* ============================================================
+   ✅ CACHE-SAFE EXPORT
+   
+   یہ pattern Next.js dev mode میں schema changes کو فوراً
+   apply کرتا ہے۔ پرانا `models.Academy || model(...)` استعمال
+   کرنے سے schema change نظر نہیں آتی جب تک server restart نہ ہو۔
+   ============================================================ */
+
+let Academy: Model<any>;
+
+if (models.Academy) {
+  /* ✅ اگر model cached ہے تو اسے حذف کریں تاکہ نیا schema لگے */
+  delete mongoose.models.Academy;
+}
+
+Academy = model('Academy', AcademySchema);
 
 export default Academy;
-

@@ -1,66 +1,115 @@
 import { NextResponse } from 'next/server';
-import cloudinary from '@/app/lib/cloudinary';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
-export async function POST(request: Request) {
+export const dynamic = 'force-dynamic';
+
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
+const ALLOWED_TYPES = [
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/webm',
+  'audio/ogg',
+  'audio/m4a',
+  'audio/x-m4a',
+];
+
+export async function POST(req: Request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('audio') as File | null;
+    /* ---------- Auth ---------- */
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
     }
 
-    console.log(`📁 File received: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`);
-
-    // فائل کا سائز چیک کریں (مثلاً 20MB سے زیادہ ہو تو وارننگ دیں)
-    if (file.size > 20 * 1024 * 1024) {
-      console.warn('⚠️ File size exceeds 20MB, may take longer to upload.');
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return NextResponse.json(
+        { error: 'Server misconfigured' },
+        { status: 500 }
+      );
     }
 
+    try {
+      const result = jwt.verify(token, jwtSecret);
+      if (typeof result === 'string') throw new Error('Invalid token');
+    } catch {
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+    }
+
+    /* ---------- Parse ---------- */
+    const formData = await req.formData();
+    const file = formData.get('audio');
+
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json(
+        { error: 'No audio file provided' },
+        { status: 400 }
+      );
+    }
+
+    /* ---------- Validate ---------- */
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'Audio must be smaller than 15 MB' },
+        { status: 400 }
+      );
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: 'Only MP3, WAV, WebM, OGG, M4A allowed' },
+        { status: 400 }
+      );
+    }
+
+    /* ---------- Filename ---------- */
+    const extMap: Record<string, string> = {
+      'audio/mpeg': 'mp3',
+      'audio/mp3': 'mp3',
+      'audio/wav': 'wav',
+      'audio/webm': 'webm',
+      'audio/ogg': 'ogg',
+      'audio/m4a': 'm4a',
+      'audio/x-m4a': 'm4a',
+    };
+    const ext = extMap[file.type] || 'mp3';
+    const random = Math.random().toString(36).slice(2, 10);
+    const filename = `audio-${Date.now()}-${random}.${ext}`;
+
+    /* ---------- Ensure folder ---------- */
+    const uploadsDir = join(process.cwd(), 'public', 'uploads');
+
+    if (!existsSync(uploadsDir)) {
+      await mkdir(uploadsDir, { recursive: true });
+    }
+
+    /* ---------- Save ---------- */
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const filepath = join(uploadsDir, filename);
 
-    const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'raw', // ✅ یہ کلیدی تبدیلی ہے
-          folder: 'teachers_audio',
-          timeout: 120000, // 2 منٹ کا ٹائم آؤٹ (بڑی فائلوں کے لیے)
-          // raw فائل کے لیے کوئی اور آپشنز درکار نہیں
-        },
-        (error, result) => {
-          if (error) {
-            console.error('❌ Cloudinary upload error:', error);
-            reject(error);
-          } else if (!result) {
-            reject(new Error('Upload result is undefined'));
-          } else {
-            console.log('✅ Cloudinary upload success:', result.secure_url);
-            resolve(result);
-          }
-        }
-      );
+    await writeFile(filepath, buffer);
 
-      uploadStream.end(buffer);
-
-      // ٹائم آؤٹ ہینڈلر
-      const timeoutId = setTimeout(() => {
-        uploadStream.destroy();
-        reject(new Error('Upload timeout after 120 seconds'));
-      }, 120000);
-
-      uploadStream.on('finish', () => clearTimeout(timeoutId));
-      uploadStream.on('error', () => clearTimeout(timeoutId));
+    return NextResponse.json({
+      success: true,
+      url: `/uploads/${filename}`,
+      size: file.size,
+      type: file.type,
     });
-
-    return NextResponse.json({ url: uploadResult.secure_url });
-  } catch (error: any) {
-    console.error('🔥 Audio upload API error:', error);
+  } catch (err) {
+    console.error('Audio upload error:', err);
     return NextResponse.json(
-      { 
-        error: 'Upload failed', 
-        details: error.message || 'Unknown error' 
-      },
+      { error: 'Failed to upload audio' },
       { status: 500 }
     );
   }

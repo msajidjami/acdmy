@@ -4,7 +4,8 @@ const CourseSchema = new Schema(
   {
     title: { type: String, required: true },
     description: { type: String, default: '' },
-    image: { type: String, default: '' },
+    image: { type: String, default: '' },        // cover image
+    thumbnail: { type: String, default: '' },    // small thumbnail (auto fallback to image)
     price: { type: Number, default: 0 },
     duration: { type: String, default: '' },
     level: {
@@ -14,12 +15,19 @@ const CourseSchema = new Schema(
     },
     category: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
+
+    /* ✅ NEW — Book Pages */
+    totalPages: { type: Number, default: 0, min: 0 },
+    bookTitle: { type: String, default: '' },
+
+    /* Color accent for the course (used in thumbnail fallback) */
+    accentColor: { type: String, default: '#6366f1' },
+
     academyId: {
       type: Schema.Types.ObjectId,
       ref: 'Academy',
       required: true,
     },
-    // جو ٹیچرز اس کورس کو پڑھا سکتے ہیں (اختیاری)
     teacherIds: [{ type: Schema.Types.ObjectId, ref: 'Teacher' }],
   },
   { timestamps: true }

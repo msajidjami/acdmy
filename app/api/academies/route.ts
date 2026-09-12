@@ -2,45 +2,61 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
 import Academy from '@/models/Academy';
 import Teacher from '@/models/Teacher';
-// User ماڈل کو درست راستے سے import کریں – اگر راستہ مختلف ہے تو تبدیل کریں
+import Course from '@/models/Course';
 import User from '@/models/User';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     await connectDB();
 
-    // تمام فعال اکیڈمیز حاصل کریں (بغیر populate کے)
-    const academies = await Academy.find({ isActive: true }).lean();
+    const academies = await Academy.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // ہر اکیڈمی کے لیے owner اور teacherCount الگ سے حاصل کریں
     const academiesWithCount = await Promise.all(
-      academies.map(async (academy) => {
-        // owner کی معلومات حاصل کریں
+      academies.map(async (academy: any) => {
         let ownerData = null;
         if (academy.ownerId) {
-          const owner = await User.findById(academy.ownerId).select('name email').lean();
+          const owner = await User.findById(academy.ownerId)
+            .select('name email')
+            .lean();
           if (owner) {
             ownerData = {
-              _id: owner._id.toString(),
-              name: owner.name,
-              email: owner.email,
+              _id: String(owner._id),
+              name: String((owner as any).name || ''),
+              email: String((owner as any).email || ''),
             };
           }
         }
 
-        // teachers کی تعداد
-        const teacherCount = await Teacher.countDocuments({ academyId: academy._id });
+        const [teacherCount, courseCount] = await Promise.all([
+          Teacher.countDocuments({ academyId: academy._id }),
+          Course.countDocuments({ academyId: academy._id, isActive: true }),
+        ]);
 
         return {
-          ...academy,
-          _id: academy._id.toString(),
+          _id: String(academy._id),
+          slug: String(academy.slug || ''),
+          name: String(academy.name || ''),
+          description: String(academy.description || ''),
+          logo: String(academy.logo || ''),
+          thumbnail: String(academy.thumbnail || ''),
+          accentColor: String(academy.accentColor || '#10b981'),
+          address: String(academy.address || ''),
+          contactEmail: String(academy.contactEmail || ''),
+          followerCount: Number(academy.followerCount) || 0,
+          avgRating: Number(academy.avgRating) || 0,
+          ratingCount: Number(academy.ratingCount) || 0,
           ownerId: ownerData,
           teacherCount,
+          courseCount,
         };
       })
     );
 
-    return NextResponse.json(academiesWithCount, { status: 200 });
+    return NextResponse.json(academiesWithCount);
   } catch (error) {
     console.error('Error fetching academies:', error);
     return NextResponse.json(

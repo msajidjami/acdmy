@@ -1,189 +1,335 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import Link from 'next/link';
+
 import connectDB from '@/app/lib/dbConnect';
+import User from '@/models/User';
 import Student from '@/models/Student';
 import Academy from '@/models/Academy';
-import {
-  UserGroupIcon,
-  AcademicCapIcon,
-  BookOpenIcon,
-} from '@heroicons/react/24/outline';
+import Teacher from '@/models/Teacher';
+import Assignment from '@/models/Assignment';
+import Course from '@/models/Course';
+
+import { ArrowLeft, GraduationCap } from 'lucide-react';
+
+import StudentDashboardView from './StudentDashboardView';
+
+export const dynamic = 'force-dynamic';
+
+/* ======================================================
+   Types
+   ====================================================== */
+
+type JwtUserPayload = JwtPayload & {
+  userId?: string;
+  email?: string;
+};
+
+/* ======================================================
+   Helpers
+   ====================================================== */
+
+function normalizeEmail(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+/* ======================================================
+   Data Fetch
+   ====================================================== */
 
 async function getStudentData(email: string) {
   await connectDB();
-  const student = await Student.findOne({ email }).lean();
-  if (!student) return null;
-  const academy = await Academy.findById(student.academyId).lean();
-  return { student, academy };
-}
 
-export default async function StudentDashboardPage() {
-  // صرف لاگ ان چیک کریں
-  const cookieStore = await cookies();
-  const token = cookieStore.get('token')?.value;
-  if (!token) return redirect('/login');
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
 
-  let userEmail = '';
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    userEmail = decoded.email;
-    if (!userEmail) throw new Error('Email not found in token');
-  } catch {
-    return redirect('/login');
+  /* ---------- Find User ---------- */
+  const user = await User.findOne({ email: normalized })
+    .select('_id name email role')
+    .lean();
+
+  if (!user) return null;
+
+  /* ---------- Find Student ---------- */
+  const student = await Student.findOne({ email: normalized })
+    .select(
+      '_id name email academyId classLevel imageUrl isActive createdAt'
+    )
+    .lean();
+
+  if (!student?.academyId) {
+    return { user, student: null, academy: null, data: null };
   }
 
-  const data = await getStudentData(userEmail);
+  const academy = await Academy.findById(student.academyId)
+    .select('_id name')
+    .lean();
 
-  // اگر اسٹوڈنٹ نہیں ملا → کوئی ری ڈائریکٹ نہیں، بس پیغام دکھائیں
-  if (!data) {
+  /* ---------- Get assignments ---------- */
+
+  const assignments = await Assignment.find({
+    academyId: student.academyId,
+    studentId: student._id,
+    status: { $ne: 'cancelled' },
+  })
+    .select(
+      '_id teacherId courseId startTime endTime daysOfWeek status notes zoomMeetingNumber zoomPassword zoomLink zoomTimezone'
+    )
+    .lean();
+
+  /* ---------- Fetch teachers & courses ---------- */
+
+  const teacherIds = [
+    ...new Set(
+      assignments.map((a: any) => String(a.teacherId || '')).filter(Boolean)
+    ),
+  ];
+
+  const courseIds = [
+    ...new Set(
+      assignments.map((a: any) => String(a.courseId || '')).filter(Boolean)
+    ),
+  ];
+
+  const [teachers, courses] = await Promise.all([
+    teacherIds.length > 0
+      ? Teacher.find({
+          _id: { $in: teacherIds },
+          academyId: student.academyId,
+        })
+          .select('_id name email subjects imageUrl')
+          .lean()
+      : Promise.resolve([]),
+
+    courseIds.length > 0
+      ? Course.find({
+          _id: { $in: courseIds },
+          academyId: student.academyId,
+        })
+          .select('_id name title')
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
+  const teacherMap = new Map(
+    teachers.map((t: any) => [String(t._id), t])
+  );
+  const courseMap = new Map(
+    courses.map((c: any) => [
+      String(c._id),
+      String((c as any).name || (c as any).title || 'Course'),
+    ])
+  );
+
+  /* ---------- Build rows ---------- */
+
+  const todayName = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+  });
+
+  const DAY_ORDER = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  const rows = assignments.map((a: any) => {
+    const teacher = teacherMap.get(String(a.teacherId));
+    const courseName =
+      courseMap.get(String(a.courseId)) || 'Course';
+
+    return {
+      _id: String(a._id),
+      courseName,
+      teacherName: String(teacher?.name || 'Teacher'),
+      teacherEmail: String(teacher?.email || ''),
+      daysOfWeek: Array.isArray(a.daysOfWeek)
+        ? a.daysOfWeek.map((d: any) => String(d))
+        : [],
+      startTime: String(a.startTime || ''),
+      endTime: String(a.endTime || ''),
+      status: String(a.status || 'scheduled'),
+      notes: String(a.notes || ''),
+      hasZoom: Boolean(a.zoomMeetingNumber),
+      zoomLink: String(a.zoomLink || ''),
+      zoomMeetingNumber: String(a.zoomMeetingNumber || ''),
+      zoomPassword: String(a.zoomPassword || ''),
+      zoomTimezone: String(a.zoomTimezone || 'Asia/Karachi'),
+      isToday:
+        Array.isArray(a.daysOfWeek) && a.daysOfWeek.includes(todayName),
+    };
+  });
+
+  /* ---------- Sort: today first, then start time ---------- */
+
+  rows.sort((a, b) => {
+    if (a.isToday !== b.isToday) return a.isToday ? -1 : 1;
+    return String(a.startTime).localeCompare(String(b.startTime));
+  });
+
+  /* ---------- Stats ---------- */
+
+  const uniqueCourses = new Set(
+    rows.map((r) => r.courseName).filter(Boolean)
+  );
+  const uniqueTeachers = new Set(
+    rows.map((r) => r.teacherName).filter(Boolean)
+  );
+  const todayClasses = rows.filter((r) => r.isToday);
+  const upcomingClasses = rows.filter((r) => r.status === 'scheduled');
+  const ongoingClasses = rows.filter((r) => r.status === 'ongoing');
+
+  return {
+    user,
+    student,
+    academy,
+    data: {
+      rows,
+      stats: {
+        totalClasses: rows.length,
+        totalCourses: uniqueCourses.size,
+        totalTeachers: uniqueTeachers.size,
+        todayClasses: todayClasses.length,
+        upcomingClasses: upcomingClasses.length,
+        ongoingClasses: ongoingClasses.length,
+      },
+    },
+  };
+}
+
+/* ======================================================
+   Page
+   ====================================================== */
+
+export default async function StudentDashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token')?.value;
+
+  if (!token) redirect('/login');
+
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('JWT_SECRET is not configured');
+
+  let decoded: JwtUserPayload;
+  try {
+    const result = jwt.verify(token, jwtSecret);
+    if (typeof result === 'string') redirect('/login');
+    decoded = result as JwtUserPayload;
+  } catch {
+    redirect('/login');
+  }
+
+  const userEmail = normalizeEmail(decoded.email);
+  if (!userEmail) redirect('/login');
+
+  const result = await getStudentData(userEmail);
+
+  /* ------------------ No Data / No Student ------------------ */
+
+  if (!result) {
     return (
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-green-200 shadow-sm">
-          <div className="text-6xl mb-4">👨‍🎓</div>
-          <h3 className="text-2xl font-bold text-black">No Student Profile Found</h3>
-          <p className="text-black/60 mt-2">
-            You are not registered as a student in any academy yet.
-          </p>
-          <Link
-            href="/"
-            className="inline-block mt-6 px-8 py-3 bg-green-600 text-white font-semibold rounded-2xl hover:bg-green-700 transition"
-          >
-            Go to Home
-          </Link>
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <div className="relative overflow-hidden rounded-3xl border border-rose-200 bg-white shadow-sm">
+          <div className="h-1.5 bg-gradient-to-r from-rose-500 via-red-500 to-pink-600" />
+
+          <div className="relative p-10 sm:p-14 text-center">
+            <div className="mx-auto mb-6 h-20 w-20 rounded-3xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-lg shadow-rose-500/30">
+              <GraduationCap className="h-10 w-10 text-white" />
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              Student Profile Not Found
+            </h1>
+
+            <p className="mt-3 text-slate-500 max-w-md mx-auto leading-relaxed">
+              Your student profile is not registered. Please contact your
+              academy administrator.
+            </p>
+
+            <Link
+              href="/"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 hover:shadow-xl hover:-translate-y-0.5 transition"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
-  const { student, academy } = data;
+  const { user, student, academy, data } = result;
+
+  /* ------------------ Student without academy ------------------ */
+
+  if (!student || !data) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
+          <div className="h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500" />
+
+          <div className="relative p-10 sm:p-14 text-center">
+            <div className="mx-auto mb-6 h-20 w-20 rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+              <GraduationCap className="h-10 w-10 text-white" />
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              No Academy Assigned
+            </h1>
+
+            <p className="mt-3 text-slate-500 max-w-md mx-auto leading-relaxed">
+              You are not yet linked to any academy. Please contact your
+              academy administrator to get started.
+            </p>
+
+            <Link
+              href="/"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 hover:shadow-xl hover:-translate-y-0.5 transition"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ------------------ Serialize ------------------ */
+
+  const studentData = {
+    _id: String(student._id),
+    name: String(student.name || (user as any).name || 'Student'),
+    email: String(student.email || ''),
+    classLevel: String((student as any).classLevel || ''),
+    imageUrl: String((student as any).imageUrl || ''),
+    isActive: (student as any).isActive !== false,
+    createdAt: (student as any).createdAt
+      ? new Date((student as any).createdAt).toISOString()
+      : null,
+  };
+
+  const academyData = academy
+    ? {
+        _id: String(academy._id),
+        name: String((academy as any).name || ''),
+      }
+    : null;
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-black">👨‍🎓 Student Dashboard</h1>
-          <p className="text-black/60 mt-1">Welcome back, {student.name || 'Student'}!</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-black/5 hover:shadow-md transition">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-xl">
-              <AcademicCapIcon className="h-6 w-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-black/60">Your Academy</p>
-              <p className="text-xl font-bold text-black truncate">{academy?.name || 'N/A'}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-black/5 hover:shadow-md transition">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-xl">
-              <BookOpenIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm text-black/60">Subjects</p>
-              <p className="text-xl font-bold text-black">{student.subjects?.length || 0}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-black/5 hover:shadow-md transition">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-xl">
-              <UserGroupIcon className="h-6 w-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-black/60">Status</p>
-              <p className="text-xl font-bold text-black">
-                {student.status === 'active'
-                  ? '✅ Active'
-                  : student.status === 'pending'
-                  ? '⏳ Pending'
-                  : '❌ Inactive'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-black/5 overflow-hidden">
-        <div className="p-5 border-b border-black/5">
-          <h2 className="font-semibold text-black">📋 Your Profile</h2>
-        </div>
-        <div className="p-5 space-y-3">
-          <div className="flex justify-between">
-            <span className="text-black/60">Name</span>
-            <span className="font-medium text-black">{student.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Email</span>
-            <span className="font-medium text-black">{student.email}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Phone</span>
-            <span className="font-medium text-black">{student.phone || 'N/A'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Parent Name</span>
-            <span className="font-medium text-black">{student.parentName || 'N/A'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Parent Phone</span>
-            <span className="font-medium text-black">{student.parentPhone || 'N/A'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Subjects</span>
-            <span className="font-medium text-black">{student.subjects?.join(', ') || 'None'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Enrolled</span>
-            <span className="font-medium text-black">
-              {new Date(student.enrollmentDate).toLocaleDateString()}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-black/60">Address</span>
-            <span className="font-medium text-black">{student.address || 'N/A'}</span>
-          </div>
-          {student.notes && (
-            <div className="flex justify-between">
-              <span className="text-black/60">Notes</span>
-              <span className="font-medium text-black">{student.notes}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link
-          href={`/academy/${academy?.slug}`}
-          className="bg-white p-5 rounded-2xl border border-black/5 hover:shadow-lg transition flex items-center gap-4 group"
-        >
-          <div className="p-2 bg-green-100 rounded-xl group-hover:bg-green-200 transition">
-            <AcademicCapIcon className="h-6 w-6 text-green-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-black">View Academy</h3>
-            <p className="text-sm text-black/60">See your academy details</p>
-          </div>
-        </Link>
-        <Link
-          href="/"
-          className="bg-white p-5 rounded-2xl border border-black/5 hover:shadow-lg transition flex items-center gap-4 group"
-        >
-          <div className="p-2 bg-gray-100 rounded-xl group-hover:bg-gray-200 transition">
-            <UserGroupIcon className="h-6 w-6 text-gray-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-black">Home</h3>
-            <p className="text-sm text-black/60">Go back to homepage</p>
-          </div>
-        </Link>
-      </div>
+    <div className="mx-auto max-w-7xl pb-10">
+      <StudentDashboardView
+        student={studentData}
+        academy={academyData}
+        stats={data.stats}
+        classes={data.rows}
+      />
     </div>
   );
 }

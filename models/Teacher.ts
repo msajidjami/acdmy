@@ -2,25 +2,52 @@ import mongoose, { Schema, models } from 'mongoose';
 
 const TeacherSchema = new Schema(
   {
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
+
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+    },
+
+    gender: {
+      type: String,
+      enum: ['male', 'female'],
+      required: true,
+      default: 'male',
+    },
+
     subjects: [{ type: String }],
-    academyId: { type: Schema.Types.ObjectId, ref: 'Academy', required: true },
+
+    academyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Academy',
+      required: true,
+    },
+
     isAvailable: { type: Boolean, default: true },
+
+    /* تصویر صرف Male کے لیے */
     profileImage: { type: String, default: '' },
+
     bio: { type: String, default: '' },
-    audioUrl: { type: String, default: '' },
-    // ✅ referralCode شامل کریں – منفرد، sparse، اور ڈیفالٹ جنریٹر
+
+    /* 🎤 Audio — لازمی */
+    audioUrl: { type: String, required: true },
+
     referralCode: {
       type: String,
       unique: true,
-      sparse: true, // null کو انڈیکس میں شامل نہیں کرے گا
-      default: function() {
-        // 8 حروف کا بے ترتیب کوڈ
+      sparse: true,
+      default: function () {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let code = '';
         for (let i = 0; i < 8; i++) {
-          code += chars.charAt(Math.floor(Math.random() * chars.length));
+          code += chars.charAt(
+            Math.floor(Math.random() * chars.length)
+          );
         }
         return code;
       },
@@ -29,4 +56,5 @@ const TeacherSchema = new Schema(
   { timestamps: true }
 );
 
-export default models.Teacher || mongoose.model('Teacher', TeacherSchema);
+export default models.Teacher ||
+  mongoose.model('Teacher', TeacherSchema);
