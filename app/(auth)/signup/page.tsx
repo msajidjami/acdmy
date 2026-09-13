@@ -27,6 +27,7 @@ interface FormData {
 
 interface ApiResponse {
   message?: string;
+  error?: string;
 }
 
 // ---------- Constants ----------
@@ -66,6 +67,7 @@ export default function SignupPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
@@ -96,9 +98,11 @@ export default function SignupPage() {
     if (error) setError('');
   };
 
-  // ✅ Google Sign-Up
+  /* ✅ Google Sign-Up — نیا صارف role منتخب کرے گا، پرانا سیدھا ہوم پیج */
   const handleGoogleSignup = () => {
-    window.location.href = `${API_BASE}/api/auth/google`;
+    setError('');
+    setGoogleLoading(true);
+    window.location.href = `${API_BASE}/api/auth/google?redirect=/`;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -146,6 +150,7 @@ export default function SignupPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        cache: 'no-store', // ✅ کیشے سے بچیں
         body: JSON.stringify({
           name,
           email,
@@ -164,9 +169,14 @@ export default function SignupPage() {
 
       if (response.ok) {
         setSuccess(true);
-        setTimeout(() => router.push('/login'), 2500);
+
+        // ✅ 1.5 سیکنڈ بعد login پیج پر بھیجیں + cache refresh
+        setTimeout(() => {
+          router.refresh(); // کیشے صاف
+          router.push('/login');
+        }, 1500);
       } else {
-        setError(data.message || 'Signup failed.');
+        setError(data.message || data.error || 'Signup failed.');
       }
     } catch (err) {
       console.error('Signup request error:', err);
@@ -214,14 +224,17 @@ export default function SignupPage() {
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
           {/* ✅ Google Sign-Up Button */}
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: googleLoading ? 1 : 1.02 }}
+            whileTap={{ scale: googleLoading ? 1 : 0.98 }}
             type="button"
             onClick={handleGoogleSignup}
-            className="w-full py-3 mb-6 flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium rounded-lg shadow-sm transition-all"
+            disabled={googleLoading || loading}
+            className="w-full py-3 mb-6 flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium rounded-lg shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <GoogleIcon />
-            <span>Continue with Google</span>
+            <span>
+              {googleLoading ? 'Redirecting...' : 'Continue with Google'}
+            </span>
           </motion.button>
 
           {/* Divider */}
@@ -325,6 +338,7 @@ export default function SignupPage() {
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   className="absolute right-3 top-3"
+                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <EyeSlashIcon className="h-5 w-5 text-gray-400" />
@@ -356,6 +370,7 @@ export default function SignupPage() {
                   type="button"
                   onClick={() => setShowConfirmPassword((prev) => !prev)}
                   className="absolute right-3 top-3"
+                  tabIndex={-1}
                 >
                   {showConfirmPassword ? (
                     <EyeSlashIcon className="h-5 w-5 text-gray-400" />
@@ -401,8 +416,8 @@ export default function SignupPage() {
               whileHover={{ scale: loading ? 1 : 1.02 }}
               whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 transition"
+              disabled={loading || googleLoading}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {loading ? 'Creating account...' : 'Create Account'}
             </motion.button>

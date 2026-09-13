@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
 export const dynamic = 'force-dynamic';
+
+/* ---------- Cloudinary Config ---------- */
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_TYPES = [
@@ -72,37 +77,30 @@ export async function POST(req: Request) {
       );
     }
 
-    /* ---------- Filename ---------- */
-    const extMap: Record<string, string> = {
-      'audio/mpeg': 'mp3',
-      'audio/mp3': 'mp3',
-      'audio/wav': 'wav',
-      'audio/webm': 'webm',
-      'audio/ogg': 'ogg',
-      'audio/m4a': 'm4a',
-      'audio/x-m4a': 'm4a',
-    };
-    const ext = extMap[file.type] || 'mp3';
-    const random = Math.random().toString(36).slice(2, 10);
-    const filename = `audio-${Date.now()}-${random}.${ext}`;
-
-    /* ---------- Ensure folder ---------- */
-    const uploadsDir = join(process.cwd(), 'public', 'uploads');
-
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-
-    /* ---------- Save ---------- */
+    /* ---------- Upload to Cloudinary ---------- */
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const filepath = join(uploadsDir, filename);
 
-    await writeFile(filepath, buffer);
+    const uploadResult: any = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: 'teachers/audio',
+            resource_type: 'video', // Cloudinary میں آڈیو کے لیے یہی ٹائپ استعمال ہوتی ہے
+            format: 'mp3',
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        )
+        .end(buffer);
+    });
 
     return NextResponse.json({
       success: true,
-      url: `/uploads/${filename}`,
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id,
       size: file.size,
       type: file.type,
     });

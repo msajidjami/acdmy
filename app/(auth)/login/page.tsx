@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, Variants } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -46,7 +46,10 @@ const GoogleIcon = () => (
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -55,9 +58,26 @@ export default function LoginPage() {
     password: '',
   });
 
+  /* ✅ اگر URL میں ?error= آئے (Google OAuth سے)، تو دکھائیں */
+  useEffect(() => {
+    const urlError = searchParams.get('error');
+    if (urlError) {
+      setError(decodeURIComponent(urlError));
+    }
+  }, [searchParams]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  /* ✅ لاگ ان کے بعد ہوم پیج پر بھیجنے کا فنکشن */
+  const goToHome = () => {
+    router.refresh(); // کیشے صاف کریں
+    // تھوڑا سا انتظار تاکہ cookie سیٹ ہو جائے
+    setTimeout(() => {
+      router.replace('/');
+    }, 100);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,8 +96,9 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        cache: 'no-store',
         body: JSON.stringify({
-          email: formData.email,
+          email: formData.email.trim().toLowerCase(),
           password: formData.password,
         }),
       });
@@ -85,20 +106,9 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        const role = data.user?.role;
-        if (role === 'admin') {
-          router.push('/admin');
-        } else if (role === 'owner') {
-          router.push('/owner/dashboard');
-        } else if (role === 'teacher') {
-          router.push('/teacher/dashboard');
-        } else if (role === 'student') {
-          router.push('/student/dashboard');
-        } else {
-          router.push('/dashboard');
-        }
+        goToHome();
       } else {
-        setError(data.message || 'Login failed');
+        setError(data.message || data.error || 'Login failed');
       }
     } catch {
       setError('Unable to connect to server. Please try again.');
@@ -107,9 +117,12 @@ export default function LoginPage() {
     }
   };
 
-  // ✅ Google Sign-In handler
+  /* ✅ Google Sign-In — صاف ستھرا redirect */
   const handleGoogleLogin = () => {
-    window.location.href = `${API_BASE}/api/auth/google`;
+    setError('');
+    setGoogleLoading(true);
+    // Google OAuth پر بھیجیں — callback پر وہ / پر واپس لائے گا
+    window.location.href = `${API_BASE}/api/auth/google?redirect=/`;
   };
 
   return (
@@ -140,14 +153,15 @@ export default function LoginPage() {
         <div className="bg-white p-8 rounded-2xl shadow-xl border border-black/5">
           {/* ✅ Google Sign-In Button */}
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: googleLoading ? 1 : 1.02 }}
+            whileTap={{ scale: googleLoading ? 1 : 0.98 }}
             type="button"
             onClick={handleGoogleLogin}
-            className="w-full py-3 mb-6 flex items-center justify-center gap-3 bg-white border border-black/10 hover:bg-black/[0.02] text-black font-medium rounded-xl shadow-sm transition-all duration-200"
+            disabled={googleLoading || loading}
+            className="w-full py-3 mb-6 flex items-center justify-center gap-3 bg-white border border-black/10 hover:bg-black/[0.02] text-black font-medium rounded-xl shadow-sm transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <GoogleIcon />
-            <span>Continue with Google</span>
+            <span>{googleLoading ? 'Redirecting...' : 'Continue with Google'}</span>
           </motion.button>
 
           {/* Divider */}
@@ -164,7 +178,9 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-black/80 mb-1">Email</label>
+              <label className="block text-sm font-medium text-black/80 mb-1">
+                Email
+              </label>
               <div className="relative">
                 <EnvelopeIcon className="absolute left-3 top-3 h-5 w-5 text-black/40" />
                 <input
@@ -173,6 +189,7 @@ export default function LoginPage() {
                   value={formData.email}
                   onChange={handleChange}
                   required
+                  autoComplete="email"
                   className="w-full pl-10 pr-4 py-3 border border-black/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white/50"
                   placeholder="example@gmail.com"
                 />
@@ -181,7 +198,9 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-black/80">Password</label>
+                <label className="block text-sm font-medium text-black/80">
+                  Password
+                </label>
                 <Link
                   href="/forgot-password"
                   className="text-xs font-medium text-green-600 hover:text-green-700 hover:underline transition"
@@ -198,6 +217,7 @@ export default function LoginPage() {
                   onChange={handleChange}
                   required
                   minLength={6}
+                  autoComplete="current-password"
                   className="w-full pl-10 pr-12 py-3 border border-black/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white/50"
                   placeholder="Enter your password"
                 />
@@ -205,6 +225,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-3 text-black/40 hover:text-black/70 transition"
+                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <EyeSlashIcon className="h-5 w-5" />
@@ -216,11 +237,11 @@ export default function LoginPage() {
             </div>
 
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 hover:shadow-green-600/40 transition-all duration-300 disabled:opacity-50"
+              disabled={loading || googleLoading}
+              className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 hover:shadow-green-600/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </motion.button>
@@ -228,7 +249,10 @@ export default function LoginPage() {
 
           <p className="mt-8 text-center text-sm text-black/60">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-green-600 font-medium hover:underline hover:text-green-700 transition">
+            <Link
+              href="/signup"
+              className="text-green-600 font-medium hover:underline hover:text-green-700 transition"
+            >
               Sign Up
             </Link>
           </p>
