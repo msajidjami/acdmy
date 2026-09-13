@@ -11,6 +11,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.4.0",
+    "@livekit/components-react": "^2.9.24",
     "@types/axios": "^0.9.36",
     "@types/react-router-dom": "^5.3.3",
     "@zoom/meetingsdk": "^6.2.0",
@@ -19,6 +20,9 @@
     "cloudinary": "^2.8.0",
     "framer-motion": "^12.23.26",
     "jsonwebtoken": "^9.0.3",
+    "katex": "^0.18.7",
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.19.0",
     "lucide-react": "^0.562.0",
     "mongoose": "^9.7.4",
     "next": "^16.1.1",

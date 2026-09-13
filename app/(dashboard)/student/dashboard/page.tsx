@@ -67,6 +67,7 @@ async function getStudentData(email: string) {
     .lean();
 
   /* ---------- Get assignments ---------- */
+  // ✅ LiveKit fields شامل
 
   const assignments = await Assignment.find({
     academyId: student.academyId,
@@ -74,7 +75,19 @@ async function getStudentData(email: string) {
     status: { $ne: 'cancelled' },
   })
     .select(
-      '_id teacherId courseId startTime endTime daysOfWeek status notes zoomMeetingNumber zoomPassword zoomLink zoomTimezone'
+      [
+        '_id',
+        'teacherId',
+        'courseId',
+        'startTime',
+        'endTime',
+        'daysOfWeek',
+        'status',
+        'notes',
+        'livekitRoomName',
+        'livekitHostIdentity',
+        'livekitProvider',
+      ].join(' ')
     )
     .lean();
 
@@ -128,20 +141,9 @@ async function getStudentData(email: string) {
     weekday: 'long',
   });
 
-  const DAY_ORDER = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
-
   const rows = assignments.map((a: any) => {
     const teacher = teacherMap.get(String(a.teacherId));
-    const courseName =
-      courseMap.get(String(a.courseId)) || 'Course';
+    const courseName = courseMap.get(String(a.courseId)) || 'Course';
 
     return {
       _id: String(a._id),
@@ -155,11 +157,11 @@ async function getStudentData(email: string) {
       endTime: String(a.endTime || ''),
       status: String(a.status || 'scheduled'),
       notes: String(a.notes || ''),
-      hasZoom: Boolean(a.zoomMeetingNumber),
-      zoomLink: String(a.zoomLink || ''),
-      zoomMeetingNumber: String(a.zoomMeetingNumber || ''),
-      zoomPassword: String(a.zoomPassword || ''),
-      zoomTimezone: String(a.zoomTimezone || 'Asia/Karachi'),
+      // ✅ LiveKit fields
+      hasLiveKit: Boolean(a.livekitRoomName),
+      livekitRoomName: String(a.livekitRoomName || ''),
+      livekitHostIdentity: String(a.livekitHostIdentity || ''),
+      livekitProvider: String(a.livekitProvider || 'none'),
       isToday:
         Array.isArray(a.daysOfWeek) && a.daysOfWeek.includes(todayName),
     };
@@ -183,6 +185,7 @@ async function getStudentData(email: string) {
   const todayClasses = rows.filter((r) => r.isToday);
   const upcomingClasses = rows.filter((r) => r.status === 'scheduled');
   const ongoingClasses = rows.filter((r) => r.status === 'ongoing');
+  const livekitReadyClasses = rows.filter((r) => r.hasLiveKit);
 
   return {
     user,
@@ -197,6 +200,8 @@ async function getStudentData(email: string) {
         todayClasses: todayClasses.length,
         upcomingClasses: upcomingClasses.length,
         ongoingClasses: ongoingClasses.length,
+        // ✅ LiveKit stat
+        livekitReadyClasses: livekitReadyClasses.length,
       },
     },
   };

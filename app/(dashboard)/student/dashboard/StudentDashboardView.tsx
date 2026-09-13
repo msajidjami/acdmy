@@ -3,46 +3,38 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Sparkles,
-  GraduationCap,
   BookOpen,
-  Users,
   Calendar,
   Clock,
   Video,
-  Flame,
-  Activity,
-  Radio,
-  ArrowRight,
+  Search,
+  Filter,
+  Sparkles,
   CheckCircle2,
-  School,
-  TrendingUp,
-  Layers,
-  User as UserIcon,
+  Radio,
+  Flame,
+  ArrowRight,
+  GraduationCap,
   Info,
-  Copy,
-  Check,
-  ExternalLink,
-  PlayCircle,
+  X,
   CalendarDays,
+  Signal,
+  ShieldCheck,
+  Lock,
+  User as UserIcon,
+  Layers,
   Zap,
+  Users,
+  Award,
+  TrendingUp,
+  Star,
+  Activity,
+  AlertCircle,
+  PlayCircle,
+  Hash,
 } from 'lucide-react';
 
-/* ======================================================
-   Types
-   ====================================================== */
-
-type StudentData = {
-  _id: string;
-  name: string;
-  email: string;
-  classLevel: string;
-  imageUrl: string;
-  isActive: boolean;
-  createdAt: string | null;
-};
-
-type AcademyData = { _id: string; name: string } | null;
+/* ------------------ Types ------------------ */
 
 type ClassRow = {
   _id: string;
@@ -54,13 +46,28 @@ type ClassRow = {
   endTime: string;
   status: string;
   notes: string;
-  hasZoom: boolean;
-  zoomLink: string;
-  zoomMeetingNumber: string;
-  zoomPassword: string;
-  zoomTimezone: string;
+  // ✅ LiveKit fields
+  hasLiveKit: boolean;
+  livekitRoomName: string;
+  livekitHostIdentity: string;
+  livekitProvider: string;
   isToday: boolean;
 };
+
+type StudentInfo = {
+  _id: string;
+  name: string;
+  email: string;
+  classLevel: string;
+  imageUrl: string;
+  isActive: boolean;
+  createdAt: string | null;
+};
+
+type AcademyInfo = {
+  _id: string;
+  name: string;
+} | null;
 
 type Stats = {
   totalClasses: number;
@@ -69,20 +76,19 @@ type Stats = {
   todayClasses: number;
   upcomingClasses: number;
   ongoingClasses: number;
+  livekitReadyClasses: number; // ✅ نیا
 };
 
 type Props = {
-  student: StudentData;
-  academy: AcademyData;
+  student: StudentInfo;
+  academy: AcademyInfo;
   stats: Stats;
   classes: ClassRow[];
 };
 
-/* ======================================================
-   Helpers
-   ====================================================== */
+/* ------------------ Helpers ------------------ */
 
-const DAY_ORDER = [
+const DAYS = [
   'Monday',
   'Tuesday',
   'Wednesday',
@@ -90,7 +96,7 @@ const DAY_ORDER = [
   'Friday',
   'Saturday',
   'Sunday',
-];
+] as const;
 
 const DAY_SHORT: Record<string, string> = {
   Monday: 'Mon',
@@ -103,12 +109,10 @@ const DAY_SHORT: Record<string, string> = {
 };
 
 function getInitials(name: string): string {
-  if (!name) return 'S';
+  if (!name) return '?';
   const parts = name.trim().split(' ');
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (
-    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
-  ).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 function formatStatus(status: string): string {
@@ -117,9 +121,11 @@ function formatStatus(status: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/* ======================================================
-   Component
-   ====================================================== */
+function getTodayName(): string {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' });
+}
+
+/* ------------------ Main Component ------------------ */
 
 export default function StudentDashboardView({
   student,
@@ -127,135 +133,160 @@ export default function StudentDashboardView({
   stats,
   classes,
 }: Props) {
-  const [copied, setCopied] = useState<string | null>(null);
+  const todayName = getTodayName();
+  const [activeTab, setActiveTab] = useState<'overview' | 'today' | 'all'>(
+    'overview'
+  );
+  const [search, setSearch] = useState('');
 
-  const initials = getInitials(student.name);
+  /* ------------------ Derived ------------------ */
 
   const todayClasses = useMemo(
     () => classes.filter((c) => c.isToday),
     [classes]
   );
-  const otherClasses = useMemo(
-    () => classes.filter((c) => !c.isToday),
+
+  const upcomingClasses = useMemo(
+    () =>
+      classes
+        .filter((c) => c.status === 'scheduled' && !c.isToday)
+        .slice(0, 5),
     [classes]
   );
 
-  const handleCopy = async (text: string, key: string) => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied(null), 1600);
-    } catch {
-      /* ignore */
-    }
-  };
+  const ongoingClasses = useMemo(
+    () => classes.filter((c) => c.status === 'ongoing'),
+    [classes]
+  );
 
-  /* ======================================================
-     Render
-     ====================================================== */
+  const filteredAllClasses = useMemo(() => {
+    if (!search.trim()) return classes;
+    const q = search.trim().toLowerCase();
+    return classes.filter(
+      (c) =>
+        c.courseName.toLowerCase().includes(q) ||
+        c.teacherName.toLowerCase().includes(q) ||
+        c.notes.toLowerCase().includes(q)
+    );
+  }, [classes, search]);
+
+  const initials = getInitials(student.name);
 
   return (
-    <div className="space-y-6">
-      {/* ============================================
-          HERO HEADER
-      ============================================ */}
+    <div className="space-y-6 pb-8">
+      {/* ================================================= */}
+      {/* HERO HEADER                                        */}
+      {/* ================================================= */}
 
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-500 via-cyan-500 to-teal-500 p-6 sm:p-8 text-white shadow-2xl shadow-cyan-500/20">
         <div className="absolute inset-0 opacity-30 pointer-events-none">
-          <div className="absolute -top-24 -right-16 h-72 w-72 rounded-full bg-white/30 blur-3xl" />
-          <div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-teal-300/40 blur-3xl" />
+          <div className="absolute -top-24 -right-16 h-80 w-80 rounded-full bg-white/40 blur-3xl" />
+          <div className="absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-teal-300/50 blur-3xl" />
         </div>
 
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-          <div className="flex items-start gap-4 min-w-0 flex-1">
-            <div className="relative shrink-0">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
+          {/* Avatar */}
+          <div className="shrink-0 flex items-center gap-4">
+            <div className="relative">
               {student.imageUrl ? (
-                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-white border-2 border-white/40 shadow-xl overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={student.imageUrl}
-                    alt={student.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                <img
+                  src={student.imageUrl}
+                  alt={student.name}
+                  className="h-20 w-20 sm:h-24 sm:w-24 rounded-3xl object-cover border-4 border-white/30 shadow-xl"
+                />
               ) : (
-                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center text-2xl sm:text-3xl font-bold shadow-xl">
+                <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center text-3xl sm:text-4xl font-bold shadow-xl">
                   {initials}
                 </div>
               )}
               <span
-                className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-sky-500 ${
-                  student.isActive
-                    ? 'bg-emerald-400 animate-pulse'
-                    : 'bg-slate-400'
+                className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-cyan-500 ${
+                  student.isActive ? 'bg-emerald-400' : 'bg-slate-400'
                 }`}
                 title={student.isActive ? 'Active' : 'Inactive'}
               />
             </div>
+          </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-xs font-semibold">
-                <Sparkles className="h-3.5 w-3.5" />
-                Student Dashboard
-              </div>
-
-              <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
-                Welcome back, {student.name}! 👋
-              </h1>
-
-              {academy?.name && (
-                <p className="mt-1.5 text-cyan-50 text-sm sm:text-base">
-                  Studying at {academy.name}
-                </p>
-              )}
-
-              <div className="mt-4 flex flex-wrap gap-2 text-xs sm:text-sm">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 font-medium">
-                  <Layers className="h-3.5 w-3.5" />
-                  {stats.totalClasses} Classes
-                </span>
-
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 font-medium">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  {stats.totalCourses} Courses
-                </span>
-
-                {stats.todayClasses > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/25 backdrop-blur-sm border border-white/30 font-semibold">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-                    </span>
-                    {stats.todayClasses} Today
-                  </span>
-                )}
-              </div>
+          {/* Info */}
+          <div className="min-w-0 flex-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-xs font-semibold">
+              <Sparkles className="h-3.5 w-3.5" />
+              Student Dashboard
             </div>
+
+            <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+              Assalam-o-Alaikum, {student.name.split(' ')[0]}! 👋
+            </h1>
+
+            <p className="mt-2 text-sm sm:text-base text-cyan-100 break-all">
+              {student.email}
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {academy?.name && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-xs font-semibold">
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  {academy.name}
+                </span>
+              )}
+              {student.classLevel && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-xs font-semibold">
+                  <Layers className="h-3.5 w-3.5" />
+                  {student.classLevel}
+                </span>
+              )}
+              {stats.todayClasses > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/30 backdrop-blur-sm border border-rose-300/40 text-xs font-bold">
+                  <Flame className="h-3.5 w-3.5" />
+                  {stats.todayClasses} class
+                  {stats.todayClasses > 1 ? 'es' : ''} today
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Link
+              href="/student/schedule"
+              className="inline-flex items-center gap-2 rounded-xl bg-white/15 backdrop-blur border border-white/25 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/25 transition"
+            >
+              <CalendarDays className="h-4 w-4" />
+              My Schedule
+            </Link>
+            <Link
+              href="/student/settings"
+              className="inline-flex items-center gap-2 rounded-xl bg-white text-sky-700 px-4 py-2.5 text-sm font-bold hover:bg-white/90 transition shadow-lg shadow-cyan-900/20"
+            >
+              <UserIcon className="h-4 w-4" />
+              Settings
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* ============================================
-          STATS CARDS
-      ============================================ */}
+      {/* ================================================= */}
+      {/* STATS CARDS                                        */}
+      {/* ================================================= */}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          title="My Classes"
+          title="Total Classes"
           value={stats.totalClasses}
-          icon={<Layers className="h-5 w-5" />}
-          gradient="from-sky-500 to-cyan-600"
+          icon={<BookOpen className="h-5 w-5" />}
+          gradient="from-sky-500 to-blue-600"
           bg="bg-sky-50"
           text="text-sky-600"
         />
         <StatCard
-          title="My Courses"
-          value={stats.totalCourses}
-          icon={<BookOpen className="h-5 w-5" />}
-          gradient="from-emerald-500 to-teal-600"
-          bg="bg-emerald-50"
-          text="text-emerald-600"
+          title="Today"
+          value={stats.todayClasses}
+          icon={<Flame className="h-5 w-5" />}
+          gradient="from-rose-500 to-pink-600"
+          bg="bg-rose-50"
+          text="text-rose-600"
+          highlight={stats.todayClasses > 0}
         />
         <StatCard
           title="My Teachers"
@@ -266,219 +297,321 @@ export default function StudentDashboardView({
           text="text-violet-600"
         />
         <StatCard
-          title="Today's Classes"
-          value={stats.todayClasses}
-          icon={<Flame className="h-5 w-5" />}
-          gradient="from-rose-500 to-pink-600"
-          bg="bg-rose-50"
-          text="text-rose-600"
-          highlight={stats.todayClasses > 0}
+          title="LiveKit Ready"
+          value={stats.livekitReadyClasses}
+          icon={<Signal className="h-5 w-5" />}
+          gradient="from-emerald-500 to-teal-600"
+          bg="bg-emerald-50"
+          text="text-emerald-600"
         />
       </div>
 
-      {/* ============================================
-          QUICK ACTIONS
-      ============================================ */}
+      {/* ================================================= */}
+      {/* ONGOING CLASSES BANNER                            */}
+      {/* ================================================= */}
 
-      <div>
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <Zap className="h-4 w-4 text-sky-500" />
-          <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-            Quick Actions
-          </h2>
-        </div>
+      {ongoingClasses.length > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 p-5 shadow-lg">
+          <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-orange-200/50 blur-3xl pointer-events-none" />
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <QuickAction
-            href="/student/courses"
-            title="My Courses"
-            description="View enrolled courses"
-            icon={<BookOpen className="h-5 w-5" />}
-            bg="bg-sky-50"
-            text="text-sky-600"
-            border="hover:border-sky-400"
-          />
-          <QuickAction
-            href="/student/teachers"
-            title="My Teachers"
-            description="Meet your teachers"
-            icon={<Users className="h-5 w-5" />}
-            bg="bg-emerald-50"
-            text="text-emerald-600"
-            border="hover:border-emerald-400"
-          />
-          <QuickAction
-            href="/student/schedule"
-            title="My Schedule"
-            description="Weekly timetable"
-            icon={<Calendar className="h-5 w-5" />}
-            bg="bg-violet-50"
-            text="text-violet-600"
-            border="hover:border-violet-400"
-          />
-          <QuickAction
-            href="/student/academy"
-            title="My Academy"
-            description="Academy details"
-            icon={<School className="h-5 w-5" />}
-            bg="bg-fuchsia-50"
-            text="text-fuchsia-600"
-            border="hover:border-fuchsia-400"
-          />
-        </div>
-      </div>
-
-      {/* ============================================
-          TODAY'S CLASSES
-      ============================================ */}
-
-      {todayClasses.length > 0 && (
-        <div className="rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50/50 to-pink-50/50 shadow-sm overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-rose-100 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-md shadow-rose-500/30 shrink-0">
-                <Flame className="h-5 w-5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base font-bold text-rose-900">
-                  Today&apos;s Classes
-                </h2>
-                <p className="text-xs text-rose-600">
-                  You have {todayClasses.length} class
-                  {todayClasses.length > 1 ? 'es' : ''} scheduled today
-                </p>
-              </div>
+          <div className="relative flex items-start gap-4">
+            <div className="h-12 w-12 rounded-xl bg-amber-100 border-2 border-amber-300 flex items-center justify-center shrink-0 shadow-sm">
+              <Radio className="h-6 w-6 text-amber-600 animate-pulse" />
             </div>
 
-            <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider animate-pulse">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-              </span>
-              Live Today
-            </span>
-          </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-amber-900 text-base sm:text-lg">
+                  🟡 {ongoingClasses.length} class
+                  {ongoingClasses.length > 1 ? 'es' : ''} in progress
+                </h3>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-amber-600 text-white px-2 py-0.5 rounded-full">
+                  <PlayCircle className="h-3 w-3" />
+                  Live Now
+                </span>
+              </div>
 
-          <div className="p-4 sm:p-5 space-y-3">
-            {todayClasses.map((cls) => (
-              <ClassCard
-                key={cls._id}
-                cls={cls}
-                highlight
-                copied={copied}
-                onCopy={handleCopy}
-              />
-            ))}
+              <div className="mt-2 space-y-1.5">
+                {ongoingClasses.map((c) => (
+                  <div
+                    key={c._id}
+                    className="flex items-center gap-2 text-sm text-amber-800 font-medium flex-wrap"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-bold">{c.courseName}</span>
+                    <span className="text-amber-500">·</span>
+                    <span>{c.teacherName}</span>
+                    <span className="text-amber-500">·</span>
+                    <span className="font-mono text-xs">
+                      {c.startTime} – {c.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {ongoingClasses.map((c) =>
+                  c.hasLiveKit ? (
+                    <Link
+                      key={`btn-${c._id}`}
+                      href={`/student/classroom/${c._id}`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-500/30 hover:shadow-lg transition"
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      Join Now
+                    </Link>
+                  ) : null
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ============================================
-          ALL CLASSES
-      ============================================ */}
+      {/* ================================================= */}
+      {/* TABS                                               */}
+      {/* ================================================= */}
 
-      <div>
-        <div className="flex items-center justify-between gap-3 mb-3 px-1">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-slate-500" />
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-              My Classes
-            </h2>
-          </div>
-          {otherClasses.length > 0 && (
-            <Link
-              href="/student/schedule"
-              className="inline-flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 transition"
-            >
-              Full Schedule
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          )}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex border-b border-slate-100">
+          {(
+            [
+              { key: 'overview', label: 'Overview', icon: Activity },
+              { key: 'today', label: "Today's Classes", icon: Flame },
+              { key: 'all', label: 'All Classes', icon: BookOpen },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 inline-flex items-center justify-center gap-2 px-3 sm:px-5 py-4 text-xs sm:text-sm font-bold transition border-b-2 ${
+                  active
+                    ? 'text-sky-600 border-sky-500 bg-sky-50/50'
+                    : 'text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">
+                  {tab.key === 'overview'
+                    ? 'Overview'
+                    : tab.key === 'today'
+                    ? 'Today'
+                    : 'All'}
+                </span>
+                {tab.key === 'today' && stats.todayClasses > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                    {stats.todayClasses}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {classes.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border-2 border-dashed border-sky-200 shadow-sm">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-sky-100 to-cyan-100 flex items-center justify-center mx-auto mb-4">
-              <GraduationCap className="h-8 w-8 text-sky-600" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-800">
-              No classes yet
-            </h3>
-            <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm">
-              Your academy has not assigned you any classes yet. Please
-              contact your academy administrator.
-            </p>
-          </div>
-        ) : otherClasses.length === 0 ? (
-          <div className="bg-white rounded-2xl p-6 text-center border border-slate-200 shadow-sm">
-            <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              All your classes are scheduled for today
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {otherClasses.map((cls) => (
-              <ClassCard
-                key={cls._id}
-                cls={cls}
-                copied={copied}
-                onCopy={handleCopy}
+        {/* ================================================= */}
+        {/* TAB: OVERVIEW                                      */}
+        {/* ================================================= */}
+
+        {activeTab === 'overview' && (
+          <div className="p-5 space-y-5">
+            {/* Quick info grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <QuickTile
+                icon={<BookOpen className="h-4 w-4" />}
+                label="Courses"
+                value={String(stats.totalCourses)}
+                tone="sky"
               />
-            ))}
+              <QuickTile
+                icon={<Users className="h-4 w-4" />}
+                label="Teachers"
+                value={String(stats.totalTeachers)}
+                tone="violet"
+              />
+              <QuickTile
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                label="Scheduled"
+                value={String(stats.upcomingClasses)}
+                tone="emerald"
+              />
+              <QuickTile
+                icon={<Zap className="h-4 w-4" />}
+                label="Ongoing"
+                value={String(stats.ongoingClasses)}
+                tone="amber"
+              />
+            </div>
+
+            {/* Today's Classes */}
+            {todayClasses.length > 0 ? (
+              <div>
+                <SectionHeader
+                  icon={<Flame className="h-4 w-4 text-rose-500" />}
+                  title="Today's Classes"
+                  count={todayClasses.length}
+                  tone="rose"
+                />
+                <div className="mt-3 space-y-2.5">
+                  {todayClasses.map((c) => (
+                    <ClassListItem key={c._id} row={c} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="py-10 text-center">
+                <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-200">
+                  <Calendar className="h-6 w-6 text-slate-400" />
+                </div>
+                <p className="text-slate-600 font-semibold text-sm">
+                  No classes scheduled today
+                </p>
+                <p className="text-slate-400 text-xs mt-1">
+                  Enjoy your day off 🎉
+                </p>
+              </div>
+            )}
+
+            {/* Upcoming Classes */}
+            {upcomingClasses.length > 0 && (
+              <div>
+                <SectionHeader
+                  icon={<Clock className="h-4 w-4 text-sky-500" />}
+                  title="Upcoming Classes"
+                  count={upcomingClasses.length}
+                  tone="sky"
+                />
+                <div className="mt-3 space-y-2.5">
+                  {upcomingClasses.map((c) => (
+                    <ClassListItem key={c._id} row={c} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================= */}
+        {/* TAB: TODAY                                         */}
+        {/* ================================================= */}
+
+        {activeTab === 'today' && (
+          <div className="p-5">
+            {todayClasses.length === 0 ? (
+              <div className="py-14 text-center">
+                <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-200">
+                  <Calendar className="h-7 w-7 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-700">
+                  No classes today
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  You have a free day. Relax and enjoy! 🌴
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {todayClasses.map((c) => (
+                  <ClassListItem key={c._id} row={c} expanded />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================= */}
+        {/* TAB: ALL                                           */}
+        {/* ================================================= */}
+
+        {activeTab === 'all' && (
+          <div className="p-5 space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search classes by course, teacher, or notes..."
+                className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/40 focus:border-sky-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition"
+                >
+                  <X className="h-3 w-3 text-slate-600" />
+                </button>
+              )}
+            </div>
+
+            {filteredAllClasses.length === 0 ? (
+              <div className="py-14 text-center">
+                <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+                  <Search className="h-7 w-7 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-700">
+                  No matches found
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  Try a different search term
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredAllClasses.map((c) => (
+                  <ClassListItem key={c._id} row={c} expanded />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ============================================
-          FOOTER SUMMARY
-      ============================================ */}
+      {/* ================================================= */}
+      {/* SECURITY NOTICE                                    */}
+      {/* ================================================= */}
 
-      {academy && student.createdAt && (
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0 h-10 w-10 rounded-xl bg-sky-500 flex items-center justify-center shadow-sm">
-              <School className="h-5 w-5 text-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-slate-800">
-                Student at {academy.name}
-              </h3>
-              <p className="mt-1.5 text-sm leading-6 text-slate-500">
-                You are enrolled as a student. Your classes, teachers, and
-                courses are managed through this academy.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[10px] font-bold uppercase tracking-wider">
-                  <Calendar className="h-3 w-3" />
-                  Enrolled{' '}
-                  {new Date(student.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-                {student.isActive && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Active
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[10px] font-bold uppercase tracking-wider">
-                  <TrendingUp className="h-3 w-3" />
-                  {stats.totalClasses} Classes
-                </span>
-              </div>
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center shadow-sm">
+            <ShieldCheck className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-800">
+              LiveKit · Privacy &amp; Security
+            </h3>
+            <p className="mt-1.5 text-sm leading-6 text-slate-500">
+              All your classes are live-only sessions with end-to-end
+              encrypted video and audio. Nothing is recorded.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
+                <CheckCircle2 className="h-3 w-3" />
+                Encrypted
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
+                <Lock className="h-3 w-3" />
+                No Recording
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[10px] font-bold uppercase tracking-wider">
+                <ShieldCheck className="h-3 w-3" />
+                LiveKit Cloud
+              </span>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-/* ======================================================
-   Sub Components
-   ====================================================== */
+/* ------------------ Stat Card ------------------ */
 
 function StatCard({
   title,
@@ -499,7 +632,7 @@ function StatCard({
 }) {
   return (
     <div
-      className={`group relative bg-white rounded-2xl p-4 sm:p-5 border transition-all duration-300 overflow-hidden ${
+      className={`group relative bg-white rounded-2xl p-4 border transition-all duration-300 overflow-hidden ${
         highlight
           ? 'border-rose-200 shadow-md shadow-rose-500/10 ring-1 ring-rose-100'
           : 'border-slate-200 hover:shadow-xl hover:border-transparent'
@@ -512,7 +645,7 @@ function StatCard({
       />
       <div className="flex items-start justify-between mb-2">
         <div
-          className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${bg} flex items-center justify-center ${text} ${
+          className={`h-9 w-9 rounded-xl ${bg} flex items-center justify-center ${text} ${
             highlight ? 'animate-pulse' : ''
           }`}
         >
@@ -524,259 +657,221 @@ function StatCard({
           </span>
         )}
       </div>
-      <p className="text-2xl sm:text-3xl font-bold text-slate-900">{value}</p>
-      <p className="text-[10px] sm:text-xs text-slate-500 mt-1 font-semibold uppercase tracking-wider">
+      <p className="text-xl sm:text-2xl font-bold text-slate-900">{value}</p>
+      <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 font-semibold uppercase tracking-wider">
         {title}
       </p>
     </div>
   );
 }
 
-function QuickAction({
-  href,
-  title,
-  description,
+/* ------------------ Quick Tile ------------------ */
+
+function QuickTile({
   icon,
-  bg,
-  text,
-  border,
+  label,
+  value,
+  tone,
 }: {
-  href: string;
-  title: string;
-  description: string;
   icon: React.ReactNode;
-  bg: string;
-  text: string;
-  border: string;
+  label: string;
+  value: string;
+  tone: 'sky' | 'violet' | 'emerald' | 'amber';
 }) {
+  const toneMap = {
+    sky: 'bg-sky-50 text-sky-600 border-sky-100',
+    violet: 'bg-violet-50 text-violet-600 border-violet-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-600 border-amber-100',
+  }[tone];
+
   return (
-    <Link
-      href={href}
-      className={`group relative flex items-center gap-3 p-4 rounded-2xl bg-white border border-slate-200 ${border} hover:shadow-lg transition-all duration-300`}
-    >
-      <div
-        className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${bg} flex items-center justify-center shrink-0 ${text} group-hover:scale-110 transition-transform`}
-      >
-        {icon}
+    <div className={`rounded-xl border ${toneMap} p-3`}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="h-6 w-6 rounded-lg bg-white flex items-center justify-center">
+          {icon}
+        </span>
+        <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+          {label}
+        </p>
       </div>
-      <div className="flex-1 min-w-0 hidden sm:block">
-        <h3 className="font-bold text-slate-900 text-sm truncate">{title}</h3>
-        <p className="text-[10px] text-slate-500 truncate">{description}</p>
-      </div>
-    </Link>
+      <p className="text-lg font-bold">{value}</p>
+    </div>
   );
 }
 
-function ClassCard({
-  cls,
-  highlight,
-  copied,
-  onCopy,
-}: {
-  cls: ClassRow;
-  highlight?: boolean;
-  copied: string | null;
-  onCopy: (text: string, key: string) => void;
-}) {
-  const daysSorted = [...cls.daysOfWeek].sort(
-    (a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)
-  );
+/* ------------------ Section Header ------------------ */
 
-  const isOngoing = cls.status === 'ongoing';
+function SectionHeader({
+  icon,
+  title,
+  count,
+  tone,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  tone: 'rose' | 'sky';
+}) {
+  const toneMap = {
+    rose: 'bg-rose-500 text-white',
+    sky: 'bg-sky-500 text-white',
+  }[tone];
 
   return (
-    <article
-      className={`relative overflow-hidden rounded-2xl bg-white transition-all duration-300 ${
-        highlight
-          ? 'border-2 border-rose-300 shadow-lg shadow-rose-500/15 ring-1 ring-rose-100'
-          : 'border border-slate-200 shadow-sm hover:shadow-lg'
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        {icon}
+        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+      </div>
+      <span
+        className={`inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full ${toneMap} text-[10px] font-bold`}
+      >
+        {count}
+      </span>
+    </div>
+  );
+}
+
+/* ------------------ Class List Item ------------------ */
+
+function ClassListItem({
+  row,
+  expanded = false,
+}: {
+  row: ClassRow;
+  expanded?: boolean;
+}) {
+  const hasLiveKit = row.hasLiveKit && Boolean(row.livekitRoomName);
+  const isOngoing = row.status === 'ongoing';
+  const isCompleted = row.status === 'completed';
+  const todayName = getTodayName();
+
+  return (
+    <div
+      className={`rounded-xl border p-3.5 transition-all hover:shadow-sm ${
+        row.isToday
+          ? 'border-rose-200 bg-gradient-to-r from-rose-50 to-pink-50 ring-1 ring-rose-100'
+          : isOngoing
+          ? 'border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 ring-1 ring-amber-100'
+          : isCompleted
+          ? 'border-slate-200 bg-slate-50/70 opacity-90'
+          : 'border-slate-200 bg-white'
       }`}
     >
-      <div
-        className={`h-1 bg-gradient-to-r ${
-          highlight
-            ? 'from-rose-500 via-pink-500 to-fuchsia-500'
-            : isOngoing
-            ? 'from-amber-500 to-orange-500'
-            : 'from-sky-500 via-cyan-500 to-teal-500'
-        }`}
-      />
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <div
+          className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+            row.isToday
+              ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white'
+              : isOngoing
+              ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white'
+              : 'bg-gradient-to-br from-sky-500 to-cyan-600 text-white'
+          }`}
+        >
+          <BookOpen className="h-5 w-5" />
+        </div>
 
-      <div className="p-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div
-              className={`h-11 w-11 rounded-xl shrink-0 flex items-center justify-center shadow-sm ${
-                highlight
-                  ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-rose-500/30'
-                  : isOngoing
-                  ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-amber-500/30'
-                  : 'bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-cyan-500/25'
-              }`}
-            >
-              <BookOpen className="h-5 w-5" />
-              {highlight && (
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border-2 border-white" />
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-bold text-sm text-slate-900 truncate">
+                  {row.courseName}
+                </h4>
+
+                {row.isToday && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider">
+                    <Flame className="h-3 w-3" />
+                    Today
+                  </span>
+                )}
+
+                {isOngoing && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                    <Radio className="h-3 w-3" />
+                    Live
+                  </span>
+                )}
+
+                {hasLiveKit && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-[10px] font-bold uppercase tracking-wider">
+                    <Signal className="h-3 w-3" />
+                    Ready
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                <span className="inline-flex items-center gap-1">
+                  <UserIcon className="h-3 w-3" />
+                  {row.teacherName}
                 </span>
-              )}
+                <span className="opacity-50">·</span>
+                <span className="inline-flex items-center gap-1 font-mono">
+                  <Clock className="h-3 w-3" />
+                  {row.startTime} – {row.endTime}
+                </span>
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-slate-900 truncate">
-                {cls.courseName}
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                by {cls.teacherName}
+          </div>
+
+          {/* Days */}
+          {expanded && row.daysOfWeek.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {row.daysOfWeek.map((day) => {
+                const dayIsToday = day === todayName;
+                return (
+                  <span
+                    key={`${row._id}-${day}`}
+                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                      dayIsToday
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white'
+                        : 'bg-sky-50 text-sky-700 ring-1 ring-sky-100'
+                    }`}
+                  >
+                    {DAY_SHORT[day] || day}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Notes (expanded) */}
+          {expanded && row.notes && (
+            <div className="mt-2.5 rounded-lg bg-white border border-slate-100 px-2.5 py-1.5">
+              <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                {row.notes}
               </p>
             </div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            {highlight && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[9px] font-bold uppercase tracking-wider">
-                <Flame className="h-2.5 w-2.5" />
-                Today
-              </span>
-            )}
-            {isOngoing ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wider">
-                <Radio className="h-2.5 w-2.5 animate-pulse" />
-                Live
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-wider border border-emerald-200">
-                <CheckCircle2 className="h-2.5 w-2.5" />
-                {formatStatus(cls.status)}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Time */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 mb-3">
-          <span className="inline-flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-slate-400" />
-            <span className="font-mono font-semibold text-slate-800">
-              {cls.startTime || '--:--'}
-            </span>
-            <span className="text-slate-400">–</span>
-            <span className="font-mono font-semibold text-slate-800">
-              {cls.endTime || '--:--'}
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
-            <Info className="h-3 w-3" />
-            {cls.zoomTimezone || 'Asia/Karachi'}
-          </span>
-        </div>
-
-        {/* Weekly days */}
-        {daysSorted.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {daysSorted.map((d) => {
-              const isToday = cls.isToday && d === new Date().toLocaleDateString('en-US', { weekday: 'long' });
-              return (
-                <span
-                  key={d}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
-                    isToday
-                      ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-sm shadow-rose-500/25'
-                      : highlight
-                      ? 'bg-rose-50 text-rose-700 border border-rose-100'
-                      : 'bg-sky-50 text-sky-700 border border-sky-100'
-                  }`}
-                >
-                  {DAY_SHORT[d] || d}
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Zoom strip */}
-        {cls.hasZoom && (
-          <div className="mb-3 rounded-xl bg-gradient-to-r from-sky-50 to-cyan-50 border border-sky-100 px-3 py-2">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span className="inline-flex items-center gap-1.5">
-                <Video className="h-3.5 w-3.5 text-sky-600" />
-                <span className="text-slate-500">Meeting:</span>
-                <span className="font-mono font-bold text-slate-800">
-                  {cls.zoomMeetingNumber}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onCopy(cls.zoomMeetingNumber, `mid-${cls._id}`)
-                  }
-                  className="h-5 w-5 rounded-md flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-100 transition"
-                  title="Copy meeting number"
-                >
-                  {copied === `mid-${cls._id}` ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </button>
-              </span>
-
-              {cls.zoomPassword && (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-slate-500">Pass:</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {cls.zoomPassword}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onCopy(cls.zoomPassword, `pw-${cls._id}`)
-                    }
-                    className="h-5 w-5 rounded-md flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-100 transition"
-                    title="Copy password"
-                  >
-                    {copied === `pw-${cls._id}` ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2">
-          {cls.hasZoom && cls.zoomLink ? (
-            <a
-              href={cls.zoomLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`group/btn inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-white transition shadow-md ${
-                highlight
-                  ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:shadow-lg hover:shadow-rose-500/30'
-                  : 'bg-gradient-to-r from-sky-600 to-cyan-600 hover:shadow-lg hover:shadow-cyan-500/30'
-              }`}
-            >
-              <Video className="h-3.5 w-3.5" />
-              Join Class
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          ) : cls.hasZoom ? (
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-              <Info className="h-3.5 w-3.5" />
-              Link not ready
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">
-              <Info className="h-3.5 w-3.5" />
-              No Zoom
-            </span>
           )}
+
+          {/* Actions */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {hasLiveKit ? (
+              <Link
+                href={`/student/classroom/${row._id}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white transition shadow-sm ${
+                  row.isToday
+                    ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:shadow-md'
+                    : 'bg-gradient-to-r from-sky-600 to-cyan-600 hover:shadow-md'
+                }`}
+              >
+                <Video className="h-3.5 w-3.5" />
+                Join Classroom
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                <Info className="h-3.5 w-3.5" />
+                Waiting for teacher
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </article>
+    </div>
   );
 }

@@ -11,7 +11,7 @@ import Assignment from '@/models/Assignment';
 import Student from '@/models/Student';
 import Course from '@/models/Course';
 
-import TeacherClassroomLoader from '@/app/components/teacher/TeacherClassroomLoader';
+import TeacherLiveKitClassroomLoader from '@/app/components/teacher/TeacherLiveKitClassroomLoader';
 
 import {
   ArrowLeft, BookOpen, User as UserIcon, Calendar, Clock,
@@ -77,24 +77,27 @@ export default async function TeacherClassroomPage({
   }
 
   /* ------------------ ASSIGNMENT ------------------ */
+  // ✅ LiveKit fields
   const assignment = await Assignment.findOne({
     _id: assignmentId,
     academyId: teacher.academyId,
     teacherId: teacher._id,
     status: { $ne: 'cancelled' },
   })
-    .select([
-      '_id', 'academyId', 'teacherId', 'studentId', 'courseId',
-      'daysOfWeek', 'startTime', 'endTime', 'status', 'notes',
-      'zoomMeetingId', 'zoomMeetingNumber', 'zoomPassword', 'zoomLink',
-      'zoomTimezone', 'zoomProvider',
-    ].join(' '))
+    .select(
+      [
+        '_id', 'academyId', 'teacherId', 'studentId', 'courseId',
+        'daysOfWeek', 'startTime', 'endTime', 'status', 'notes',
+        'livekitRoomName', 'livekitHostToken', 'livekitHostIdentity',
+        'livekitProvider',
+      ].join(' ')
+    )
     .lean();
 
   if (!assignment) notFound();
 
-  /* ------------------ ZOOM NOT READY ------------------ */
-  if (!assignment.zoomMeetingNumber) {
+  /* ------------------ LIVEKIT NOT READY ------------------ */
+  if (!assignment.livekitRoomName) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
         <Link
@@ -112,12 +115,12 @@ export default async function TeacherClassroomPage({
               <AlertTriangle className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              Zoom Classroom Not Ready
+              LiveKit Classroom Not Ready
             </h1>
             <p className="mt-3 text-sm sm:text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
-              This class does not have a Zoom meeting configured yet. Please
-              ask the academy owner to configure the permanent Zoom meeting
-              for this assignment.
+              This class does not have a LiveKit room configured yet. Please
+              ask the academy owner to create the LiveKit room for this
+              assignment.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
@@ -161,8 +164,8 @@ export default async function TeacherClassroomPage({
   /* ------------------ PREPARE DATA ------------------ */
   const classroomData = {
     assignmentId: String(assignment._id),
-    meetingNumber: String(assignment.zoomMeetingNumber || ''),
-    password: String(assignment.zoomPassword || ''),
+    roomName: String(assignment.livekitRoomName || ''),
+    hostIdentity: String(assignment.livekitHostIdentity || ''),
     studentName: String((student as any)?.name || 'Student'),
     fatherName: String((student as any)?.fatherName || ''),
     courseName: String(
@@ -173,11 +176,10 @@ export default async function TeacherClassroomPage({
       : [],
     startTime: String(assignment.startTime || ''),
     endTime: String(assignment.endTime || ''),
-    timezone: String(assignment.zoomTimezone || 'Asia/Karachi'),
     status: String(assignment.status || 'scheduled'),
     teacherName: String((teacher as any).name || (user as any).name || 'Teacher'),
     teacherEmail: email,
-    zoomProvider: String(assignment.zoomProvider || ''),
+    provider: String(assignment.livekitProvider || 'livekit'),
     courseId: String((course as any)?._id || assignment.courseId || ''),
     totalPages: Number((course as any)?.totalPages || 0),
   };
@@ -197,7 +199,7 @@ export default async function TeacherClassroomPage({
         <span className="text-slate-400">Classroom</span>
       </div>
 
-      {/* Hero Header — no dynamic date, no hydration mismatch */}
+      {/* Hero Header */}
       <div
         className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 shadow-2xl"
         suppressHydrationWarning
@@ -209,15 +211,18 @@ export default async function TeacherClassroomPage({
         <div className="relative z-10 p-5 sm:p-6 lg:p-8">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/95 text-[11px] font-semibold">
-              <Video className="h-3.5 w-3.5 text-sky-400" />
-              Zoom Classroom
+              <Video className="h-3.5 w-3.5 text-emerald-400" />
+              LiveKit Classroom
             </span>
-            {classroomData.zoomProvider && (
+            {classroomData.provider && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 text-[11px] font-semibold capitalize">
                 <Sparkles className="h-3.5 w-3.5" />
-                {classroomData.zoomProvider}
+                {classroomData.provider}
               </span>
             )}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/15 border border-blue-400/30 text-blue-200 text-[11px] font-semibold">
+              🔒 No Recording
+            </span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight break-words">
@@ -247,8 +252,19 @@ export default async function TeacherClassroomPage({
           </div>
 
           <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <HeroStat icon={<Hash className="h-4 w-4" />} label="Meeting" value={classroomData.meetingNumber} tone="sky" />
-            <HeroStat icon={<Globe className="h-4 w-4" />} label="Timezone" value={classroomData.timezone} tone="violet" />
+            <HeroStat
+              icon={<Hash className="h-4 w-4" />}
+              label="Room"
+              value={classroomData.roomName.slice(-12)}
+              tone="sky"
+            />
+            <HeroStat
+              icon={<Globe className="h-4 w-4" />}
+              label="Provider"
+              value={classroomData.provider}
+              tone="violet"
+              capitalize
+            />
             <HeroStat
               icon={<Calendar className="h-4 w-4" />}
               label="Days"
@@ -259,16 +275,22 @@ export default async function TeacherClassroomPage({
               }
               tone="emerald"
             />
-            <HeroStat icon={<BookOpen className="h-4 w-4" />} label="Status" value={classroomData.status} tone="amber" capitalize />
+            <HeroStat
+              icon={<BookOpen className="h-4 w-4" />}
+              label="Status"
+              value={classroomData.status}
+              tone="amber"
+              capitalize
+            />
           </div>
         </div>
       </div>
 
-      {/* ✅ Zoom classroom — client-only + error boundary + isolated */}
-      <TeacherClassroomLoader
+      {/* ✅ LiveKit Classroom — client-only loader */}
+      <TeacherLiveKitClassroomLoader
         assignmentId={classroomData.assignmentId}
-        meetingNumber={classroomData.meetingNumber}
-        password={classroomData.password}
+        roomName={classroomData.roomName}
+        hostIdentity={classroomData.hostIdentity}
         teacherName={classroomData.teacherName}
         teacherEmail={classroomData.teacherEmail}
         courseName={classroomData.courseName}

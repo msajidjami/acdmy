@@ -10,7 +10,7 @@ import Assignment from '@/models/Assignment';
 import Course from '@/models/Course';
 import Academy from '@/models/Academy';
 
-import StudentZoomClassroom from '@/app/components/student/StudentZoomClassroom';
+import StudentLiveKitClassroom from '@/app/components/student/StudentLiveKitClassroom';
 
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ import {
   Globe,
   Hash,
   Layers,
+  Signal,
+  Lock,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -121,13 +123,7 @@ export default async function StudentClassroomPage({
     .lean();
 
   /* ---------- Load Assignment (SECURITY) ---------- */
-
-  /*
-   * Assignment must:
-   *  1. Belong to the student's academy
-   *  2. Belong to this student
-   *  3. Not be cancelled
-   */
+  // ✅ LiveKit fields
 
   const assignment = await Assignment.findOne({
     _id: assignmentId,
@@ -147,21 +143,18 @@ export default async function StudentClassroomPage({
         'endTime',
         'status',
         'notes',
-        'zoomMeetingId',
-        'zoomMeetingNumber',
-        'zoomPassword',
-        'zoomLink',
-        'zoomTimezone',
-        'zoomProvider',
+        'livekitRoomName',
+        'livekitHostIdentity',
+        'livekitProvider',
       ].join(' ')
     )
     .lean();
 
   if (!assignment) notFound();
 
-  /* ---------- Zoom not configured ---------- */
+  /* ---------- LiveKit room not configured ---------- */
 
-  if (!assignment.zoomMeetingNumber) {
+  if (!assignment.livekitRoomName) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8">
         <Link
@@ -186,7 +179,7 @@ export default async function StudentClassroomPage({
             </h1>
 
             <p className="mt-3 text-sm sm:text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
-              This class does not have a Zoom meeting configured yet. Please
+              This class does not have a LiveKit room configured yet. Please
               ask your teacher or academy administrator.
             </p>
 
@@ -235,8 +228,7 @@ export default async function StudentClassroomPage({
 
   const classroomData = {
     assignmentId: String(assignment._id),
-    meetingNumber: String(assignment.zoomMeetingNumber || ''),
-    password: String(assignment.zoomPassword || ''),
+    roomName: String(assignment.livekitRoomName || ''),
     studentName: String((student as any).name || 'Student'),
     studentEmail: String((student as any).email || ''),
     classLevel: String((student as any).classLevel || ''),
@@ -251,9 +243,8 @@ export default async function StudentClassroomPage({
       : [],
     startTime: String(assignment.startTime || ''),
     endTime: String(assignment.endTime || ''),
-    timezone: String(assignment.zoomTimezone || 'Asia/Karachi'),
     status: String(assignment.status || 'scheduled'),
-    zoomProvider: String(assignment.zoomProvider || ''),
+    provider: String(assignment.livekitProvider || 'livekit'),
   };
 
   const todayName = new Date().toLocaleDateString('en-US', {
@@ -294,8 +285,8 @@ export default async function StudentClassroomPage({
           {/* Top badges */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-[11px] font-semibold">
-              <Video className="h-3.5 w-3.5" />
-              Zoom Classroom
+              <Signal className="h-3.5 w-3.5" />
+              LiveKit Classroom
             </span>
 
             {isToday && (
@@ -311,6 +302,11 @@ export default async function StudentClassroomPage({
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 text-emerald-100 text-[11px] font-bold uppercase tracking-wider">
               <Sparkles className="h-3 w-3" />
               Student
+            </span>
+
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/20 backdrop-blur-sm border border-blue-400/30 text-blue-100 text-[11px] font-bold uppercase tracking-wider">
+              <Lock className="h-3 w-3" />
+              No Recording
             </span>
           </div>
 
@@ -345,14 +341,14 @@ export default async function StudentClassroomPage({
           <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
             <HeroStat
               icon={<Hash className="h-4 w-4" />}
-              label="Meeting"
-              value={classroomData.meetingNumber}
+              label="Room"
+              value={classroomData.roomName.slice(-12)}
               tone="sky"
             />
             <HeroStat
               icon={<Globe className="h-4 w-4" />}
-              label="Timezone"
-              value={classroomData.timezone}
+              label="Provider"
+              value={classroomData.provider}
               tone="violet"
             />
             <HeroStat
@@ -379,10 +375,9 @@ export default async function StudentClassroomPage({
           CLASSROOM
       ============================================ */}
 
-      <StudentZoomClassroom
+      <StudentLiveKitClassroom
         assignmentId={classroomData.assignmentId}
-        meetingNumber={classroomData.meetingNumber}
-        password={classroomData.password}
+        roomName={classroomData.roomName}
         studentName={classroomData.studentName}
         studentEmail={classroomData.studentEmail}
         courseName={classroomData.courseName}
