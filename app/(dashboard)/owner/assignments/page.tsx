@@ -21,7 +21,6 @@ import {
   ClockIcon,
   VideoCameraIcon,
   CheckCircleIcon,
-  LinkIcon,
   AcademicCapIcon,
   UsersIcon,
   ClipboardDocumentListIcon,
@@ -30,11 +29,7 @@ import {
   SparklesIcon,
   MagnifyingGlassIcon,
   FunnelIcon,
-  ChevronRightIcon,
-  UserGroupIcon,
-  UserCircleIcon,
   LockClosedIcon,
-  GlobeAltIcon,
   ArrowTopRightOnSquareIcon,
   BellAlertIcon,
   NoSymbolIcon,
@@ -43,9 +38,10 @@ import {
   PlayCircleIcon,
   CheckBadgeIcon,
   FireIcon,
+  SignalIcon,
+  KeyIcon,
+  GlobeAltIcon,
 } from '@heroicons/react/24/outline';
-
-import ZoomLinkButton from '@/app/components/ZoomLinkButton';
 
 /* ------------------ Types ------------------ */
 
@@ -70,11 +66,11 @@ interface AssignmentCourse {
 type AssignmentStatus = 'scheduled' | 'ongoing' | 'completed' | 'cancelled';
 
 type TimeStatus =
-  | 'alarm' // starts in < 30 min
-  | 'ongoing' // happening right now
-  | 'upcoming' // later today
-  | 'completed' // passed today
-  | 'off'; // not scheduled today
+  | 'alarm'
+  | 'ongoing'
+  | 'upcoming'
+  | 'completed'
+  | 'off';
 
 interface Assignment {
   _id: string;
@@ -86,14 +82,12 @@ interface Assignment {
   endTime: string;
   status: AssignmentStatus;
   notes: string;
-  zoomMeetingId: string;
-  zoomMeetingNumber: string;
-  zoomPassword: string;
-  zoomLink: string;
-  zoomStartUrl: string;
-  zoomHostUserId: string;
-  zoomTimezone: string;
-  zoomProvider: string;
+  // LiveKit fields
+  livekitRoomName: string;
+  livekitHostToken: string;
+  livekitHostIdentity: string;
+  livekitProvider: string;
+  livekitCreatedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -125,14 +119,11 @@ interface AssignmentFormData {
   endTime: string;
   status: AssignmentStatus;
   notes: string;
-  zoomLink: string;
-  zoomMeetingId: string;
-  zoomMeetingNumber: string;
-  zoomPassword: string;
-  zoomStartUrl: string;
-  zoomHostUserId: string;
-  zoomTimezone: string;
-  zoomProvider: string;
+  // LiveKit fields
+  livekitRoomName: string;
+  livekitHostToken: string;
+  livekitHostIdentity: string;
+  livekitProvider: string;
 }
 
 interface ApiErrorResponse {
@@ -141,23 +132,15 @@ interface ApiErrorResponse {
   details?: string;
 }
 
-interface ZoomMeetingResponse {
+interface LiveKitRoomResponse {
   success?: boolean;
-  meetingId?: string | number;
-  meetingNumber?: string | number;
-  id?: string | number;
-  joinUrl?: string;
-  join_url?: string;
-  zoomLink?: string;
-  startUrl?: string;
-  start_url?: string;
-  zoomStartUrl?: string;
-  password?: string;
-  meetingPassword?: string;
-  hostUserId?: string | number;
-  host_id?: string | number;
-  timezone?: string;
+  roomName?: string;
+  room?: string;
+  name?: string;
+  hostToken?: string;
+  hostIdentity?: string;
   provider?: string;
+  createdAt?: string;
 }
 
 type FilterKey =
@@ -270,14 +253,10 @@ const DEFAULT_FORM_DATA: AssignmentFormData = {
   endTime: '10:00',
   status: 'scheduled',
   notes: '',
-  zoomLink: '',
-  zoomMeetingId: '',
-  zoomMeetingNumber: '',
-  zoomPassword: '',
-  zoomStartUrl: '',
-  zoomHostUserId: '',
-  zoomTimezone: 'Asia/Karachi',
-  zoomProvider: 'none',
+  livekitRoomName: '',
+  livekitHostToken: '',
+  livekitHostIdentity: '',
+  livekitProvider: 'livekit',
 };
 
 /* ------------------ Helpers ------------------ */
@@ -331,16 +310,6 @@ function getCurrentDayName(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
-/**
- * Computes the current "time status" for a given assignment.
- *
- * Rules:
- *  - 'off'       → today is not in daysOfWeek
- *  - 'alarm'     → today's class starts in 0..30 min
- *  - 'ongoing'   → now is between start and end today
- *  - 'upcoming'  → today's class is later than 30 min from now
- *  - 'completed' → today's class has already ended
- */
 function getTimeStatus(
   assignment: Assignment,
   now: Date
@@ -368,7 +337,6 @@ function getTimeStatus(
     };
   }
 
-  // class already ended today
   if (nowMin > endMin) {
     return {
       status: 'completed',
@@ -378,7 +346,6 @@ function getTimeStatus(
     };
   }
 
-  // currently ongoing
   if (nowMin >= startMin && nowMin <= endMin) {
     return {
       status: 'ongoing',
@@ -390,7 +357,6 @@ function getTimeStatus(
 
   const diff = startMin - nowMin;
 
-  // starting within 30 minutes
   if (diff <= 30 && diff > 0) {
     return {
       status: 'alarm',
@@ -426,7 +392,7 @@ export default function OwnerAssignmentsPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [generatingZoom, setGeneratingZoom] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [editingAssignment, setEditingAssignment] =
@@ -439,14 +405,13 @@ export default function OwnerAssignmentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
 
-  // Live "now" — mounted only on client to avoid hydration mismatch
   const [now, setNow] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 30_000); // every 30s
+    const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -560,20 +525,16 @@ export default function OwnerAssignmentsPage() {
       endTime: assignment.endTime || '10:00',
       status: assignment.status || 'scheduled',
       notes: assignment.notes || '',
-      zoomLink: assignment.zoomLink || '',
-      zoomMeetingId: assignment.zoomMeetingId || '',
-      zoomMeetingNumber: assignment.zoomMeetingNumber || '',
-      zoomPassword: assignment.zoomPassword || '',
-      zoomStartUrl: assignment.zoomStartUrl || '',
-      zoomHostUserId: assignment.zoomHostUserId || '',
-      zoomTimezone: assignment.zoomTimezone || 'Asia/Karachi',
-      zoomProvider: assignment.zoomProvider || 'none',
+      livekitRoomName: assignment.livekitRoomName || '',
+      livekitHostToken: assignment.livekitHostToken || '',
+      livekitHostIdentity: assignment.livekitHostIdentity || '',
+      livekitProvider: assignment.livekitProvider || 'livekit',
     });
     setShowModal(true);
   };
 
   const closeModal = () => {
-    if (submitting || generatingZoom) return;
+    if (submitting || creatingRoom) return;
     setShowModal(false);
     setEditingAssignment(null);
     setFormData({ ...DEFAULT_FORM_DATA });
@@ -607,9 +568,9 @@ export default function OwnerAssignmentsPage() {
     return true;
   };
 
-  /* ------------------ Zoom Generation ------------------ */
+  /* ------------------ LiveKit Room Creation ------------------ */
 
-  const generateZoomMeeting = async () => {
+  const createLiveKitRoom = async () => {
     if (!validateForm()) return;
 
     const teacher = teachers.find((item) => item._id === formData.teacherId);
@@ -621,28 +582,29 @@ export default function OwnerAssignmentsPage() {
       return;
     }
 
-    setGeneratingZoom(true);
+    setCreatingRoom(true);
 
     try {
-      const topic = `${course.title} - ${student.name} & ${teacher.name}`;
-      const agenda = `Class for ${course.title}. Student: ${student.name}. Teacher: ${teacher.name}.`;
+      const roomLabel = `${course.title} - ${student.name}`;
 
-      const response = await fetch('/api/zoom/create-meeting', {
+      const response = await fetch('/api/livekit/create-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         cache: 'no-store',
         body: JSON.stringify({
-          topic,
-          agenda,
+          label: roomLabel,
+          teacherId: teacher._id,
+          teacherEmail: teacher.email || '',
+          teacherName: teacher.name,
+          studentId: student._id,
+          studentName: student.name,
+          courseId: course._id,
+          courseTitle: course.title,
           startTime: formData.startTime,
           endTime: formData.endTime,
           daysOfWeek: formData.daysOfWeek,
           timezone: 'Asia/Karachi',
-          teacherEmail: teacher.email || '',
-          teacherId: teacher._id,
-          studentId: student._id,
-          courseId: course._id,
         }),
       });
 
@@ -652,90 +614,48 @@ export default function OwnerAssignmentsPage() {
         throw new Error(
           getApiErrorMessage(
             data,
-            `Failed to create Zoom meeting (HTTP ${response.status}).`
+            `Failed to create LiveKit room (HTTP ${response.status}).`
           )
         );
       }
 
-      const zoomData = (data || {}) as ZoomMeetingResponse;
+      const roomData = (data || {}) as LiveKitRoomResponse;
 
-      const meetingId = String(
-        zoomData.meetingId ?? zoomData.id ?? ''
+      const roomName = String(
+        roomData.roomName ?? roomData.room ?? roomData.name ?? ''
       ).trim();
-      const meetingNumber = String(
-        zoomData.meetingNumber ?? zoomData.id ?? zoomData.meetingId ?? ''
-      ).trim();
-      const joinUrl = String(
-        zoomData.joinUrl ?? zoomData.join_url ?? zoomData.zoomLink ?? ''
-      ).trim();
-      const startUrl = String(
-        zoomData.startUrl ?? zoomData.start_url ?? zoomData.zoomStartUrl ?? ''
-      ).trim();
-      const password = String(
-        zoomData.password ?? zoomData.meetingPassword ?? ''
-      ).trim();
-      const hostUserId = String(
-        zoomData.hostUserId ?? zoomData.host_id ?? ''
-      ).trim();
-      const timezone = String(zoomData.timezone || 'Asia/Karachi').trim();
-      const provider = String(zoomData.provider || 'zoom').trim();
+      const hostToken = String(roomData.hostToken ?? '').trim();
+      const hostIdentity = String(roomData.hostIdentity ?? '').trim();
+      const provider = String(roomData.provider ?? 'livekit').trim();
 
-      if (!meetingId)
+      if (!roomName) {
         throw new Error(
-          'Zoom meeting was created but no Meeting ID was returned.'
+          'LiveKit room was created but no Room Name was returned.'
         );
-      if (!meetingNumber)
-        throw new Error(
-          'Zoom meeting was created but no Meeting Number was returned.'
-        );
-      if (!joinUrl)
-        throw new Error(
-          'Zoom meeting was created but no participant Join URL was returned.'
-        );
+      }
 
       setFormData((previous) => ({
         ...previous,
-        zoomLink: joinUrl,
-        zoomMeetingId: meetingId,
-        zoomMeetingNumber: meetingNumber,
-        zoomPassword: password,
-        zoomStartUrl: startUrl,
-        zoomHostUserId: hostUserId,
-        zoomTimezone: timezone,
-        zoomProvider: provider,
+        livekitRoomName: roomName,
+        livekitHostToken: hostToken,
+        livekitHostIdentity: hostIdentity,
+        livekitProvider: provider,
       }));
 
       toast.success(
-        startUrl
-          ? 'Zoom meeting created. Student Join URL and Teacher Host URL are ready.'
-          : 'Zoom meeting created, but the Teacher Host Start URL was not returned.'
+        hostToken
+          ? 'LiveKit room created. Teacher host token is ready.'
+          : 'LiveKit room created successfully.'
       );
     } catch (error: unknown) {
-      console.error('Zoom meeting creation error:', error);
+      console.error('LiveKit room creation error:', error);
       const message =
         error instanceof Error
           ? error.message
-          : 'Failed to create Zoom meeting.';
-      const lowerMessage = message.toLowerCase();
-
-      if (
-        lowerMessage.includes('connect timeout') ||
-        lowerMessage.includes('zoom.us:443') ||
-        lowerMessage.includes('api.zoom.us:443') ||
-        lowerMessage.includes('unable to connect') ||
-        lowerMessage.includes('network') ||
-        lowerMessage.includes('etimedout') ||
-        lowerMessage.includes('fetch failed')
-      ) {
-        toast.error(
-          'Server cannot connect to Zoom. Check server internet access, DNS, firewall/VPN and outbound HTTPS (443).',
-          { duration: 6000 }
-        );
-      } else {
-        toast.error(message, { duration: 5000 });
-      }
+          : 'Failed to create LiveKit room.';
+      toast.error(message, { duration: 5000 });
     } finally {
-      setGeneratingZoom(false);
+      setCreatingRoom(false);
     }
   };
 
@@ -756,14 +676,10 @@ export default function OwnerAssignmentsPage() {
       endTime: formData.endTime,
       status: formData.status,
       notes: formData.notes.trim(),
-      zoomMeetingId: formData.zoomMeetingId,
-      zoomMeetingNumber: formData.zoomMeetingNumber,
-      zoomPassword: formData.zoomPassword,
-      zoomLink: formData.zoomLink,
-      zoomStartUrl: formData.zoomStartUrl,
-      zoomHostUserId: formData.zoomHostUserId,
-      zoomTimezone: formData.zoomTimezone || 'Asia/Karachi',
-      zoomProvider: formData.zoomProvider || 'none',
+      livekitRoomName: formData.livekitRoomName,
+      livekitHostToken: formData.livekitHostToken,
+      livekitHostIdentity: formData.livekitHostIdentity,
+      livekitProvider: formData.livekitProvider || 'livekit',
     };
 
     try {
@@ -860,8 +776,8 @@ export default function OwnerAssignmentsPage() {
     students.length - assignedStudentsCount
   );
 
-  const zoomAssignmentsCount = assignments.filter(
-    (a) => Boolean(a.zoomLink || a.zoomMeetingNumber)
+  const livekitAssignmentsCount = assignments.filter((a) =>
+    Boolean(a.livekitRoomName)
   ).length;
 
   const scheduledAssignmentsCount = assignments.filter(
@@ -871,7 +787,7 @@ export default function OwnerAssignmentsPage() {
   const canCreateAssignment =
     teachers.length > 0 && students.length > 0 && courses.length > 0;
 
-  const canGenerateZoom = Boolean(
+  const canCreateRoom = Boolean(
     formData.teacherId &&
       formData.studentId &&
       formData.courseId &&
@@ -885,7 +801,6 @@ export default function OwnerAssignmentsPage() {
      TIME-AWARE DERIVED DATA
   ========================================================= */
 
-  // Map each assignment to its time status
   const assignmentTimeStatuses = useMemo(() => {
     if (!now) return new Map<string, TimeStatus>();
     const map = new Map<string, TimeStatus>();
@@ -895,7 +810,6 @@ export default function OwnerAssignmentsPage() {
     return map;
   }, [assignments, now]);
 
-  // Today's classes (sorted by start time) with status
   const todaysClasses = useMemo(() => {
     if (!now) return [];
     const today = getCurrentDayName(now);
@@ -925,7 +839,6 @@ export default function OwnerAssignmentsPage() {
     (c) => c.info.status === 'completed'
   );
 
-  // Off days for today (classes NOT scheduled today)
   const todaysOff = useMemo(() => {
     if (!now) return [];
     const today = getCurrentDayName(now);
@@ -942,7 +855,6 @@ export default function OwnerAssignmentsPage() {
       }`
     : '';
 
-  // Filtered teachers for the main list
   const filteredTeachers = useMemo(() => {
     let result = teachers;
 
@@ -1049,14 +961,14 @@ export default function OwnerAssignmentsPage() {
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-white/90 text-xs font-semibold">
                 <SparklesIcon className="h-3 w-3" />
-                Class Management
+                LiveKit Class Management
               </div>
               <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-white leading-tight">
                 Assignments
               </h1>
               <p className="mt-1 text-white/80 text-sm sm:text-base max-w-lg">
-                Assign teachers, schedule weekly classes, and manage Zoom
-                meetings in one place.
+                Assign teachers, schedule weekly classes, and manage LiveKit
+                rooms in one place.
               </p>
             </div>
           </div>
@@ -1083,7 +995,7 @@ export default function OwnerAssignmentsPage() {
       </div>
 
       {/* ============================================
-          LIVE ALARM BANNER — pulsing if classes soon
+          LIVE ALARM BANNER
       ============================================ */}
       {mounted && (todaysAlarms.length > 0 || todaysOngoing.length > 0) && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-orange-300 bg-gradient-to-r from-orange-50 via-amber-50 to-yellow-50 p-5 shadow-lg animate-pulse-slow">
@@ -1222,7 +1134,6 @@ export default function OwnerAssignmentsPage() {
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {/* Time column */}
                         <div className="shrink-0 w-16 sm:w-20 text-center">
                           <p className="text-sm sm:text-base font-extrabold text-slate-900 leading-tight">
                             {formatTime(assignment.startTime).replace(
@@ -1239,10 +1150,8 @@ export default function OwnerAssignmentsPage() {
                           </p>
                         </div>
 
-                        {/* Divider */}
                         <div className="w-px self-stretch bg-slate-200" />
 
-                        {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <span
@@ -1294,14 +1203,16 @@ export default function OwnerAssignmentsPage() {
                             </span>
                           </div>
 
-                          {assignment.zoomLink && (
+                          {assignment.livekitRoomName && (
                             <div className="mt-2.5">
-                              <ZoomLinkButton zoomLink={assignment.zoomLink} />
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+                                <SignalIcon className="h-3.5 w-3.5" />
+                                LiveKit Room Ready
+                              </div>
                             </div>
                           )}
                         </div>
 
-                        {/* Action */}
                         <button
                           type="button"
                           onClick={() => openEditModal(assignment)}
@@ -1318,7 +1229,6 @@ export default function OwnerAssignmentsPage() {
             )}
           </div>
 
-          {/* Off-today summary */}
           {todaysOff.length > 0 && (
             <div className="px-5 pb-5">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
@@ -1389,8 +1299,8 @@ export default function OwnerAssignmentsPage() {
             text: 'text-amber-600',
           },
           {
-            title: 'Zoom',
-            value: zoomAssignmentsCount,
+            title: 'LiveKit',
+            value: livekitAssignmentsCount,
             icon: VideoCameraIcon,
             gradient: 'from-emerald-500 to-teal-600',
             bg: 'bg-emerald-50',
@@ -1574,7 +1484,6 @@ export default function OwnerAssignmentsPage() {
                   key={teacher._id}
                   className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
                 >
-                  {/* Header */}
                   <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 px-5 py-4 text-white overflow-hidden">
                     <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
                     <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-white/5 rounded-full" />
@@ -1613,7 +1522,6 @@ export default function OwnerAssignmentsPage() {
                     )}
                   </div>
 
-                  {/* Body */}
                   <div className="p-4">
                     {teacherAssignments.length === 0 ? (
                       <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
@@ -1653,7 +1561,6 @@ export default function OwnerAssignmentsPage() {
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
-                                  {/* Student row */}
                                   <div className="flex items-center gap-2.5">
                                     <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
                                       {getInitials(
@@ -1689,7 +1596,6 @@ export default function OwnerAssignmentsPage() {
                                     </div>
                                   </div>
 
-                                  {/* Meta row */}
                                   <div className="mt-3 flex flex-wrap gap-1.5">
                                     <span className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-slate-200 text-[11px] font-semibold text-slate-600">
                                       <BookOpenIcon className="h-3 w-3 shrink-0 text-slate-400" />
@@ -1717,7 +1623,6 @@ export default function OwnerAssignmentsPage() {
                                     </span>
                                   </div>
 
-                                  {/* Badges row */}
                                   <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                                     <span
                                       className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${statusMeta.classes}`}
@@ -1728,22 +1633,22 @@ export default function OwnerAssignmentsPage() {
                                       {statusMeta.label}
                                     </span>
 
-                                    {assignment.zoomLink ? (
+                                    {assignment.livekitRoomName ? (
                                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold uppercase tracking-wider">
                                         <CheckCircleIcon className="h-3 w-3" />
-                                        Zoom Ready
+                                        Room Ready
                                       </span>
-                                    ) : assignment.zoomMeetingNumber ? (
-                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-bold uppercase tracking-wider">
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold uppercase tracking-wider">
                                         <VideoCameraIcon className="h-3 w-3" />
-                                        ID Only
+                                        No Room
                                       </span>
-                                    ) : null}
+                                    )}
 
-                                    {assignment.zoomStartUrl && (
+                                    {assignment.livekitHostToken && (
                                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-bold uppercase tracking-wider">
-                                        <CheckCircleIcon className="h-3 w-3" />
-                                        Host Ready
+                                        <KeyIcon className="h-3 w-3" />
+                                        Host Token
                                       </span>
                                     )}
 
@@ -1762,6 +1667,17 @@ export default function OwnerAssignmentsPage() {
                                     )}
                                   </div>
 
+                                  {assignment.livekitRoomName && (
+                                    <div className="mt-3 rounded-lg bg-white border border-slate-200 p-2.5">
+                                      <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
+                                        LiveKit Room
+                                      </p>
+                                      <p className="font-mono text-xs text-slate-700 font-semibold truncate">
+                                        {assignment.livekitRoomName}
+                                      </p>
+                                    </div>
+                                  )}
+
                                   {assignment.notes && (
                                     <p className="mt-2.5 text-xs text-slate-500 line-clamp-1 bg-white px-2.5 py-1.5 rounded-lg border border-slate-100">
                                       <span className="font-bold text-slate-700">
@@ -1770,26 +1686,8 @@ export default function OwnerAssignmentsPage() {
                                       {assignment.notes}
                                     </p>
                                   )}
-
-                                  <div className="mt-3">
-                                    {assignment.zoomLink ? (
-                                      <ZoomLinkButton
-                                        zoomLink={assignment.zoomLink}
-                                      />
-                                    ) : assignment.zoomMeetingNumber ? (
-                                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold">
-                                        <VideoCameraIcon className="h-4 w-4" />
-                                        Missing URL
-                                      </div>
-                                    ) : (
-                                      <span className="text-[11px] text-slate-400 italic">
-                                        No Zoom Link Configured
-                                      </span>
-                                    )}
-                                  </div>
                                 </div>
 
-                                {/* Actions */}
                                 <div className="flex flex-col gap-1 shrink-0 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
                                   <button
                                     type="button"
@@ -1821,7 +1719,6 @@ export default function OwnerAssignmentsPage() {
                     )}
                   </div>
 
-                  {/* Footer */}
                   <div className="p-3 bg-slate-50 border-t border-slate-100">
                     <button
                       type="button"
@@ -1872,7 +1769,6 @@ export default function OwnerAssignmentsPage() {
             {filteredStudents.map((student) => {
               const isAssigned = assignedStudentIds.has(student._id);
 
-              // student's time statuses today
               const studentAssignments = assignments.filter(
                 (a) => a.studentId?._id === student._id
               );
@@ -1953,7 +1849,7 @@ export default function OwnerAssignmentsPage() {
       )}
 
       {/* ============================================
-          MODAL (unchanged form, same structure)
+          MODAL
       ============================================ */}
       {showModal && (
         <div
@@ -1966,7 +1862,6 @@ export default function OwnerAssignmentsPage() {
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[92vh] overflow-hidden flex flex-col border border-slate-100 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            {/* HEADER */}
             <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-100 bg-white">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -1979,7 +1874,7 @@ export default function OwnerAssignmentsPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
-                      Class Management
+                      LiveKit Class Management
                     </p>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
                       {editingAssignment
@@ -1992,7 +1887,7 @@ export default function OwnerAssignmentsPage() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  disabled={submitting || generatingZoom}
+                  disabled={submitting || creatingRoom}
                   className="h-9 w-9 rounded-lg flex items-center justify-center bg-slate-50 hover:bg-slate-100 border border-slate-200 transition disabled:opacity-50 shrink-0"
                 >
                   <XMarkIcon className="h-5 w-5 text-slate-500" />
@@ -2000,7 +1895,6 @@ export default function OwnerAssignmentsPage() {
               </div>
             </div>
 
-            {/* FORM */}
             <form
               onSubmit={handleSubmit}
               className="flex-1 min-h-0 flex flex-col bg-slate-50/50"
@@ -2121,8 +2015,7 @@ export default function OwnerAssignmentsPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                       {DAYS.map((day) => {
                         const selected = formData.daysOfWeek.includes(day);
-                        const isToday =
-                          mounted && currentDayName === day;
+                        const isToday = mounted && currentDayName === day;
                         return (
                           <label
                             key={day}
@@ -2223,145 +2116,137 @@ export default function OwnerAssignmentsPage() {
                   </div>
                 </div>
 
-                {/* ZOOM */}
+                {/* LIVEKIT ROOM */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                   <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <VideoCameraIcon className="h-4 w-4 text-indigo-600" />
+                      <SignalIcon className="h-4 w-4 text-indigo-600" />
                     </div>
-                    Zoom Integration
+                    LiveKit Room
                     <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full ml-1">
                       Optional
                     </span>
                   </h4>
 
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    {!formData.zoomLink && (
+                    {!formData.livekitRoomName && (
                       <div className="mb-4">
                         <p className="text-sm text-slate-600">
-                          Create an instant Zoom meeting room for this weekly
-                          schedule.
+                          Create a LiveKit room for this weekly schedule. No
+                          recording — Live-only sessions.
                         </p>
                       </div>
                     )}
 
                     <button
                       type="button"
-                      onClick={generateZoomMeeting}
+                      onClick={createLiveKitRoom}
                       disabled={
-                        generatingZoom || submitting || !canGenerateZoom
+                        creatingRoom || submitting || !canCreateRoom
                       }
                       className="w-full py-3 bg-white border-2 border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50 text-indigo-700 font-bold rounded-xl transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
                     >
-                      {generatingZoom ? (
+                      {creatingRoom ? (
                         <>
                           <span className="h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-                          Connecting to Zoom...
+                          Creating LiveKit Room...
                         </>
                       ) : (
                         <>
-                          <VideoCameraIcon className="h-5 w-5" />
-                          {formData.zoomLink
-                            ? 'Regenerate Zoom Meeting'
-                            : 'Generate Zoom Meeting'}
+                          <SignalIcon className="h-5 w-5" />
+                          {formData.livekitRoomName
+                            ? 'Regenerate LiveKit Room'
+                            : 'Create LiveKit Room'}
                         </>
                       )}
                     </button>
 
-                    {!canGenerateZoom && !formData.zoomLink && (
+                    {!canCreateRoom && !formData.livekitRoomName && (
                       <p className="text-center text-[11px] font-medium text-slate-400 mt-3 flex items-center justify-center gap-1">
                         <ExclamationTriangleIcon className="h-3.5 w-3.5" />
                         Complete participant and schedule details first.
                       </p>
                     )}
 
-                    {formData.zoomLink && (
+                    {formData.livekitRoomName && (
                       <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
                         <div className="flex items-center justify-between gap-2 border-b border-emerald-100 pb-3 mb-3">
                           <div className="flex items-center gap-2 text-emerald-700">
                             <CheckCircleIcon className="h-5 w-5" />
                             <span className="font-bold text-sm">
-                              Meeting Successfully Created
+                              LiveKit Room Ready
                             </span>
                           </div>
                           <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-md uppercase tracking-wider">
-                            {formData.zoomProvider || 'ZOOM'}
+                            {formData.livekitProvider || 'LIVEKIT'}
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {formData.zoomMeetingNumber && (
-                            <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
-                              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">
-                                Meeting ID
-                              </p>
-                              <p className="font-bold text-slate-900 text-sm tracking-wide break-all">
-                                {formData.zoomMeetingNumber}
-                              </p>
-                            </div>
-                          )}
-
-                          {formData.zoomPassword && (
-                            <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
-                              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">
-                                Passcode
-                              </p>
-                              <p className="font-bold text-slate-900 text-sm tracking-wide">
-                                {formData.zoomPassword}
-                              </p>
-                            </div>
-                          )}
+                        <div className="bg-white rounded-xl p-3 border border-emerald-100 shadow-sm">
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1 flex items-center gap-1">
+                            <GlobeAltIcon className="h-3 w-3" />
+                            Room Name
+                          </p>
+                          <p className="font-mono font-bold text-slate-900 text-xs tracking-wide break-all">
+                            {formData.livekitRoomName}
+                          </p>
                         </div>
 
                         <div
                           className={`mt-3 rounded-xl border p-3 ${
-                            formData.zoomStartUrl
+                            formData.livekitHostToken
                               ? 'bg-indigo-50 border-indigo-200'
                               : 'bg-amber-50 border-amber-200'
                           }`}
                         >
                           <div className="flex items-start gap-2">
-                            {formData.zoomStartUrl ? (
-                              <CheckCircleIcon className="h-5 w-5 text-indigo-600 shrink-0" />
+                            {formData.livekitHostToken ? (
+                              <KeyIcon className="h-5 w-5 text-indigo-600 shrink-0" />
                             ) : (
                               <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 shrink-0" />
                             )}
                             <div>
                               <p
                                 className={`text-xs font-bold ${
-                                  formData.zoomStartUrl
+                                  formData.livekitHostToken
                                     ? 'text-indigo-700'
                                     : 'text-amber-700'
                                 }`}
                               >
-                                {formData.zoomStartUrl
-                                  ? 'Teacher Host Start Link Ready'
-                                  : 'Teacher Host Start Link Not Available'}
+                                {formData.livekitHostToken
+                                  ? 'Teacher Host Token Ready'
+                                  : 'Teacher Host Token Missing'}
                               </p>
                               <p
                                 className={`text-[11px] mt-1 ${
-                                  formData.zoomStartUrl
+                                  formData.livekitHostToken
                                     ? 'text-indigo-600'
                                     : 'text-amber-700'
                                 }`}
                               >
-                                {formData.zoomStartUrl
-                                  ? 'The teacher can use the saved host start link to start the Zoom class.'
-                                  : 'Zoom did not return a host start URL. The participant link is available, but the teacher host link still needs to be configured.'}
+                                {formData.livekitHostToken
+                                  ? 'The teacher can use the host token to join the room with full control.'
+                                  : 'LiveKit did not return a host token. Students can still join, but the teacher needs a host token.'}
                               </p>
                             </div>
                           </div>
                         </div>
 
-                        <a
-                          href={formData.zoomLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-3 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-4 w-4 stroke-2" />
-                          Launch Participant Test Meeting
-                        </a>
+                        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                          <div className="flex items-start gap-2">
+                            <LockClosedIcon className="h-5 w-5 text-blue-600 shrink-0" />
+                            <div>
+                              <p className="text-xs font-bold text-blue-700">
+                                Recording is disabled
+                              </p>
+                              <p className="text-[11px] mt-1 text-blue-600">
+                                Live-only sessions. Nothing is saved to disk —
+                                the room disappears when all participants
+                                leave.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2430,13 +2315,12 @@ export default function OwnerAssignmentsPage() {
                 <div className="h-2" />
               </div>
 
-              {/* FOOTER */}
               <div className="shrink-0 bg-white border-t border-slate-200 px-5 sm:px-6 py-4 sm:py-5">
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     type="button"
                     onClick={closeModal}
-                    disabled={submitting || generatingZoom}
+                    disabled={submitting || creatingRoom}
                     className="sm:w-32 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-200 transition disabled:opacity-50 text-sm"
                   >
                     Cancel
@@ -2444,7 +2328,7 @@ export default function OwnerAssignmentsPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting || generatingZoom}
+                    disabled={submitting || creatingRoom}
                     className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm active:scale-[0.98]"
                   >
                     {submitting ? (
@@ -2472,7 +2356,6 @@ export default function OwnerAssignmentsPage() {
         </div>
       )}
 
-      {/* Custom slow pulse animation */}
       <style jsx global>{`
         @keyframes pulse-slow {
           0%,

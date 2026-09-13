@@ -70,12 +70,28 @@ async function getScheduleData(email: string) {
     .lean();
 
   /* ---------- Fetch assignments ---------- */
+  // ✅ LiveKit fields شامل
 
   const assignments = await Assignment.find({
     academyId: student.academyId,
     studentId: student._id,
     status: { $ne: 'cancelled' },
   })
+    .select(
+      [
+        '_id',
+        'teacherId',
+        'courseId',
+        'daysOfWeek',
+        'startTime',
+        'endTime',
+        'status',
+        'notes',
+        'livekitRoomName',
+        'livekitHostIdentity',
+        'livekitProvider',
+      ].join(' ')
+    )
     .sort({ startTime: 1, createdAt: 1 })
     .lean();
 
@@ -132,7 +148,6 @@ async function getScheduleData(email: string) {
       String(a.courseId || ''),
       String(a.startTime || ''),
       String(a.endTime || ''),
-      String(a.zoomTimezone || 'Asia/Karachi'),
     ].join('|');
 
     const teacher = teacherMap.get(String(a.teacherId));
@@ -153,11 +168,11 @@ async function getScheduleData(email: string) {
         endTime: String(a.endTime || ''),
         status: String(a.status || 'scheduled'),
         notes: String(a.notes || ''),
-        zoomMeetingNumber: String(a.zoomMeetingNumber || ''),
-        zoomPassword: String(a.zoomPassword || ''),
-        zoomLink: String(a.zoomLink || ''),
-        zoomTimezone: String(a.zoomTimezone || 'Asia/Karachi'),
-        hasZoom: Boolean(a.zoomMeetingNumber),
+        // ✅ LiveKit fields
+        livekitRoomName: String(a.livekitRoomName || ''),
+        livekitHostIdentity: String(a.livekitHostIdentity || ''),
+        livekitProvider: String(a.livekitProvider || 'none'),
+        hasLiveKit: Boolean(a.livekitRoomName),
       });
       continue;
     }
@@ -171,12 +186,12 @@ async function getScheduleData(email: string) {
     // Prefer ongoing status
     if (a.status === 'ongoing') existing.status = 'ongoing';
 
-    // Take zoom if missing
-    if (!existing.zoomMeetingNumber && a.zoomMeetingNumber) {
-      existing.zoomMeetingNumber = String(a.zoomMeetingNumber);
-      existing.zoomPassword = String(a.zoomPassword || '');
-      existing.zoomLink = String(a.zoomLink || '');
-      existing.hasZoom = true;
+    // Take LiveKit room if missing
+    if (!existing.livekitRoomName && a.livekitRoomName) {
+      existing.livekitRoomName = String(a.livekitRoomName);
+      existing.livekitHostIdentity = String(a.livekitHostIdentity || '');
+      existing.livekitProvider = String(a.livekitProvider || 'livekit');
+      existing.hasLiveKit = true;
     }
   }
 

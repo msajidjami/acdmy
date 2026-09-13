@@ -24,9 +24,7 @@ const DAY_ORDER = [
 ];
 
 function normalizeEmail(value: unknown): string {
-  return String(value || '')
-    .trim()
-    .toLowerCase();
+  return String(value || '').trim().toLowerCase();
 }
 
 function sortDays(days: string[]): string[] {
@@ -51,7 +49,7 @@ function getClassKey(assignment: any): string {
     String(assignment.teacherId || ''),
     String(assignment.startTime || ''),
     String(assignment.endTime || ''),
-    String(assignment.zoomTimezone || 'Asia/Karachi'),
+    'Asia/Karachi',
   ].join('|');
 }
 
@@ -98,11 +96,19 @@ async function getTeacherSchedule() {
     };
   }
 
+  // ✅ LiveKit fields منتخب کریں
   const assignments = await Assignment.find({
     academyId: teacher.academyId,
     teacherId: teacher._id,
     status: { $ne: 'cancelled' },
   })
+    .select(
+      [
+        'studentId', 'teacherId', 'courseId',
+        'daysOfWeek', 'startTime', 'endTime', 'status', 'notes',
+        'livekitRoomName', 'livekitHostIdentity', 'livekitProvider',
+      ].join(' ')
+    )
     .sort({ startTime: 1, createdAt: 1 })
     .lean();
 
@@ -183,24 +189,24 @@ async function getTeacherSchedule() {
         endTime: String(assignment.endTime || ''),
         status: String(assignment.status || 'scheduled'),
         notes: String(assignment.notes || ''),
-        zoomMeetingId: String(assignment.zoomMeetingId || ''),
-        zoomMeetingNumber: String(assignment.zoomMeetingNumber || ''),
-        zoomPassword: String(assignment.zoomPassword || ''),
-        zoomLink: String(assignment.zoomLink || ''),
-        zoomTimezone: String(assignment.zoomTimezone || 'Asia/Karachi'),
-        zoomProvider: String(assignment.zoomProvider || ''),
+        // ✅ LiveKit fields
+        livekitRoomName: String(assignment.livekitRoomName || ''),
+        livekitHostIdentity: String(assignment.livekitHostIdentity || ''),
+        livekitProvider: String(assignment.livekitProvider || 'none'),
       });
       continue;
     }
 
     existing.daysOfWeek.push(...assignmentDays.map((day: any) => String(day)));
 
-    if (!existing.zoomMeetingNumber && assignment.zoomMeetingNumber) {
-      existing.zoomMeetingId = String(assignment.zoomMeetingId || '');
-      existing.zoomMeetingNumber = String(assignment.zoomMeetingNumber || '');
-      existing.zoomPassword = String(assignment.zoomPassword || '');
-      existing.zoomLink = String(assignment.zoomLink || '');
-      existing.zoomProvider = String(assignment.zoomProvider || '');
+    if (!existing.livekitRoomName && assignment.livekitRoomName) {
+      existing.livekitRoomName = String(assignment.livekitRoomName || '');
+      existing.livekitHostIdentity = String(
+        assignment.livekitHostIdentity || ''
+      );
+      existing.livekitProvider = String(
+        assignment.livekitProvider || 'livekit'
+      );
     }
 
     if (!existing.notes && assignment.notes) {
@@ -217,9 +223,7 @@ async function getTeacherSchedule() {
     daysOfWeek: sortDays(row.daysOfWeek),
   }));
 
-  rows.sort((a, b) =>
-    String(a.startTime).localeCompare(String(b.startTime))
-  );
+  rows.sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
 
   return {
     teacherName: String(teacher.name || (user as any).name || 'Teacher'),

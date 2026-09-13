@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 
 import connectDB from '@/app/lib/dbConnect';
-
 import Assignment from '@/models/Assignment';
 import Academy from '@/models/Academy';
 import User from '@/models/User';
@@ -33,20 +32,12 @@ const VALID_STATUSES = [
   'cancelled',
 ] as const;
 
-const VALID_ZOOM_PROVIDERS = [
-  'zoom',
-  'none',
-] as const;
+// ✅ Zoom اور LiveKit دونوں providers
+const VALID_PROVIDERS = ['zoom', 'livekit', 'none'] as const;
 
-type JwtPayload = {
-  userId?: string;
-};
-
-type AssignmentStatus =
-  (typeof VALID_STATUSES)[number];
-
-type ZoomProvider =
-  (typeof VALID_ZOOM_PROVIDERS)[number];
+type JwtPayload = { userId?: string };
+type AssignmentStatus = (typeof VALID_STATUSES)[number];
+type Provider = (typeof VALID_PROVIDERS)[number];
 
 type RequestBody = {
   studentId?: string;
@@ -58,6 +49,7 @@ type RequestBody = {
   status?: string;
   notes?: string;
 
+  // Zoom fields (backward compatibility)
   zoomMeetingId?: string | number | null;
   zoomMeetingNumber?: string | number | null;
   zoomPassword?: string | null;
@@ -68,69 +60,40 @@ type RequestBody = {
   zoomProvider?: string | null;
   zoomUuid?: string | null;
   zoomMeetingCreated?: boolean;
+
+  // ✅ LiveKit fields
+  livekitRoomName?: string | null;
+  livekitHostToken?: string | null;
+  livekitHostIdentity?: string | null;
+  livekitProvider?: string | null;
 };
 
 function getJwtSecret(): string {
-  if (!JWT_SECRET) {
-    throw new Error(
-      'JWT_SECRET is not configured'
-    );
-  }
-
+  if (!JWT_SECRET) throw new Error('JWT_SECRET is not configured');
   return JWT_SECRET;
 }
 
-async function getUserFromRequest(
-  req: NextRequest
-) {
-  const token =
-    req.cookies.get('token')?.value;
-
-  if (!token) {
-    return null;
-  }
+async function getUserFromRequest(req: NextRequest) {
+  const token = req.cookies.get('token')?.value;
+  if (!token) return null;
 
   try {
-    const decoded =
-      jwt.verify(
-        token,
-        getJwtSecret()
-      ) as JwtPayload;
-
-    if (!decoded?.userId) {
-      return null;
-    }
-
+    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
+    if (!decoded?.userId) return null;
     await connectDB();
-
-    return await User.findById(
-      decoded.userId
-    )
-      .select('-password')
-      .lean();
+    return await User.findById(decoded.userId).select('-password').lean();
   } catch (error) {
-    console.error(
-      'getUserFromRequest error:',
-      error
-    );
-
+    console.error('getUserFromRequest error:', error);
     return null;
   }
 }
 
-function normalizeDays(
-  daysOfWeek: unknown[]
-): string[] {
+function normalizeDays(daysOfWeek: unknown[]): string[] {
   return [
     ...new Set(
       daysOfWeek
-        .map((day: unknown) =>
-          String(day).trim()
-        )
-        .filter(
-          (day: string) =>
-            Boolean(day)
-        )
+        .map((day) => String(day).trim())
+        .filter((day) => Boolean(day))
     ),
   ];
 }
@@ -152,9 +115,7 @@ function buildScheduleKey({
   startTime: string;
   endTime: string;
 }): string {
-  const sortedDays =
-    [...daysOfWeek].sort();
-
+  const sortedDays = [...daysOfWeek].sort();
   return [
     String(academyId),
     String(studentId),
@@ -166,304 +127,149 @@ function buildScheduleKey({
   ].join('_');
 }
 
-/*
- * ========================================================
+/* ========================================================
  * GET
- * ========================================================
- */
-export async function GET(
-  req: NextRequest
-) {
+ * ======================================================== */
+export async function GET(req: NextRequest) {
   try {
-    const user =
-      await getUserFromRequest(req);
-
+    const user = await getUserFromRequest(req);
     if (!user) {
-      return NextResponse.json(
-        {
-          error: 'Unauthorized',
-        },
-        {
-          status: 401,
-        }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const academy =
-      await Academy.findOne({
-        ownerId: user._id,
-      }).lean();
-
+    const academy = await Academy.findOne({ ownerId: user._id }).lean();
     if (!academy) {
-      return NextResponse.json(
-        {
-          error: 'No academy found',
-        },
-        {
-          status: 404,
-        }
-      );
+      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    const assignments =
-      await Assignment.find({
-        academyId: academy._id,
+    const assignments = await Assignment.find({ academyId: academy._id })
+      .select(
+        [
+          'studentId',
+          'teacherId',
+          'courseId',
+          'daysOfWeek',
+          'startTime',
+          'endTime',
+          'status',
+          'notes',
+          'scheduleKey',
+
+          'zoomMeetingId',
+          'zoomMeetingNumber',
+          'zoomPassword',
+          'zoomLink',
+          'zoomStartUrl',
+          'zoomHostUserId',
+          'zoomTimezone',
+          'zoomProvider',
+          'zoomUuid',
+          'zoomMeetingCreated',
+
+          // ✅ LiveKit fields
+          'livekitRoomName',
+          'livekitHostIdentity',
+          'livekitProvider',
+
+          'createdAt',
+          'updatedAt',
+        ].join(' ')
+      )
+      .populate({ path: 'studentId', model: Student, select: 'name email' })
+      .populate({
+        path: 'teacherId',
+        model: Teacher,
+        select: 'name email subjects',
       })
-        .select(
-          [
-            'studentId',
-            'teacherId',
-            'courseId',
-            'daysOfWeek',
-            'startTime',
-            'endTime',
-            'status',
-            'notes',
-            'scheduleKey',
+      .populate({ path: 'courseId', model: Course, select: 'title' })
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
 
-            'zoomMeetingId',
-            'zoomMeetingNumber',
-            'zoomPassword',
-            'zoomLink',
-            'zoomStartUrl',
-            'zoomHostUserId',
-            'zoomTimezone',
-            'zoomProvider',
-            'zoomUuid',
-            'zoomMeetingCreated',
+    const sanitized = assignments.map((a: any) => ({
+      _id: String(a._id),
 
-            'createdAt',
-            'updatedAt',
-          ].join(' ')
-        )
-        .populate({
-          path: 'studentId',
-          model: Student,
-          select: 'name email',
-        })
-        .populate({
-          path: 'teacherId',
-          model: Teacher,
-          select:
-            'name email subjects',
-        })
-        .populate({
-          path: 'courseId',
-          model: Course,
-          select: 'title',
-        })
-        .sort({
-          createdAt: -1,
-        })
-        .limit(500)
-        .lean();
+      studentId: a.studentId
+        ? {
+            _id: String(a.studentId._id),
+            name: a.studentId.name || '',
+            email: a.studentId.email || '',
+          }
+        : null,
 
-    const sanitized =
-      assignments.map(
-        (assignment: any) => ({
-          _id:
-            String(assignment._id),
-
-          studentId:
-            assignment.studentId
-              ? {
-                  _id: String(
-                    assignment
-                      .studentId
-                      ._id
-                  ),
-                  name:
-                    assignment
-                      .studentId
-                      .name || '',
-                  email:
-                    assignment
-                      .studentId
-                      .email || '',
-                }
-              : null,
-
-          teacherId:
-            assignment.teacherId
-              ? {
-                  _id: String(
-                    assignment
-                      .teacherId
-                      ._id
-                  ),
-                  name:
-                    assignment
-                      .teacherId
-                      .name || '',
-                  email:
-                    assignment
-                      .teacherId
-                      .email || '',
-                  subjects:
-                    Array.isArray(
-                      assignment
-                        .teacherId
-                        .subjects
-                    )
-                      ? assignment
-                          .teacherId
-                          .subjects
-                      : [],
-                }
-              : null,
-
-          courseId:
-            assignment.courseId
-              ? {
-                  _id: String(
-                    assignment
-                      .courseId
-                      ._id
-                  ),
-                  title:
-                    assignment
-                      .courseId
-                      .title || '',
-                }
-              : null,
-
-          daysOfWeek:
-            Array.isArray(
-              assignment.daysOfWeek
-            )
-              ? assignment.daysOfWeek
+      teacherId: a.teacherId
+        ? {
+            _id: String(a.teacherId._id),
+            name: a.teacherId.name || '',
+            email: a.teacherId.email || '',
+            subjects: Array.isArray(a.teacherId.subjects)
+              ? a.teacherId.subjects
               : [],
+          }
+        : null,
 
-          startTime:
-            assignment.startTime || '',
+      courseId: a.courseId
+        ? {
+            _id: String(a.courseId._id),
+            title: a.courseId.title || '',
+          }
+        : null,
 
-          endTime:
-            assignment.endTime || '',
+      daysOfWeek: Array.isArray(a.daysOfWeek) ? a.daysOfWeek : [],
+      startTime: a.startTime || '',
+      endTime: a.endTime || '',
+      status: a.status || 'scheduled',
+      notes: a.notes || '',
 
-          status:
-            assignment.status ||
-            'scheduled',
+      // Zoom
+      zoomMeetingId: a.zoomMeetingId || '',
+      zoomMeetingNumber: a.zoomMeetingNumber || '',
+      zoomPassword: a.zoomPassword || '',
+      zoomLink: a.zoomLink || '',
+      zoomStartUrl: a.zoomStartUrl || '',
+      zoomHostUserId: a.zoomHostUserId || '',
+      zoomTimezone: a.zoomTimezone || 'Asia/Karachi',
+      zoomProvider: a.zoomProvider || 'none',
+      zoomUuid: a.zoomUuid || '',
+      zoomMeetingCreated: Boolean(a.zoomMeetingCreated),
 
-          notes:
-            assignment.notes || '',
+      // ✅ LiveKit
+      livekitRoomName: a.livekitRoomName || '',
+      livekitHostIdentity: a.livekitHostIdentity || '',
+      livekitProvider: a.livekitProvider || 'none',
 
-          zoomMeetingId:
-            assignment.zoomMeetingId ||
-            '',
+      scheduleKey: a.scheduleKey || '',
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+    }));
 
-          zoomMeetingNumber:
-            assignment.zoomMeetingNumber ||
-            '',
-
-          zoomPassword:
-            assignment.zoomPassword ||
-            '',
-
-          zoomLink:
-            assignment.zoomLink ||
-            '',
-
-          zoomStartUrl:
-            assignment.zoomStartUrl ||
-            '',
-
-          zoomHostUserId:
-            assignment.zoomHostUserId ||
-            '',
-
-          zoomTimezone:
-            assignment.zoomTimezone ||
-            'Asia/Karachi',
-
-          zoomProvider:
-            assignment.zoomProvider ||
-            'none',
-
-          zoomUuid:
-            assignment.zoomUuid || '',
-
-          zoomMeetingCreated:
-            Boolean(
-              assignment.zoomMeetingCreated
-            ),
-
-          scheduleKey:
-            assignment.scheduleKey ||
-            '',
-
-          createdAt:
-            assignment.createdAt,
-
-          updatedAt:
-            assignment.updatedAt,
-        })
-      );
-
-    return NextResponse.json(
-      sanitized
-    );
+    return NextResponse.json(sanitized);
   } catch (error) {
-    console.error(
-      'GET /api/owner/assignments error:',
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error: 'Server error',
-      },
-      {
-        status: 500,
-      }
-    );
+    console.error('GET /api/owner/assignments error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
-/*
- * ========================================================
+/* ========================================================
  * POST
- * ========================================================
- */
-export async function POST(
-  req: NextRequest
-) {
+ * ======================================================== */
+export async function POST(req: NextRequest) {
   try {
-    const user =
-      await getUserFromRequest(req);
-
+    const user = await getUserFromRequest(req);
     if (!user) {
-      return NextResponse.json(
-        {
-          error: 'Unauthorized',
-        },
-        {
-          status: 401,
-        }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectDB();
 
-    const academy =
-      await Academy.findOne({
-        ownerId: user._id,
-      });
-
+    const academy = await Academy.findOne({ ownerId: user._id });
     if (!academy) {
-      return NextResponse.json(
-        {
-          error: 'No academy found',
-        },
-        {
-          status: 404,
-        }
-      );
+      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    const body =
-      (await req.json()) as RequestBody;
+    const body = (await req.json()) as RequestBody;
 
     const {
       studentId,
@@ -485,11 +291,15 @@ export async function POST(
       zoomProvider,
       zoomUuid,
       zoomMeetingCreated,
+
+      // ✅ LiveKit
+      livekitRoomName,
+      livekitHostToken,
+      livekitHostIdentity,
+      livekitProvider,
     } = body;
 
-    /*
-     * Required fields
-     */
+    /* Required fields */
     if (
       !studentId ||
       !teacherId ||
@@ -500,263 +310,128 @@ export async function POST(
       !endTime
     ) {
       return NextResponse.json(
-        {
-          error:
-            'All required fields are required.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'All required fields are required.' },
+        { status: 400 }
       );
     }
 
-    /*
-     * ObjectId validation
-     */
+    /* ObjectId validation */
     if (
-      !mongoose.Types.ObjectId.isValid(
-        studentId
-      ) ||
-      !mongoose.Types.ObjectId.isValid(
-        teacherId
-      ) ||
-      !mongoose.Types.ObjectId.isValid(
-        courseId
-      )
+      !mongoose.Types.ObjectId.isValid(studentId) ||
+      !mongoose.Types.ObjectId.isValid(teacherId) ||
+      !mongoose.Types.ObjectId.isValid(courseId)
     ) {
       return NextResponse.json(
-        {
-          error:
-            'Invalid student, teacher, or course ID.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'Invalid student, teacher, or course ID.' },
+        { status: 400 }
       );
     }
 
-    /*
-     * Days
-     */
-    const uniqueDays =
-      normalizeDays(daysOfWeek);
-
-    const invalidDays =
-      uniqueDays.filter(
-        (
-          day: string
-        ) =>
-          !VALID_DAYS.includes(
-            day as
-              (typeof VALID_DAYS)[number]
-          )
+    /* Days */
+    const uniqueDays = normalizeDays(daysOfWeek);
+    const invalidDays = uniqueDays.filter(
+      (day) => !VALID_DAYS.includes(day as (typeof VALID_DAYS)[number])
+    );
+    if (invalidDays.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid day(s): ${invalidDays.join(', ')}` },
+        { status: 400 }
       );
+    }
+
+    /* Time */
+    const normalizedStartTime = String(startTime).trim();
+    const normalizedEndTime = String(endTime).trim();
 
     if (
-      invalidDays.length > 0
+      !/^\d{2}:\d{2}$/.test(normalizedStartTime) ||
+      !/^\d{2}:\d{2}$/.test(normalizedEndTime)
     ) {
       return NextResponse.json(
-        {
-          error:
-            `Invalid day(s): ${invalidDays.join(', ')}`,
-        },
-        {
-          status: 400,
-        }
+        { error: 'Invalid start or end time.' },
+        { status: 400 }
       );
     }
 
-    /*
-     * Time
-     */
-    const normalizedStartTime =
-      String(startTime).trim();
-
-    const normalizedEndTime =
-      String(endTime).trim();
-
-    if (
-      !/^\d{2}:\d{2}$/.test(
-        normalizedStartTime
-      ) ||
-      !/^\d{2}:\d{2}$/.test(
-        normalizedEndTime
-      )
-    ) {
+    if (normalizedEndTime <= normalizedStartTime) {
       return NextResponse.json(
-        {
-          error:
-            'Invalid start or end time.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'End time must be after start time.' },
+        { status: 400 }
       );
     }
 
-    if (
-      normalizedEndTime <=
-      normalizedStartTime
-    ) {
+    /* Status */
+    const normalizedStatus = (status || 'scheduled') as string;
+    if (!VALID_STATUSES.includes(normalizedStatus as AssignmentStatus)) {
       return NextResponse.json(
-        {
-          error:
-            'End time must be after start time.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'Invalid assignment status.' },
+        { status: 400 }
       );
     }
 
-    /*
-     * Status
-     */
-    const normalizedStatus =
-      (status ||
-        'scheduled') as string;
-
-    if (
-      !VALID_STATUSES.includes(
-        normalizedStatus as AssignmentStatus
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'Invalid assignment status.',
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * Student
-     */
-    const student =
-      await Student.findOne({
-        _id: studentId,
-        academyId: academy._id,
-      }).lean();
-
+    /* Student / Teacher / Course ownership */
+    const student = await Student.findOne({
+      _id: studentId,
+      academyId: academy._id,
+    }).lean();
     if (!student) {
       return NextResponse.json(
-        {
-          error:
-            'Student not found in your academy.',
-        },
-        {
-          status: 404,
-        }
+        { error: 'Student not found in your academy.' },
+        { status: 404 }
       );
     }
 
-    /*
-     * Teacher
-     */
-    const teacher =
-      await Teacher.findOne({
-        _id: teacherId,
-        academyId: academy._id,
-      }).lean();
-
+    const teacher = await Teacher.findOne({
+      _id: teacherId,
+      academyId: academy._id,
+    }).lean();
     if (!teacher) {
       return NextResponse.json(
-        {
-          error:
-            'Teacher not found in your academy.',
-        },
-        {
-          status: 404,
-        }
+        { error: 'Teacher not found in your academy.' },
+        { status: 404 }
       );
     }
 
-    /*
-     * Course
-     */
-    const course =
-      await Course.findOne({
-        _id: courseId,
-        academyId: academy._id,
-      }).lean();
-
+    const course = await Course.findOne({
+      _id: courseId,
+      academyId: academy._id,
+    }).lean();
     if (!course) {
       return NextResponse.json(
-        {
-          error:
-            'Course not found in your academy.',
-        },
-        {
-          status: 404,
-        }
+        { error: 'Course not found in your academy.' },
+        { status: 404 }
       );
     }
 
-    /*
-     * Zoom normalization
-     */
+    /* ✅ Zoom normalization */
     const normalizedZoomMeetingId =
-      zoomMeetingId !== undefined &&
-      zoomMeetingId !== null
-        ? String(
-            zoomMeetingId
-          ).trim()
+      zoomMeetingId !== undefined && zoomMeetingId !== null
+        ? String(zoomMeetingId).trim()
         : '';
-
     const normalizedZoomMeetingNumber =
-      zoomMeetingNumber !== undefined &&
-      zoomMeetingNumber !== null
-        ? String(
-            zoomMeetingNumber
-          ).trim()
+      zoomMeetingNumber !== undefined && zoomMeetingNumber !== null
+        ? String(zoomMeetingNumber).trim()
         : '';
-
     const normalizedZoomPassword =
-      typeof zoomPassword ===
-      'string'
-        ? zoomPassword.trim()
-        : '';
-
+      typeof zoomPassword === 'string' ? zoomPassword.trim() : '';
     const normalizedZoomLink =
-      typeof zoomLink ===
-      'string'
-        ? zoomLink.trim()
-        : '';
-
+      typeof zoomLink === 'string' ? zoomLink.trim() : '';
     const normalizedZoomStartUrl =
-      typeof zoomStartUrl ===
-      'string'
-        ? zoomStartUrl.trim()
-        : '';
-
+      typeof zoomStartUrl === 'string' ? zoomStartUrl.trim() : '';
     const normalizedZoomHostUserId =
-      zoomHostUserId !== undefined &&
-      zoomHostUserId !== null
-        ? String(
-            zoomHostUserId
-          ).trim()
+      zoomHostUserId !== undefined && zoomHostUserId !== null
+        ? String(zoomHostUserId).trim()
         : '';
-
     const normalizedZoomTimezone =
-      typeof zoomTimezone ===
-        'string' &&
-      zoomTimezone.trim()
+      typeof zoomTimezone === 'string' && zoomTimezone.trim()
         ? zoomTimezone.trim()
         : 'Asia/Karachi';
 
     let normalizedZoomProvider =
-      typeof zoomProvider ===
-        'string' &&
-      zoomProvider.trim()
+      typeof zoomProvider === 'string' && zoomProvider.trim()
         ? zoomProvider.trim()
         : '';
-
-    if (
-      !normalizedZoomProvider
-    ) {
+    if (!normalizedZoomProvider) {
       normalizedZoomProvider =
         normalizedZoomMeetingId ||
         normalizedZoomMeetingNumber ||
@@ -765,256 +440,152 @@ export async function POST(
           ? 'zoom'
           : 'none';
     }
-
-    if (
-      !VALID_ZOOM_PROVIDERS.includes(
-        normalizedZoomProvider as ZoomProvider
-      )
-    ) {
+    if (!VALID_PROVIDERS.includes(normalizedZoomProvider as Provider)) {
       return NextResponse.json(
-        {
-          error:
-            'Invalid Zoom provider.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'Invalid Zoom provider.' },
+        { status: 400 }
       );
     }
 
-    /*
-     * Schedule Key
-     */
-    const scheduleKey =
-      buildScheduleKey({
-        academyId:
-          academy._id as mongoose.Types.ObjectId,
+    /* ✅ LiveKit normalization */
+    const normalizedLivekitRoomName =
+      typeof livekitRoomName === 'string' ? livekitRoomName.trim() : '';
+    const normalizedLivekitHostToken =
+      typeof livekitHostToken === 'string' ? livekitHostToken.trim() : '';
+    const normalizedLivekitHostIdentity =
+      typeof livekitHostIdentity === 'string'
+        ? livekitHostIdentity.trim()
+        : '';
+    const normalizedLivekitProvider =
+      typeof livekitProvider === 'string' && livekitProvider.trim()
+        ? livekitProvider.trim()
+        : normalizedLivekitRoomName
+        ? 'livekit'
+        : 'none';
 
-        studentId,
+    if (!VALID_PROVIDERS.includes(normalizedLivekitProvider as Provider)) {
+      return NextResponse.json(
+        { error: 'Invalid LiveKit provider.' },
+        { status: 400 }
+      );
+    }
 
-        teacherId,
+    /* ✅ Schedule key */
+    const scheduleKey = buildScheduleKey({
+      academyId: academy._id as mongoose.Types.ObjectId,
+      studentId,
+      teacherId,
+      courseId,
+      daysOfWeek: uniqueDays,
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
+    });
 
-        courseId,
-
-        daysOfWeek:
-          uniqueDays,
-
-        startTime:
-          normalizedStartTime,
-
-        endTime:
-          normalizedEndTime,
-      });
-
-    /*
-     * Friendly duplicate check
-     *
-     * MongoDB unique index remains
-     * the final protection.
-     */
+    /* Duplicate check */
     if (
-      normalizedStatus ===
-        'scheduled' ||
-      normalizedStatus ===
-        'ongoing'
+      normalizedStatus === 'scheduled' ||
+      normalizedStatus === 'ongoing'
     ) {
-      const existingAssignment =
-        await Assignment.findOne({
-          academyId:
-            academy._id,
-
-          scheduleKey,
-
-          status: {
-            $in: [
-              'scheduled',
-              'ongoing',
-            ],
-          },
-        })
-          .select('_id')
-          .lean();
+      const existingAssignment = await Assignment.findOne({
+        academyId: academy._id,
+        scheduleKey,
+        status: { $in: ['scheduled', 'ongoing'] },
+      })
+        .select('_id')
+        .lean();
 
       if (existingAssignment) {
         return NextResponse.json(
           {
             error:
               'یہ کلاس پہلے ہی اسی طالب علم، استاد اور وقت کے ساتھ موجود ہے۔',
-            code:
-              'DUPLICATE_ASSIGNMENT',
-            assignmentId:
-              String(
-                existingAssignment._id
-              ),
+            code: 'DUPLICATE_ASSIGNMENT',
+            assignmentId: String(existingAssignment._id),
           },
-          {
-            status: 409,
-          }
+          { status: 409 }
         );
       }
     }
 
-    /*
-     * Create
-     */
-    const newAssignment =
-      await Assignment.create({
-        academyId:
-          academy._id,
+    /* ✅ Create */
+    const newAssignment = await Assignment.create({
+      academyId: academy._id,
+      studentId,
+      teacherId,
+      courseId,
+      daysOfWeek: uniqueDays,
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
+      status: normalizedStatus,
+      notes:
+        typeof notes === 'string' ? notes.trim().slice(0, 1000) : '',
+      scheduleKey,
 
-        studentId,
+      // Zoom
+      zoomMeetingId: normalizedZoomMeetingId,
+      zoomMeetingNumber: normalizedZoomMeetingNumber,
+      zoomPassword: normalizedZoomPassword,
+      zoomLink: normalizedZoomLink,
+      zoomStartUrl: normalizedZoomStartUrl,
+      zoomHostUserId: normalizedZoomHostUserId,
+      zoomTimezone: normalizedZoomTimezone,
+      zoomProvider: normalizedZoomProvider,
+      zoomUuid:
+        zoomUuid !== undefined && zoomUuid !== null
+          ? String(zoomUuid).trim()
+          : '',
+      zoomMeetingCreated: Boolean(zoomMeetingCreated),
 
-        teacherId,
-
-        courseId,
-
-        daysOfWeek:
-          uniqueDays,
-
-        startTime:
-          normalizedStartTime,
-
-        endTime:
-          normalizedEndTime,
-
-        status:
-          normalizedStatus,
-
-        notes:
-          typeof notes === 'string'
-            ? notes
-                .trim()
-                .slice(0, 1000)
-            : '',
-
-        scheduleKey,
-
-        zoomMeetingId:
-          normalizedZoomMeetingId,
-
-        zoomMeetingNumber:
-          normalizedZoomMeetingNumber,
-
-        zoomPassword:
-          normalizedZoomPassword,
-
-        zoomLink:
-          normalizedZoomLink,
-
-        zoomStartUrl:
-          normalizedZoomStartUrl,
-
-        zoomHostUserId:
-          normalizedZoomHostUserId,
-
-        zoomTimezone:
-          normalizedZoomTimezone,
-
-        zoomProvider:
-          normalizedZoomProvider,
-
-        zoomUuid:
-          zoomUuid !== undefined &&
-          zoomUuid !== null
-            ? String(
-                zoomUuid
-              ).trim()
-            : '',
-
-        zoomMeetingCreated:
-          Boolean(
-            zoomMeetingCreated
-          ),
-      });
+      // ✅ LiveKit
+      livekitRoomName: normalizedLivekitRoomName,
+      livekitHostToken: normalizedLivekitHostToken,
+      livekitHostIdentity: normalizedLivekitHostIdentity,
+      livekitProvider: normalizedLivekitProvider,
+    });
 
     return NextResponse.json(
-      {
-        success: true,
-        assignment:
-          newAssignment,
-      },
-      {
-        status: 201,
-      }
+      { success: true, assignment: newAssignment },
+      { status: 201 }
     );
   } catch (error: unknown) {
-    console.error(
-      'POST /api/owner/assignments error:',
-      error
-    );
+    console.error('POST /api/owner/assignments error:', error);
 
-    const mongoError =
-      error as {
-        code?: number;
-        name?: string;
-        message?: string;
-      };
+    const mongoError = error as {
+      code?: number;
+      name?: string;
+      message?: string;
+    };
 
-    /*
-     * Duplicate key
-     */
-    if (
-      mongoError.code === 11000
-    ) {
+    if (mongoError.code === 11000) {
       return NextResponse.json(
         {
           error:
             'یہ کلاس پہلے ہی اسی schedule پر موجود ہے۔ ایک ہی کلاس دوبارہ محفوظ نہیں کی جا سکتی۔',
-          code:
-            'DUPLICATE_ASSIGNMENT',
+          code: 'DUPLICATE_ASSIGNMENT',
         },
-        {
-          status: 409,
-        }
+        { status: 409 }
       );
     }
 
-    /*
-     * Validation
-     */
-    if (
-      mongoError.name ===
-      'ValidationError'
-    ) {
+    if (mongoError.name === 'ValidationError') {
       return NextResponse.json(
         {
-          error:
-            mongoError.message ||
-            'Assignment validation failed.',
+          error: mongoError.message || 'Assignment validation failed.',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * Cast
-     */
-    if (
-      mongoError.name ===
-      'CastError'
-    ) {
+    if (mongoError.name === 'CastError') {
       return NextResponse.json(
-        {
-          error:
-            'Invalid assignment data.',
-        },
-        {
-          status: 400,
-        }
+        { error: 'Invalid assignment data.' },
+        { status: 400 }
       );
     }
 
     return NextResponse.json(
-      {
-        error:
-          mongoError.message ||
-          'Server error.',
-      },
-      {
-        status: 500,
-      }
+      { error: mongoError.message || 'Server error.' },
+      { status: 500 }
     );
   }
 }

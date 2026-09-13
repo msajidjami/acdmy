@@ -6,7 +6,7 @@ import Link from 'next/link';
 import connectDB from '@/app/lib/dbConnect';
 import Teacher from '@/models/Teacher';
 import Academy from '@/models/Academy';
-import ZoomConnection from '@/models/ZoomConnection';
+import Assignment from '@/models/Assignment';
 
 import {
   User,
@@ -23,7 +23,6 @@ import {
   KeyRound,
   BadgeCheck,
   AlertTriangle,
-  RefreshCw,
   Hash,
   IdCard,
   CircleDot,
@@ -31,6 +30,11 @@ import {
   GraduationCap,
   Activity,
   Info,
+  Signal,
+  Lock,
+  Layers,
+  Server,
+  Radio,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +51,12 @@ type JwtUserPayload = JwtPayload & {
 type TeacherData = {
   teacher: any;
   academy: any;
-  zoomConnection: any | null;
+  livekitStats: {
+    totalRooms: number;
+    activeRooms: number;
+    latestRoomName: string;
+    hasAnyRoom: boolean;
+  };
 };
 
 /* ======================================================
@@ -55,9 +64,7 @@ type TeacherData = {
    ====================================================== */
 
 function normalizeEmail(value: unknown): string {
-  return String(value || '')
-    .trim()
-    .toLowerCase();
+  return String(value || '').trim().toLowerCase();
 }
 
 function getInitials(name: string): string {
@@ -68,7 +75,7 @@ function getInitials(name: string): string {
 }
 
 /* ======================================================
-   Get Teacher + Zoom Data
+   Get Teacher + LiveKit Data
    ====================================================== */
 
 async function getTeacherData(email: string): Promise<TeacherData | null> {
@@ -87,17 +94,44 @@ async function getTeacherData(email: string): Promise<TeacherData | null> {
     ? await Academy.findById(teacher.academyId).select('_id name').lean()
     : null;
 
-  const zoomConnection = await ZoomConnection.findOne({
-    academyId: teacher.academyId,
-    teacherId: teacher._id,
-    zoomConnected: true,
-  })
-    .select(
-      '_id zoomConnected zoomUserId zoomAccountId zoomEmail zoomTokenExpiresAt zoomScope createdAt updatedAt'
-    )
-    .lean();
+  // ✅ LiveKit stats — count teacher's assignments with rooms
+  let totalRooms = 0;
+  let activeRooms = 0;
+  let latestRoomName = '';
+  let hasAnyRoom = false;
 
-  return { teacher, academy, zoomConnection };
+  if (teacher.academyId) {
+    const assignments = await Assignment.find({
+      academyId: teacher.academyId,
+      teacherId: teacher._id,
+      status: { $ne: 'cancelled' },
+      livekitRoomName: { $nin: ['', null] },
+    })
+      .select('livekitRoomName status createdAt')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    totalRooms = assignments.length;
+    activeRooms = assignments.filter(
+      (a: any) => a.status === 'scheduled' || a.status === 'ongoing'
+    ).length;
+    latestRoomName = String(
+      (assignments[0] as any)?.livekitRoomName || ''
+    );
+    hasAnyRoom = totalRooms > 0;
+  }
+
+  return {
+    teacher,
+    academy,
+    livekitStats: {
+      totalRooms,
+      activeRooms,
+      latestRoomName,
+      hasAnyRoom,
+    },
+  };
 }
 
 /* ======================================================
@@ -167,15 +201,23 @@ export default async function TeacherSettingsPage({
     );
   }
 
-  const { teacher, academy, zoomConnection } = data;
+  const { teacher, academy, livekitStats } = data;
 
   const params = await searchParams;
-  const zoomStatus = String(params?.zoom || '').trim();
-  const zoomMessage = String(params?.message || '').trim();
-  const isZoomConnected = Boolean(zoomConnection?.zoomConnected);
+  const statusParam = String(params?.zoom || '').trim();
+  const statusMessage = String(params?.message || '').trim();
 
   const teacherName = teacher.name || 'Teacher';
   const initials = getInitials(teacherName);
+
+  // ✅ LiveKit کی configuration کا status (server side سے)
+  const livekitApiConfigured = Boolean(
+    process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET
+  );
+  const livekitUrlConfigured = Boolean(
+    process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL
+  );
+  const livekitReady = livekitApiConfigured && livekitUrlConfigured;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-0 pb-10">
@@ -254,13 +296,13 @@ export default async function TeacherSettingsPage({
               </div>
               <div
                 className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl backdrop-blur-sm border font-semibold ${
-                  isZoomConnected
+                  livekitStats.hasAnyRoom
                     ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100'
                     : 'bg-amber-500/20 border-amber-400/30 text-amber-100'
                 }`}
               >
-                <Video className="h-3.5 w-3.5" />
-                Zoom {isZoomConnected ? 'Ready' : 'Setup'}
+                <Signal className="h-3.5 w-3.5" />
+                LiveKit {livekitStats.hasAnyRoom ? 'Ready' : 'Setup'}
               </div>
             </div>
           </div>
@@ -268,10 +310,10 @@ export default async function TeacherSettingsPage({
       </div>
 
       {/* ============================================
-          ZOOM CALLBACK — Success
+          CALLBACK — Success
       ============================================ */}
 
-      {zoomStatus === 'connected' && (
+      {statusParam === 'connected' && (
         <div className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="shrink-0 h-10 w-10 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30">
@@ -279,10 +321,10 @@ export default async function TeacherSettingsPage({
             </div>
             <div className="min-w-0">
               <h2 className="font-bold text-emerald-900">
-                Zoom Successfully Connected
+                LiveKit Classroom Successfully Connected
               </h2>
               <p className="mt-1 text-sm text-emerald-700 leading-relaxed">
-                Your Zoom account is now linked to your teacher account.
+                Your LiveKit room is now linked to your teacher account.
               </p>
             </div>
           </div>
@@ -290,19 +332,21 @@ export default async function TeacherSettingsPage({
       )}
 
       {/* ============================================
-          ZOOM CALLBACK — Error
+          CALLBACK — Error
       ============================================ */}
 
-      {zoomStatus === 'error' && (
+      {statusParam === 'error' && (
         <div className="relative overflow-hidden rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50 to-red-50 p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="shrink-0 h-10 w-10 rounded-xl bg-rose-500 flex items-center justify-center shadow-md shadow-rose-500/30">
               <XCircle className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0">
-              <h2 className="font-bold text-rose-900">Zoom Connection Failed</h2>
+              <h2 className="font-bold text-rose-900">
+                LiveKit Connection Failed
+              </h2>
               <p className="mt-1 break-words text-sm text-rose-700 leading-relaxed">
-                {zoomMessage || 'An error occurred while connecting Zoom.'}
+                {statusMessage || 'An error occurred while connecting LiveKit.'}
               </p>
             </div>
           </div>
@@ -362,12 +406,12 @@ export default async function TeacherSettingsPage({
       </div>
 
       {/* ============================================
-          ZOOM INTEGRATION CARD
+          LIVEKIT INTEGRATION CARD
       ============================================ */}
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 text-white">
+        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-6 text-white">
           <div className="absolute inset-0 opacity-20 pointer-events-none">
             <div className="absolute -top-16 -right-10 h-56 w-56 rounded-full bg-white/40 blur-3xl" />
           </div>
@@ -375,32 +419,32 @@ export default async function TeacherSettingsPage({
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <div className="shrink-0 h-14 w-14 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center shadow-lg">
-                <Video className="h-7 w-7 text-white" />
+                <Signal className="h-7 w-7 text-white" />
               </div>
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-sm text-[10px] font-bold uppercase tracking-wider">
                   <Zap className="h-3 w-3" />
-                  Zoom Integration
+                  LiveKit Integration
                 </div>
-                <h2 className="mt-2 text-xl font-bold">Zoom Classroom</h2>
-                <p className="mt-1 text-sm text-indigo-100">
-                  Connect Zoom to start your assigned classes.
+                <h2 className="mt-2 text-xl font-bold">LiveKit Classroom</h2>
+                <p className="mt-1 text-sm text-emerald-100">
+                  Live video classes — no recording, privacy-first.
                 </p>
               </div>
             </div>
 
-            {isZoomConnected ? (
+            {livekitStats.hasAnyRoom ? (
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 text-emerald-100 text-xs font-bold uppercase tracking-wider w-fit">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                 </span>
-                Connected
+                Rooms Ready
               </span>
             ) : (
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 backdrop-blur-sm border border-amber-400/30 text-amber-100 text-xs font-bold uppercase tracking-wider w-fit">
                 <CircleDot className="h-3 w-3" />
-                Not Connected
+                Waiting for Assignments
               </span>
             )}
           </div>
@@ -408,34 +452,41 @@ export default async function TeacherSettingsPage({
 
         {/* Body */}
         <div className="p-5 sm:p-6">
-          {!isZoomConnected ? (
+          {!livekitStats.hasAnyRoom ? (
             /* ----------------------------------------
-               NOT CONNECTED STATE
+               NO ROOMS YET
             ---------------------------------------- */
             <div className="space-y-5">
-              {/* Instructions */}
-              <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-indigo-50 p-5">
+              <div className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-emerald-50 p-5">
                 <div className="flex items-start gap-3">
                   <div className="shrink-0 h-10 w-10 rounded-xl bg-sky-500 flex items-center justify-center shadow-md shadow-sky-500/30">
                     <Info className="h-5 w-5 text-white" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-bold text-sky-900">
-                      Before you connect
+                      How LiveKit works for you
                     </h3>
                     <ul className="mt-3 space-y-2 text-sm leading-6 text-sky-800">
                       <li className="flex items-start gap-2">
                         <span className="shrink-0 mt-2 h-1.5 w-1.5 rounded-full bg-sky-500" />
                         <span>
-                          Your Zoom account must already be signed in on this
-                          device.
+                          Your academy owner creates LiveKit rooms for your
+                          classes.
                         </span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="shrink-0 mt-2 h-1.5 w-1.5 rounded-full bg-sky-500" />
                         <span>
-                          Your Zoom account email must match the email you used
-                          to sign in to this website.
+                          When a class is scheduled, you&apos;ll see it in{' '}
+                          <strong>My Classes</strong> with an{' '}
+                          <strong>Open Classroom</strong> button.
+                        </span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="shrink-0 mt-2 h-1.5 w-1.5 rounded-full bg-sky-500" />
+                        <span>
+                          No Zoom account needed — LiveKit is fully integrated
+                          into this platform.
                         </span>
                       </li>
                     </ul>
@@ -451,37 +502,42 @@ export default async function TeacherSettingsPage({
                   tone="sky"
                 />
                 <FeaturePill
-                  icon={<Sparkles className="h-3.5 w-3.5" />}
-                  label="Host Controls"
-                  tone="violet"
+                  icon={<Lock className="h-3.5 w-3.5" />}
+                  label="No Recording"
+                  tone="emerald"
                 />
                 <FeaturePill
                   icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                  label="Secure OAuth"
-                  tone="emerald"
+                  label="End-to-end"
+                  tone="violet"
+                />
+                <FeaturePill
+                  icon={<Layers className="h-3.5 w-3.5" />}
+                  label="Code + Design Whiteboards"
+                  tone="sky"
                 />
               </div>
 
               {/* CTA */}
               <div>
-                <a
-                  href="/api/zoom/connect"
-                  className="group inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/40 hover:-translate-y-0.5 transition-all"
+                <Link
+                  href="/teacher/classes"
+                  className="group inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all"
                 >
-                  <Video className="h-4 w-4" />
-                  Connect Zoom Account
+                  <GraduationCap className="h-4 w-4" />
+                  Go to My Classes
                   <ExternalLink className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </a>
+                </Link>
 
                 <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5">
-                  <KeyRound className="h-3 w-3" />
-                  You will be redirected to the Zoom authorization page.
+                  <Info className="h-3 w-3" />
+                  Rooms will appear here once your owner assigns you a class.
                 </p>
               </div>
             </div>
           ) : (
             /* ----------------------------------------
-               CONNECTED STATE
+               ROOMS EXIST
             ---------------------------------------- */
             <div className="space-y-5">
               {/* Success banner */}
@@ -492,62 +548,65 @@ export default async function TeacherSettingsPage({
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-bold text-emerald-900">
-                      Zoom is connected
+                      LiveKit is ready
                     </h3>
                     <p className="mt-1 text-sm leading-6 text-emerald-800">
-                      Your Zoom account is ready to be used for assigned
-                      online classes.
+                      Your LiveKit classrooms are configured. Open{' '}
+                      <strong>My Classes</strong> to start a class.
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Zoom Details Grid */}
-              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+              {/* Stats grid */}
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <DetailTile
-                  icon={<Mail className="h-4 w-4" />}
-                  label="Zoom Account Email"
-                  value={zoomConnection.zoomEmail || 'Not available'}
+                  icon={<Video className="h-4 w-4" />}
+                  label="Total Rooms"
+                  value={String(livekitStats.totalRooms)}
                   tone="indigo"
-                  breakAll
+                />
+
+                <DetailTile
+                  icon={<Radio className="h-4 w-4" />}
+                  label="Active Classes"
+                  value={String(livekitStats.activeRooms)}
+                  tone="emerald"
+                />
+
+                <DetailTile
+                  icon={<Signal className="h-4 w-4" />}
+                  label="Provider"
+                  value="LiveKit Cloud"
+                  tone="sky"
+                />
+
+                <DetailTile
+                  icon={<Lock className="h-4 w-4" />}
+                  label="Recording"
+                  value="Disabled"
+                  tone="violet"
+                />
+
+                <DetailTile
+                  icon={<Server className="h-4 w-4" />}
+                  label="API Status"
+                  value={livekitReady ? 'Connected' : 'Not Configured'}
+                  tone={livekitReady ? 'emerald' : 'rose'}
                 />
 
                 <DetailTile
                   icon={<IdCard className="h-4 w-4" />}
-                  label="Zoom User ID"
-                  value={zoomConnection.zoomUserId || 'Not available'}
-                  tone="violet"
+                  label="Latest Room"
+                  value={livekitStats.latestRoomName || 'None'}
+                  tone="indigo"
                   mono
                   breakAll
-                />
-
-                <DetailTile
-                  icon={<Hash className="h-4 w-4" />}
-                  label="Zoom Account ID"
-                  value={zoomConnection.zoomAccountId || 'Not available'}
-                  tone="sky"
-                  mono
-                  breakAll
-                />
-
-                <DetailTile
-                  icon={<BadgeCheck className="h-4 w-4" />}
-                  label="Connection Status"
-                  value="Connected & Verified"
-                  tone="emerald"
                 />
               </div>
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
-                <a
-                  href="/api/zoom/connect"
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 px-5 py-3 text-sm font-bold text-indigo-700 transition"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Reconnect Zoom
-                </a>
-
                 <Link
                   href="/teacher/classes"
                   className="inline-flex items-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-3 text-sm font-bold text-white transition"
@@ -555,9 +614,62 @@ export default async function TeacherSettingsPage({
                   <GraduationCap className="h-4 w-4" />
                   Go to My Classes
                 </Link>
+
+                <Link
+                  href="/teacher/schedule"
+                  className="inline-flex items-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 px-5 py-3 text-sm font-bold text-indigo-700 transition"
+                >
+                  <Activity className="h-4 w-4" />
+                  My Schedule
+                </Link>
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ============================================
+          SYSTEM CONFIGURATION (Read-only)
+      ============================================ */}
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="p-5 border-b border-slate-100 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-sm shrink-0">
+            <Server className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              System Configuration
+            </h2>
+            <p className="text-xs text-slate-500">
+              Managed by your academy administrator
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:gap-4 p-5 sm:grid-cols-2">
+          <StatusTile
+            label="LiveKit API Key"
+            value={livekitApiConfigured ? 'Configured' : 'Not Configured'}
+            ok={livekitApiConfigured}
+          />
+          <StatusTile
+            label="LiveKit URL"
+            value={livekitUrlConfigured ? 'Configured' : 'Not Configured'}
+            ok={livekitUrlConfigured}
+          />
+          <StatusTile
+            label="OAuth Callback"
+            value="Disabled (LiveKit mode)"
+            ok={true}
+            neutral
+          />
+          <StatusTile
+            label="Recording Feature"
+            value="Disabled by policy"
+            ok={true}
+            neutral
+          />
         </div>
       </div>
 
@@ -573,9 +685,9 @@ export default async function TeacherSettingsPage({
           <div className="min-w-0">
             <h3 className="font-bold text-slate-800">Security &amp; Privacy</h3>
             <p className="mt-1.5 text-sm leading-6 text-slate-500">
-              Zoom OAuth access and refresh tokens are never exposed to the
-              browser. This sensitive information is stored only in the
-              server-side database.
+              LiveKit access tokens are generated server-side and never stored
+              in the browser. All video and audio traffic is encrypted in
+              transit. Recordings are disabled — nothing is saved to disk.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
@@ -584,11 +696,11 @@ export default async function TeacherSettingsPage({
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[10px] font-bold uppercase tracking-wider">
                 <ShieldCheck className="h-3 w-3" />
-                OAuth 2.0
+                Encrypted (DTLS-SRTP)
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[10px] font-bold uppercase tracking-wider">
-                <KeyRound className="h-3 w-3" />
-                Encrypted
+                <Lock className="h-3 w-3" />
+                No recording
               </span>
             </div>
           </div>
@@ -671,7 +783,7 @@ function DetailTile({
   icon: React.ReactNode;
   label: string;
   value: string;
-  tone: 'indigo' | 'sky' | 'violet' | 'emerald';
+  tone: 'indigo' | 'sky' | 'violet' | 'emerald' | 'rose';
   mono?: boolean;
   breakAll?: boolean;
 }) {
@@ -696,6 +808,11 @@ function DetailTile({
       text: 'text-emerald-600',
       border: 'border-emerald-100',
     },
+    rose: {
+      bg: 'bg-rose-50',
+      text: 'text-rose-600',
+      border: 'border-rose-100',
+    },
   }[tone];
 
   return (
@@ -716,9 +833,46 @@ function DetailTile({
         className={`text-sm font-semibold text-slate-900 ${
           mono ? 'font-mono' : ''
         } ${breakAll ? 'break-all' : 'truncate'}`}
+        title={value}
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function StatusTile({
+  label,
+  value,
+  ok,
+  neutral,
+}: {
+  label: string;
+  value: string;
+  ok: boolean;
+  neutral?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+      <span className="text-xs font-bold text-slate-600">{label}</span>
+      <span
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+          neutral
+            ? 'bg-slate-100 text-slate-600 border border-slate-200'
+            : ok
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : 'bg-rose-50 text-rose-700 border border-rose-200'
+        }`}
+      >
+        {neutral ? (
+          <CircleDot className="h-3 w-3" />
+        ) : ok ? (
+          <CheckCircle2 className="h-3 w-3" />
+        ) : (
+          <XCircle className="h-3 w-3" />
+        )}
+        {value}
+      </span>
     </div>
   );
 }

@@ -18,10 +18,9 @@ import {
   GraduationCap,
   Info,
   X,
-  ExternalLink,
-  Copy,
-  Check,
   CalendarDays,
+  Signal,
+  ShieldCheck,
   Zap,
 } from 'lucide-react';
 
@@ -37,12 +36,10 @@ type ClassRow = {
   endTime: string;
   status: string;
   notes: string;
-  zoomMeetingId: string;
-  zoomMeetingNumber: string;
-  zoomPassword: string;
-  zoomLink: string;
-  zoomTimezone: string;
-  zoomProvider: string;
+  // ✅ LiveKit fields
+  livekitRoomName: string;
+  livekitHostIdentity: string;
+  livekitProvider: string;
 };
 
 type Props = {
@@ -97,20 +94,24 @@ export default function ClassesView({
   const todayName = getTodayName();
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'ongoing'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'scheduled' | 'ongoing'
+  >('all');
   const [dayFilter, setDayFilter] = useState<string>('all');
-  const [zoomOnly, setZoomOnly] = useState(false);
+  const [livekitOnly, setLivekitOnly] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
 
   /* ------------------ Derived ------------------ */
 
   const stats = useMemo(() => {
-    const todayCount = classes.filter((c) => isTodayClass(c, todayName)).length;
+    const todayCount = classes.filter((c) =>
+      isTodayClass(c, todayName)
+    ).length;
     return {
       total: classes.length,
       scheduled: classes.filter((c) => c.status === 'scheduled').length,
       ongoing: classes.filter((c) => c.status === 'ongoing').length,
-      zoom: classes.filter((c) => Boolean(c.zoomMeetingNumber)).length,
+      livekit: classes.filter((c) => Boolean(c.livekitRoomName)).length,
       today: todayCount,
     };
   }, [classes, todayName]);
@@ -137,8 +138,8 @@ export default function ClassesView({
       result = result.filter((c) => c.daysOfWeek.includes(dayFilter));
     }
 
-    if (zoomOnly) {
-      result = result.filter((c) => Boolean(c.zoomMeetingNumber));
+    if (livekitOnly) {
+      result = result.filter((c) => Boolean(c.livekitRoomName));
     }
 
     if (todayOnly) {
@@ -157,20 +158,28 @@ export default function ClassesView({
 
       return String(a.startTime).localeCompare(String(b.startTime));
     });
-  }, [classes, search, statusFilter, dayFilter, zoomOnly, todayOnly, todayName]);
+  }, [
+    classes,
+    search,
+    statusFilter,
+    dayFilter,
+    livekitOnly,
+    todayOnly,
+    todayName,
+  ]);
 
   const hasActiveFilters =
     search.trim() !== '' ||
     statusFilter !== 'all' ||
     dayFilter !== 'all' ||
-    zoomOnly ||
+    livekitOnly ||
     todayOnly;
 
   const clearAll = () => {
     setSearch('');
     setStatusFilter('all');
     setDayFilter('all');
-    setZoomOnly(false);
+    setLivekitOnly(false);
     setTodayOnly(false);
   };
 
@@ -202,7 +211,9 @@ export default function ClassesView({
             <p className="mt-2 text-base sm:text-lg text-indigo-100">
               {teacherName}
               <span className="opacity-60 mx-2">·</span>
-              <span className="text-sm opacity-90 break-all">{teacherEmail}</span>
+              <span className="text-sm opacity-90 break-all">
+                {teacherEmail}
+              </span>
             </p>
 
             {todayCount > 0 && (
@@ -211,7 +222,9 @@ export default function ClassesView({
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
                 </span>
-                You have <span className="text-white font-bold">{todayCount}</span> class{todayCount > 1 ? 'es' : ''} today
+                You have{' '}
+                <span className="text-white font-bold">{todayCount}</span> class
+                {todayCount > 1 ? 'es' : ''} today
               </div>
             )}
           </div>
@@ -228,8 +241,8 @@ export default function ClassesView({
               href="/teacher/settings"
               className="inline-flex items-center gap-2 rounded-xl bg-white text-indigo-700 px-4 py-2.5 text-sm font-bold hover:bg-white/90 transition shadow-lg shadow-purple-900/20"
             >
-              <Video className="h-4 w-4" />
-              Zoom Settings
+              <Signal className="h-4 w-4" />
+              LiveKit Settings
             </Link>
           </div>
         </div>
@@ -274,8 +287,8 @@ export default function ClassesView({
           text="text-amber-600"
         />
         <StatCard
-          title="Zoom"
-          value={stats.zoom}
+          title="LiveKit"
+          value={stats.livekit}
           icon={<Video className="h-5 w-5" />}
           gradient="from-sky-500 to-cyan-600"
           bg="bg-sky-50"
@@ -356,18 +369,18 @@ export default function ClassesView({
             );
           })}
 
-          {/* Zoom Toggle */}
+          {/* LiveKit Toggle */}
           <button
             type="button"
-            onClick={() => setZoomOnly((v) => !v)}
+            onClick={() => setLivekitOnly((v) => !v)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-              zoomOnly
+              livekitOnly
                 ? 'bg-gradient-to-r from-sky-500 to-cyan-600 text-white shadow-md shadow-sky-500/25'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             <Video className="h-3.5 w-3.5" />
-            Zoom only
+            LiveKit only
           </button>
 
           {/* Today Toggle */}
@@ -406,7 +419,9 @@ export default function ClassesView({
           {DAYS.map((day) => {
             const isToday = day === todayName;
             const active = dayFilter === day;
-            const count = classes.filter((c) => c.daysOfWeek.includes(day)).length;
+            const count = classes.filter((c) =>
+              c.daysOfWeek.includes(day)
+            ).length;
             if (count === 0) return null;
 
             return (
@@ -447,7 +462,9 @@ export default function ClassesView({
           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
             <p className="text-xs text-slate-500">
               Showing{' '}
-              <span className="font-bold text-slate-800">{filtered.length}</span>{' '}
+              <span className="font-bold text-slate-800">
+                {filtered.length}
+              </span>{' '}
               of {classes.length} classes
             </p>
             {hasActiveFilters && (
@@ -478,7 +495,7 @@ export default function ClassesView({
           </h3>
           <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm">
             Your academy owner has not assigned any active classes to you yet.
-            Once assigned, they'll appear here.
+            Once assigned, they&apos;ll appear here.
           </p>
         </div>
       ) : filtered.length === 0 ? (
@@ -585,20 +602,8 @@ function ClassCard({
   todayName: string;
   isToday: boolean;
 }) {
-  const [copied, setCopied] = useState<string | null>(null);
-
-  const hasZoom = Boolean(row.zoomMeetingNumber);
+  const hasLiveKit = Boolean(row.livekitRoomName);
   const isOngoing = row.status === 'ongoing';
-
-  const handleCopy = async (text: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied(null), 1800);
-    } catch {
-      /* ignore */
-    }
-  };
 
   return (
     <article
@@ -678,13 +683,13 @@ function ClassCard({
             </div>
           </div>
 
-          {hasZoom && (
+          {hasLiveKit && (
             <span
-              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200 text-[10px] font-bold uppercase tracking-wider"
-              title={`Zoom · ${row.zoomProvider || 'Configured'}`}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-[10px] font-bold uppercase tracking-wider"
+              title={`LiveKit · ${row.livekitProvider || 'livekit'}`}
             >
-              <Video className="h-3 w-3" />
-              Zoom
+              <Signal className="h-3 w-3" />
+              LiveKit
             </span>
           )}
         </div>
@@ -715,7 +720,7 @@ function ClassCard({
           </span>
           <span className="inline-flex items-center gap-1 text-xs text-slate-400">
             <Info className="h-3 w-3" />
-            {row.zoomTimezone || 'Asia/Karachi'}
+            Asia/Karachi
           </span>
         </div>
 
@@ -760,54 +765,21 @@ function ClassCard({
           </div>
         )}
 
-        {/* Zoom details strip */}
-        {hasZoom && (
-          <div className="mb-4 rounded-xl bg-gradient-to-r from-sky-50 to-cyan-50 border border-sky-100 px-3 py-2.5">
+        {/* LiveKit details strip */}
+        {hasLiveKit && (
+          <div className="mb-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-slate-500">Meeting ID:</span>
-                <span className="font-bold text-slate-800">
-                  {row.zoomMeetingNumber}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(row.zoomMeetingNumber, 'mid')}
-                  className="h-5 w-5 rounded-md flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-100 transition"
-                  title="Copy meeting ID"
-                >
-                  {copied === 'mid' ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </button>
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="text-slate-500">Room ready</span>
               </span>
-
-              {row.zoomPassword && (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-slate-500">Pass:</span>
-                  <span className="font-bold text-slate-800">
-                    {row.zoomPassword}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(row.zoomPassword, 'pw')}
-                    className="h-5 w-5 rounded-md flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-100 transition"
-                    title="Copy password"
-                  >
-                    {copied === 'pw' ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </button>
-                </span>
-              )}
-
-              {row.zoomProvider && (
-                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-slate-500">No recording</span>
+              </span>
+              {row.livekitProvider && (
+                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
                   <Zap className="h-3 w-3" />
-                  {row.zoomProvider}
+                  {row.livekitProvider}
                 </span>
               )}
             </div>
@@ -816,7 +788,7 @@ function ClassCard({
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
-          {hasZoom ? (
+          {hasLiveKit ? (
             <Link
               href={`/teacher/classroom/${row._id}`}
               className={`group/btn inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition shadow-md ${
@@ -832,20 +804,8 @@ function ClassCard({
           ) : (
             <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-700 ring-1 ring-amber-200">
               <Info className="h-4 w-4" />
-              Zoom not configured
+              LiveKit room not created
             </span>
-          )}
-
-          {row.zoomLink && (
-            <a
-              href={row.zoomLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Join in Zoom
-            </a>
           )}
         </div>
       </div>
