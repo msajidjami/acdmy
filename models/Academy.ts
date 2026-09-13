@@ -1,10 +1,85 @@
-import mongoose, { Schema, models, model, Model } from 'mongoose';
+import mongoose, { Schema, models, model, Model, Document, Types } from 'mongoose';
+
+/* ============================================================
+   TYPES
+   ============================================================ */
+
+export type PlanId =
+  | 'free'
+  | 'trial'
+  | 'starter'
+  | 'growth'
+  | 'pro'
+  | 'business'
+  | 'enterprise';
+
+export interface IRating {
+  _id?: Types.ObjectId;
+  userId: Types.ObjectId;
+  stars: number;
+  comment: string;
+  createdAt: Date;
+}
+
+export interface IAcademy extends Document {
+  _id: Types.ObjectId;
+
+  // Owner
+  ownerId: Types.ObjectId;
+
+  // Basic
+  name: string;
+  slug: string;
+  description: string;
+  logo: string;
+  thumbnail: string;
+  accentColor: string;
+  address: string;
+  contactEmail: string;
+  isActive: boolean;
+
+  // Followers
+  followers: Types.ObjectId[];
+  followerCount: number;
+
+  // Ratings
+  ratings: IRating[];
+  avgRating: number;
+  ratingCount: number;
+
+  // Zoom
+  zoomConnected: boolean;
+  zoomAccountId: string;
+  zoomHostUserId: string;
+  zoomHostEmail: string;
+
+  // ✅ Subscription / Billing
+  isPublic: boolean;
+  subscriptionId?: Types.ObjectId | null;
+  studentLimit: number;
+  currentStudentCount: number;
+  planId: PlanId;
+
+  // ✅ Public Profile (extra fields)
+  tagline?: string;
+  contactPhone?: string;
+  city?: string;
+  country?: string;
+  website?: string;
+
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Methods
+  recalculateStats(): void;
+}
 
 /* ============================================================
    RATING SUB-SCHEMA
    ============================================================ */
 
-const RatingSchema = new Schema(
+const RatingSchema = new Schema<IRating>(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -35,7 +110,7 @@ const RatingSchema = new Schema(
    MAIN SCHEMA
    ============================================================ */
 
-const AcademySchema = new Schema(
+const AcademySchema = new Schema<IAcademy>(
   {
     /* ---------- OWNER ---------- */
     ownerId: {
@@ -61,10 +136,8 @@ const AcademySchema = new Schema(
 
     logo: { type: String, default: '', trim: true },
 
-    /* ✅ Cover / Hero image */
     thumbnail: { type: String, default: '', trim: true },
 
-    /* ✅ Accent color */
     accentColor: {
       type: String,
       default: '#10b981',
@@ -141,10 +214,79 @@ const AcademySchema = new Schema(
       trim: true,
       lowercase: true,
     },
+
+    /* ========================================================
+       ✅ SUBSCRIPTION / BILLING
+       ======================================================== */
+
+    isPublic: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    subscriptionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Subscription',
+      default: null,
+    },
+
+    studentLimit: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    currentStudentCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    planId: {
+      type: String,
+      enum: ['free', 'trial', 'starter', 'growth', 'pro', 'business', 'enterprise'],
+      default: 'free',
+      index: true,
+    },
+
+    /* ========================================================
+       ✅ PUBLIC PROFILE (extra)
+       ======================================================== */
+
+    tagline: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 150,
+    },
+
+    contactPhone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+
+    country: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+
+    website: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,
-    /* ✅ Unknown fields کو preserve کریں — schema update کے بعد بھی */
     strict: false,
   }
 );
@@ -157,6 +299,10 @@ AcademySchema.index({ ownerId: 1, isActive: 1 });
 AcademySchema.index({ zoomHostUserId: 1 });
 AcademySchema.index({ followerCount: -1 });
 AcademySchema.index({ avgRating: -1 });
+
+// ✅ Subscription related
+AcademySchema.index({ isPublic: 1, isActive: 1 });
+AcademySchema.index({ planId: 1, isPublic: 1 });
 
 /* ============================================================
    METHODS
@@ -174,7 +320,7 @@ AcademySchema.methods.recalculateStats = function () {
     this.avgRating = 0;
   } else {
     const sum = ratings.reduce(
-      (acc: number, r: any) => acc + (Number(r.stars) || 0),
+      (acc: number, r: IRating) => acc + (Number(r.stars) || 0),
       0
     );
     this.avgRating = Math.round((sum / ratings.length) * 10) / 10;
@@ -183,19 +329,14 @@ AcademySchema.methods.recalculateStats = function () {
 
 /* ============================================================
    ✅ CACHE-SAFE EXPORT
-   
-   یہ pattern Next.js dev mode میں schema changes کو فوراً
-   apply کرتا ہے۔ پرانا `models.Academy || model(...)` استعمال
-   کرنے سے schema change نظر نہیں آتی جب تک server restart نہ ہو۔
    ============================================================ */
 
-let Academy: Model<any>;
+let Academy: Model<IAcademy>;
 
 if (models.Academy) {
-  /* ✅ اگر model cached ہے تو اسے حذف کریں تاکہ نیا schema لگے */
   delete mongoose.models.Academy;
 }
 
-Academy = model('Academy', AcademySchema);
+Academy = model<IAcademy>('Academy', AcademySchema);
 
 export default Academy;

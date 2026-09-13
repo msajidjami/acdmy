@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
@@ -17,32 +17,58 @@ import {
   Shield,
   ChevronRight,
   Sparkles,
+  Receipt,
+  Crown,
+  CreditCard,
 } from 'lucide-react';
 
-/* ------------------ Types ------------------ */
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
   badge?: string;
+  badgeColor?: 'rose' | 'amber' | 'emerald';
 }
 
-/* ----------------------------------------------------------
-   🎯 SITE NAVBAR HEIGHT
-   ----------------------------------------------------------
-   اپنی ویب سائٹ کی navbar کی height کے مطابق تبدیل کریں:
-   • h-16 (64px)  →  '4rem'
-   • h-20 (80px)  →  '5rem'
-   • h-24 (96px)  →  '6rem'
----------------------------------------------------------- */
-const NAVBAR_H = '4rem'; // 64px
+interface AdminLayoutProps {
+  children: React.ReactNode;
+}
+
+/* ============================================================
+   NAVBAR HEIGHT
+   ============================================================ */
+
+const NAVBAR_H = '4rem';
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
 
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Users', href: '/admin/users', icon: Users },
   { name: 'Academies', href: '/admin/academies', icon: School },
-  { name: 'Inquiries', href: '/admin/inquiries', icon: Mail, badge: '3' },
+  { name: 'Inquiries', href: '/admin/inquiries', icon: Mail },
+];
+
+// ✅ NEW: Payment section
+const paymentNavItems: NavItem[] = [
+  {
+    name: 'Payment Proofs',
+    href: '/admin/payment-proofs',
+    icon: Receipt,
+    badge: 'New',
+    badgeColor: 'amber',
+  },
+  {
+    name: 'Subscriptions',
+    href: '/admin/subscriptions',
+    icon: Crown,
+  },
 ];
 
 const systemNavItems: NavItem[] = [
@@ -50,14 +76,13 @@ const systemNavItems: NavItem[] = [
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
-/* ------------------ Layout ------------------ */
-
-interface AdminLayoutProps {
-  children: React.ReactNode;
-}
+/* ============================================================
+   LAYOUT
+   ============================================================ */
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
@@ -65,13 +90,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    window.location.href = '/login';
+    router.push('/login');
   };
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  /* ---- Nav Item renderer (shared between mobile & desktop) ---- */
+  /* ---------- Badge colors ---------- */
+  const badgeColorMap = {
+    rose: 'bg-rose-100 text-rose-600',
+    amber: 'bg-amber-100 text-amber-700',
+    emerald: 'bg-emerald-100 text-emerald-700',
+  };
+
+  /* ---------- Nav Item ---------- */
   const renderNavItem = (item: NavItem, onClick?: () => void) => {
     const active = isActive(item.href);
     const Icon = item.icon;
@@ -91,7 +123,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           }
         `}
       >
-        {/* Active left indicator */}
         {active && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-indigo-600 rounded-r-full" />
         )}
@@ -112,7 +143,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <span className="flex-1">{item.name}</span>
 
         {item.badge && (
-          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-600">
+          <span
+            className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+              badgeColorMap[item.badgeColor || 'rose']
+            }`}
+          >
             {item.badge}
           </span>
         )}
@@ -122,14 +157,32 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     );
   };
 
+  /* ---------- Section Renderer ---------- */
+  const renderSection = (
+    label: string,
+    items: NavItem[],
+    onClick?: () => void
+  ) => (
+    <>
+      <p className="px-3 pt-4 first:pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+        {label}
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => renderNavItem(item, onClick))}
+      </div>
+    </>
+  );
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
+
   return (
     <div
       className="min-h-screen bg-slate-50"
       style={{ paddingTop: NAVBAR_H }}
     >
-      {/* =========================================
-          MOBILE HEADER
-      ========================================= */}
+      {/* ============ MOBILE HEADER ============ */}
       <header
         className="
           fixed left-0 right-0 h-14
@@ -172,46 +225,27 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </button>
       </header>
 
-      {/* =========================================
-          MOBILE MENU + OVERLAY
-      ========================================= */}
+      {/* ============ MOBILE MENU ============ */}
       {isSidebarOpen && (
         <>
-          {/* Overlay */}
           <div
             className="fixed left-0 right-0 bottom-0 bg-slate-900/40 backdrop-blur-[2px] z-30 lg:hidden"
             style={{ top: `calc(${NAVBAR_H} + 3.5rem)` }}
             onClick={closeSidebar}
           />
 
-          {/* Dropdown Menu */}
           <div
             className="
               fixed left-0 right-0
               bg-white border-b border-slate-200 shadow-2xl
               z-40 lg:hidden
-              animate-in slide-in-from-top-2 duration-200
             "
             style={{ top: `calc(${NAVBAR_H} + 3.5rem)` }}
           >
             <nav className="p-3 max-h-[calc(100vh-8rem)] overflow-y-auto">
-              <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Main Menu
-              </p>
-              <div className="space-y-1">
-                {mainNavItems.map((item) =>
-                  renderNavItem(item, closeSidebar)
-                )}
-              </div>
-
-              <p className="px-3 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                System
-              </p>
-              <div className="space-y-1">
-                {systemNavItems.map((item) =>
-                  renderNavItem(item, closeSidebar)
-                )}
-              </div>
+              {renderSection('Main Menu', mainNavItems, closeSidebar)}
+              {renderSection('Payments', paymentNavItems, closeSidebar)}
+              {renderSection('System', systemNavItems, closeSidebar)}
 
               <div className="mt-4 pt-3 border-t border-slate-100">
                 <button
@@ -233,21 +267,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </>
       )}
 
-      {/* =========================================
-          LAYOUT WRAPPER (Sidebar + Main)
-          - Desktop: flex row
-      ========================================= */}
+      {/* ============ LAYOUT ============ */}
       <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
-        {/* =========================================
-            DESKTOP SIDEBAR — sticky (scrolls with page,
-            so it never overlaps the footer)
-        ========================================= */}
+        {/* ============ DESKTOP SIDEBAR ============ */}
         <aside className="hidden lg:block w-72 shrink-0">
           <div
-            className="
-              sticky bg-white border-r border-slate-200
-              flex flex-col
-            "
+            className="sticky bg-white border-r border-slate-200 flex flex-col"
             style={{
               top: NAVBAR_H,
               height: `calc(100vh - ${NAVBAR_H})`,
@@ -273,22 +298,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
             {/* Navigation */}
             <nav className="flex-1 p-3 overflow-y-auto">
-              <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Main Menu
-              </p>
-              <div className="space-y-1">
-                {mainNavItems.map((item) => renderNavItem(item))}
-              </div>
-
-              <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                System
-              </p>
-              <div className="space-y-1">
-                {systemNavItems.map((item) => renderNavItem(item))}
-              </div>
+              {renderSection('Main Menu', mainNavItems)}
+              {renderSection('Payments', paymentNavItems)}
+              {renderSection('System', systemNavItems)}
             </nav>
 
-            {/* User / Logout Card */}
+            {/* User / Logout */}
             <div className="p-3 border-t border-slate-100">
               <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 mb-2">
                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md">
@@ -321,9 +336,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </aside>
 
-        {/* =========================================
-            MAIN CONTENT
-        ========================================= */}
+        {/* ============ MAIN CONTENT ============ */}
         <main className="flex-1 min-w-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 lg:pt-8 pb-10">
             {children}

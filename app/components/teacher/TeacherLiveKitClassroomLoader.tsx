@@ -43,17 +43,51 @@ import {
   ShieldCheck,
   Sparkles,
   Zap,
+  Eye,
+  EyeOff,
+  Share2,
+  AudioLines,
+  Waves,
 } from 'lucide-react';
 
 import CodeEditorOverlay from '@/app/components/teacher/CodeEditorOverlay';
 import DesignStudioOverlay from '@/app/components/teacher/DesignStudioOverlay';
 import STEMBoardOverlay from '@/app/components/teacher/boards/STEMBoardOverlay';
 
+import {
+  type WhiteboardKind,
+  type WhiteboardMessage,
+  type CodeBoardState,
+  type DesignBoardState,
+  type STEMBoardState,
+  WHITEBOARD_TOPIC,
+  encodeMessage,
+} from '@/app/lib/livekit/whiteboardChannel';
+
+/* ============================================================ */
+/* ✅ TYPE-SAFE WRAPPERS — onStateChange prop کے لیے            */
+/* ============================================================ */
+
+type BoardProps<T> = {
+  onClose: () => void;
+  onStateChange?: (state: T) => void;
+};
+
+const CodeEditor = CodeEditorOverlay as unknown as React.ComponentType<
+  BoardProps<CodeBoardState>
+>;
+const STEMBoard = STEMBoardOverlay as unknown as React.ComponentType<
+  BoardProps<STEMBoardState>
+>;
+const DesignBoard = DesignStudioOverlay as unknown as React.ComponentType<
+  BoardProps<DesignBoardState>
+>;
+
 /* ============================================================ */
 /* TYPES                                                        */
 /* ============================================================ */
 
-type WhiteboardMode = null | 'code' | 'design' | 'stem';
+type WhiteboardMode = null | WhiteboardKind;
 
 interface Props {
   assignmentId: string;
@@ -78,6 +112,53 @@ interface ParticipantInfo {
 }
 
 /* ============================================================ */
+/* NOISE CANCELLATION HELPER (Krisp)                            */
+/* ============================================================ */
+
+/**
+ * LiveKit Krisp Noise Filter استعمال کرتا ہے اگر installed ہو۔
+ * Install: npm install @livekit/krisp-noise-filter
+ */
+async function applyKrispNoiseFilter(track: LocalTrack): Promise<boolean> {
+  try {
+    // Dynamic import — package نہ ہو تو error نہ دے
+    const mod: any = await import('@livekit/krisp-noise-filter').catch(
+      () => null
+    );
+
+    if (!mod || !mod.KrispNoiseFilter) {
+      console.warn(
+        '[LiveKit] Krisp noise filter not installed. Falling back to browser noise suppression.'
+      );
+      return false;
+    }
+
+    const filter = new mod.KrispNoiseFilter();
+    // LocalAudioTrack کے پاس setProcessor موجود ہے
+    if (typeof (track as any).setProcessor === 'function') {
+      await (track as any).setProcessor(filter);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[LiveKit] Krisp error:', err);
+    return false;
+  }
+}
+
+async function removeProcessor(track: LocalTrack): Promise<void> {
+  try {
+    if (typeof (track as any).stopProcessor === 'function') {
+      await (track as any).stopProcessor();
+    } else if (typeof (track as any).setProcessor === 'function') {
+      await (track as any).setProcessor(undefined);
+    }
+  } catch (err) {
+    console.warn('[LiveKit] removeProcessor error:', err);
+  }
+}
+
+/* ============================================================ */
 /* MAIN COMPONENT                                               */
 /* ============================================================ */
 
@@ -93,7 +174,7 @@ export default function TeacherLiveKitClassroomLoader({
   totalPages,
   pagesCompletedSoFar,
 }: Props) {
-  /* ---------- Connection state ---------- */
+  /* ---------- Connection ---------- */
   const [room, setRoom] = useState<Room | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     ConnectionState.Disconnected
@@ -101,20 +182,28 @@ export default function TeacherLiveKitClassroomLoader({
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
 
-  /* ---------- Media controls ---------- */
+  /* ---------- Media ---------- */
   const [micEnabled, setMicEnabled] = useState(false);
   const [camEnabled, setCamEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
+
+  /* ---------- ✅ Noise Cancellation ---------- */
+  const [noiseCancellation, setNoiseCancellation] = useState(true);
+  const [krispAvailable, setKrispAvailable] = useState(true);
 
   /* ---------- Participants ---------- */
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [activeSpeaker, setActiveSpeaker] = useState('');
 
-  /* ---------- UI state ---------- */
+  /* ---------- UI ---------- */
   const [whiteboard, setWhiteboard] = useState<WhiteboardMode>(null);
   const [showParticipants, setShowParticipants] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedRoom, setCopiedRoom] = useState(false);
+
+  /* ---------- Whiteboard Sharing ---------- */
+  const [isSharingWhiteboard, setIsSharingWhiteboard] = useState(false);
+  const [studentCount, setStudentCount] = useState(0);
 
   /* ---------- Refs ---------- */
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -128,6 +217,171 @@ export default function TeacherLiveKitClassroomLoader({
   );
   const roomRef = useRef<Room | null>(null);
 
+  // Latest state of each whiteboard
+  const boardStatesRef = useRef<Record<WhiteboardKind, any>>({
+    code: {},
+    design: {},
+    stem: {},
+  });
+
+  // Throttle broadcast per board
+  const lastBroadcastRef = useRef<Record<WhiteboardKind, number>>({
+    code: 0,
+    design: 0,
+    stem: 0,
+  });
+
+  // Latest isSharing & whiteboard in refs for callbacks
+  const isSharingRef = useRef(false);
+  const whiteboardRef = useRef<WhiteboardMode>(null);
+  const noiseCancelRef = useRef(true);
+
+  useEffect(() => {
+    isSharingRef.current = isSharingWhiteboard;
+  }, [isSharingWhiteboard]);
+
+  useEffect(() => {
+    whiteboardRef.current = whiteboard;
+  }, [whiteboard]);
+
+  useEffect(() => {
+    noiseCancelRef.current = noiseCancellation;
+  }, [noiseCancellation]);
+
+  /* ============================================================ */
+  /* PUBLISH WHITEBOARD MESSAGE                                   */
+  /* ============================================================ */
+
+  const publishWhiteboardMessage = useCallback(
+    async (message: WhiteboardMessage) => {
+      const r = roomRef.current;
+      if (!r) return;
+
+      try {
+        const encoded = encodeMessage(message);
+        // ✅ Uint8Array<ArrayBufferLike> → Uint8Array<ArrayBuffer>
+        const payload = new Uint8Array(encoded);
+
+        await r.localParticipant.publishData(payload, {
+          reliable: true,
+          topic: WHITEBOARD_TOPIC,
+        });
+      } catch (err) {
+        console.warn('[WB] publish failed:', err);
+      }
+    },
+    []
+  );
+
+  /* ============================================================ */
+  /* OPEN / CLOSE / STATE CHANGE                                  */
+  /* ============================================================ */
+
+  const openWhiteboard = useCallback(
+    (board: WhiteboardKind) => {
+      setWhiteboard(board);
+
+      if (isSharingRef.current) {
+        publishWhiteboardMessage({
+          type: 'wb-open',
+          board,
+          state: boardStatesRef.current[board] || {},
+          senderName: teacherName,
+        });
+      }
+    },
+    [publishWhiteboardMessage, teacherName]
+  );
+
+  const closeWhiteboard = useCallback(() => {
+    const current = whiteboardRef.current;
+    setWhiteboard(null);
+
+    if (current && isSharingRef.current) {
+      publishWhiteboardMessage({ type: 'wb-close', board: current });
+    }
+  }, [publishWhiteboardMessage]);
+
+  const handleBoardStateChange = useCallback(
+    (board: WhiteboardKind, state: any) => {
+      boardStatesRef.current[board] = state;
+
+      if (!isSharingRef.current || whiteboardRef.current !== board) return;
+
+      // Throttle: Design = 15fps, Code/STEM = 5fps
+      const now = Date.now();
+      const minInterval = board === 'design' ? 66 : 200;
+      if (now - lastBroadcastRef.current[board] < minInterval) return;
+      lastBroadcastRef.current[board] = now;
+
+      publishWhiteboardMessage({
+        type: 'wb-state',
+        board,
+        state,
+      });
+    },
+    [publishWhiteboardMessage]
+  );
+
+  /* ============================================================ */
+  /* TOGGLE SHARING                                               */
+  /* ============================================================ */
+
+  const toggleWhiteboardSharing = useCallback(async () => {
+    const next = !isSharingRef.current;
+    setIsSharingWhiteboard(next);
+
+    const currentBoard = whiteboardRef.current;
+
+    if (next && currentBoard) {
+      await publishWhiteboardMessage({
+        type: 'wb-open',
+        board: currentBoard,
+        state: boardStatesRef.current[currentBoard] || {},
+        senderName: teacherName,
+      });
+    } else if (!next && currentBoard) {
+      await publishWhiteboardMessage({
+        type: 'wb-close',
+        board: currentBoard,
+      });
+    }
+  }, [publishWhiteboardMessage, teacherName]);
+
+  /* ============================================================ */
+  /* ✅ TOGGLE NOISE CANCELLATION                                 */
+  /* ============================================================ */
+
+  const toggleNoiseCancellation = useCallback(async () => {
+    const audioTrack = localTracksRef.current.find(
+      (t) => t.kind === Track.Kind.Audio
+    );
+    if (!audioTrack) {
+      setError('Microphone track is not available yet.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    const next = !noiseCancellation;
+
+    try {
+      if (next) {
+        const ok = await applyKrispNoiseFilter(audioTrack);
+        if (!ok) {
+          setKrispAvailable(false);
+          // Browser-level noise suppression پہلے سے on ہے
+        }
+        setNoiseCancellation(true);
+      } else {
+        await removeProcessor(audioTrack);
+        setNoiseCancellation(false);
+      }
+    } catch (err) {
+      console.error('[LiveKit] toggleNoiseCancellation error:', err);
+      setNoiseCancellation(next);
+    }
+  }, [noiseCancellation]);
+
   /* ============================================================ */
   /* CONNECT TO LIVEKIT ROOM                                      */
   /* ============================================================ */
@@ -139,7 +393,6 @@ export default function TeacherLiveKitClassroomLoader({
     setError('');
 
     try {
-      /* ---------- 1. Fetch teacher host token ---------- */
       const tokenRes = await fetch('/api/livekit/teacher-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,8 +404,7 @@ export default function TeacherLiveKitClassroomLoader({
       if (!tokenRes.ok) {
         const data = await tokenRes.json().catch(() => ({}));
         throw new Error(
-          data?.error ||
-            `Token request failed (HTTP ${tokenRes.status})`
+          data?.error || `Token request failed (HTTP ${tokenRes.status})`
         );
       }
 
@@ -162,13 +414,10 @@ export default function TeacherLiveKitClassroomLoader({
         throw new Error('Server did not return token or URL');
       }
 
-      /* ---------- 2. Create Room ---------- */
       const newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
-        videoCaptureDefaults: {
-          resolution: { width: 1280, height: 720 },
-        },
+        videoCaptureDefaults: { resolution: { width: 1280, height: 720 } },
         audioCaptureDefaults: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -178,12 +427,9 @@ export default function TeacherLiveKitClassroomLoader({
 
       roomRef.current = newRoom;
 
-      /* ---------- 3. Wire up events ---------- */
-
       const refreshParticipants = () => {
         const list: ParticipantInfo[] = [];
 
-        // Local
         const local = newRoom.localParticipant;
         if (local) {
           list.push({
@@ -200,8 +446,9 @@ export default function TeacherLiveKitClassroomLoader({
           });
         }
 
-        // Remote
+        let count = 0;
         newRoom.remoteParticipants.forEach((p: RemoteParticipant) => {
+          count++;
           list.push({
             identity: p.identity,
             name: p.name || p.identity,
@@ -217,16 +464,15 @@ export default function TeacherLiveKitClassroomLoader({
         });
 
         setParticipants(list);
+        setStudentCount(count);
       };
 
       newRoom
         .on(RoomEvent.Connected, () => {
-          console.log('[LiveKit] Connected');
           setConnectionState(ConnectionState.Connected);
           refreshParticipants();
         })
         .on(RoomEvent.Disconnected, () => {
-          console.log('[LiveKit] Disconnected');
           setConnectionState(ConnectionState.Disconnected);
           roomRef.current = null;
           setRoom(null);
@@ -239,9 +485,17 @@ export default function TeacherLiveKitClassroomLoader({
         })
         .on(RoomEvent.ParticipantConnected, () => {
           refreshParticipants();
+          // Send current whiteboard state to newly joined participant
+          if (isSharingRef.current && whiteboardRef.current) {
+            publishWhiteboardMessage({
+              type: 'wb-open',
+              board: whiteboardRef.current,
+              state: boardStatesRef.current[whiteboardRef.current] || {},
+              senderName: teacherName,
+            });
+          }
         })
         .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
-          // Cleanup remote elements
           const vidEl = remoteVideoElementsRef.current.get(p.identity);
           if (vidEl) {
             vidEl.remove();
@@ -254,41 +508,51 @@ export default function TeacherLiveKitClassroomLoader({
           }
           refreshParticipants();
         })
-        .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant) => {
-          if (track.kind === Track.Kind.Video) {
-            const el = document.createElement('video');
-            el.autoplay = true;
-            el.playsInline = true;
-            el.muted = false;
-            el.className = 'w-full h-full object-cover';
-            track.attach(el);
-            remoteVideoElementsRef.current.set(participant.identity, el);
-          } else if (track.kind === Track.Kind.Audio) {
-            const el = document.createElement('audio');
-            el.autoplay = true;
-            track.attach(el);
-            remoteAudioElementsRef.current.set(participant.identity, el);
-            document.body.appendChild(el);
-          }
-          refreshParticipants();
-        })
-        .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, _pub, participant) => {
-          track.detach();
-          if (track.kind === Track.Kind.Video) {
-            const el = remoteVideoElementsRef.current.get(participant.identity);
-            if (el) {
-              el.remove();
-              remoteVideoElementsRef.current.delete(participant.identity);
+        .on(
+          RoomEvent.TrackSubscribed,
+          (track: RemoteTrack, _pub, participant) => {
+            if (track.kind === Track.Kind.Video) {
+              const el = document.createElement('video');
+              el.autoplay = true;
+              el.playsInline = true;
+              el.muted = false;
+              el.className = 'w-full h-full object-cover';
+              track.attach(el);
+              remoteVideoElementsRef.current.set(participant.identity, el);
+            } else if (track.kind === Track.Kind.Audio) {
+              const el = document.createElement('audio');
+              el.autoplay = true;
+              track.attach(el);
+              remoteAudioElementsRef.current.set(participant.identity, el);
+              document.body.appendChild(el);
             }
-          } else if (track.kind === Track.Kind.Audio) {
-            const el = remoteAudioElementsRef.current.get(participant.identity);
-            if (el) {
-              el.remove();
-              remoteAudioElementsRef.current.delete(participant.identity);
-            }
+            refreshParticipants();
           }
-          refreshParticipants();
-        })
+        )
+        .on(
+          RoomEvent.TrackUnsubscribed,
+          (track: RemoteTrack, _pub, participant) => {
+            track.detach();
+            if (track.kind === Track.Kind.Video) {
+              const el = remoteVideoElementsRef.current.get(
+                participant.identity
+              );
+              if (el) {
+                el.remove();
+                remoteVideoElementsRef.current.delete(participant.identity);
+              }
+            } else if (track.kind === Track.Kind.Audio) {
+              const el = remoteAudioElementsRef.current.get(
+                participant.identity
+              );
+              if (el) {
+                el.remove();
+                remoteAudioElementsRef.current.delete(participant.identity);
+              }
+            }
+            refreshParticipants();
+          }
+        )
         .on(RoomEvent.TrackMuted, () => refreshParticipants())
         .on(RoomEvent.TrackUnmuted, () => refreshParticipants())
         .on(RoomEvent.LocalTrackPublished, () => refreshParticipants())
@@ -301,22 +565,12 @@ export default function TeacherLiveKitClassroomLoader({
           }
         });
 
-      /* ---------- 4. Connect ---------- */
       await newRoom.connect(url, token);
 
-      /* ---------- 5. Create local tracks ---------- */
       let tracks: LocalTrack[] = [];
       try {
-        tracks = await createLocalTracks({
-          audio: true,
-          video: true,
-        });
-      } catch (mediaErr: any) {
-        console.warn(
-          '[LiveKit] Media permission denied or partial:',
-          mediaErr?.message
-        );
-        // Try audio-only fallback
+        tracks = await createLocalTracks({ audio: true, video: true });
+      } catch {
         try {
           tracks = await createLocalTracks({ audio: true, video: false });
         } catch {
@@ -326,7 +580,16 @@ export default function TeacherLiveKitClassroomLoader({
 
       localTracksRef.current = tracks;
 
-      /* ---------- 6. Mute first, then publish ---------- */
+      /* ✅ Auto-apply Krisp noise filter on audio track if enabled */
+      if (noiseCancelRef.current) {
+        const audioTrack = tracks.find((t) => t.kind === Track.Kind.Audio);
+        if (audioTrack) {
+          const ok = await applyKrispNoiseFilter(audioTrack);
+          setKrispAvailable(ok);
+          if (!ok) setNoiseCancellation(false);
+        }
+      }
+
       for (const t of tracks) {
         try {
           await t.mute();
@@ -343,7 +606,6 @@ export default function TeacherLiveKitClassroomLoader({
         }
       }
 
-      /* ---------- 7. Attach local preview ---------- */
       const localVideoTrack = tracks.find(
         (t) => t.kind === Track.Kind.Video
       );
@@ -363,7 +625,12 @@ export default function TeacherLiveKitClassroomLoader({
     } finally {
       setIsConnecting(false);
     }
-  }, [assignmentId, roomName, teacherName]);
+  }, [
+    assignmentId,
+    roomName,
+    teacherName,
+    publishWhiteboardMessage,
+  ]);
 
   /* ============================================================ */
   /* DISCONNECT                                                   */
@@ -371,7 +638,6 @@ export default function TeacherLiveKitClassroomLoader({
 
   const disconnect = useCallback(async () => {
     try {
-      // Stop all local tracks
       localTracksRef.current.forEach((t) => {
         try {
           t.stop();
@@ -382,13 +648,11 @@ export default function TeacherLiveKitClassroomLoader({
       });
       localTracksRef.current = [];
 
-      // Remove remote elements
       remoteVideoElementsRef.current.forEach((el) => el.remove());
       remoteVideoElementsRef.current.clear();
       remoteAudioElementsRef.current.forEach((el) => el.remove());
       remoteAudioElementsRef.current.clear();
 
-      // Disconnect room
       if (roomRef.current) {
         await roomRef.current.disconnect();
       }
@@ -401,13 +665,16 @@ export default function TeacherLiveKitClassroomLoader({
       setCamEnabled(false);
       setScreenSharing(false);
       setActiveSpeaker('');
+      setWhiteboard(null);
+      setIsSharingWhiteboard(false);
+      setStudentCount(0);
     } catch (err) {
       console.error('[LiveKit] Disconnect error:', err);
     }
   }, []);
 
   /* ============================================================ */
-  /* CLEANUP ON UNMOUNT                                           */
+  /* CLEANUP                                                      */
   /* ============================================================ */
 
   useEffect(() => {
@@ -521,7 +788,7 @@ export default function TeacherLiveKitClassroomLoader({
   }, []);
 
   /* ============================================================ */
-  /* COPY ROOM NAME                                               */
+  /* COPY ROOM                                                    */
   /* ============================================================ */
 
   const copyRoomName = useCallback(async () => {
@@ -561,8 +828,7 @@ export default function TeacherLiveKitClassroomLoader({
             Connecting to LiveKit Classroom
           </h3>
           <p className="text-sm text-slate-500 mt-2">
-            Setting up your camera and microphone. Please allow permissions if
-            prompted.
+            Setting up your camera and microphone.
           </p>
         </div>
       </div>
@@ -590,7 +856,7 @@ export default function TeacherLiveKitClassroomLoader({
               setError('');
               connectToRoom();
             }}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition hover:from-indigo-700 hover:to-purple-700"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:from-indigo-700 hover:to-purple-700"
           >
             Try Again
           </button>
@@ -616,12 +882,11 @@ export default function TeacherLiveKitClassroomLoader({
               Ready to Start Class?
             </h3>
             <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-              You are joining as the <strong className="text-slate-700">Host</strong>.
-              Your camera and microphone will start muted. Turn them on after
-              joining.
+              You are joining as the{' '}
+              <strong className="text-slate-700">Host</strong>. Your camera
+              and microphone will start muted.
             </p>
 
-            {/* Room info */}
             <div className="mt-6 rounded-2xl bg-slate-50 border border-slate-200 p-4 text-left">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -650,7 +915,6 @@ export default function TeacherLiveKitClassroomLoader({
               </p>
             </div>
 
-            {/* Start button */}
             <button
               type="button"
               onClick={connectToRoom}
@@ -661,7 +925,6 @@ export default function TeacherLiveKitClassroomLoader({
               Start LiveKit Class
             </button>
 
-            {/* Privacy note */}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-slate-400">
               <span className="inline-flex items-center gap-1.5">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
@@ -670,6 +933,10 @@ export default function TeacherLiveKitClassroomLoader({
               <span className="inline-flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
                 Encrypted transport
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <AudioLines className="h-3.5 w-3.5 text-violet-500" />
+                AI Noise Cancellation
               </span>
             </div>
           </div>
@@ -688,7 +955,6 @@ export default function TeacherLiveKitClassroomLoader({
         {/* ============ TOP BAR ============ */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-950/80 border-b border-white/10">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Connection indicator */}
             <div className="flex items-center gap-2 shrink-0">
               {connected ? (
                 <>
@@ -717,7 +983,6 @@ export default function TeacherLiveKitClassroomLoader({
               )}
             </div>
 
-            {/* Room info */}
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs font-bold text-white/90 truncate">
                 {courseName}
@@ -727,10 +992,28 @@ export default function TeacherLiveKitClassroomLoader({
                 {studentName}
               </span>
             </div>
+
+            {/* ✅ Noise cancel indicator */}
+            {noiseCancellation && (
+              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/40 text-violet-300 text-[10px] font-bold uppercase tracking-wider">
+                <AudioLines className="h-2.5 w-2.5" />
+                AI Noise OFF
+              </span>
+            )}
+
+            {/* ✅ Sharing indicator */}
+            {isSharingWhiteboard && whiteboard && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                Sharing {whiteboard.toUpperCase()}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Participants button */}
             <button
               type="button"
               onClick={() => setShowParticipants((v) => !v)}
@@ -745,7 +1028,6 @@ export default function TeacherLiveKitClassroomLoader({
               {participants.length}
             </button>
 
-            {/* Fullscreen */}
             <button
               type="button"
               onClick={toggleFullscreen}
@@ -766,7 +1048,6 @@ export default function TeacherLiveKitClassroomLoader({
           ref={videoContainerRef}
           className="relative bg-slate-950 aspect-video max-h-[70vh] overflow-hidden"
         >
-          {/* Remote participants grid */}
           <div
             className={`absolute inset-0 p-2 grid gap-2 ${
               remoteParticipants.length <= 1
@@ -802,7 +1083,7 @@ export default function TeacherLiveKitClassroomLoader({
             )}
           </div>
 
-          {/* Local video (Picture-in-Picture) */}
+          {/* Local PiP */}
           <div className="absolute bottom-4 right-4 w-32 sm:w-48 lg:w-56 aspect-video rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-800 z-10">
             <video
               ref={localVideoRef}
@@ -812,7 +1093,6 @@ export default function TeacherLiveKitClassroomLoader({
               className="w-full h-full object-cover"
               style={{ transform: 'scaleX(-1)' }}
             />
-            {/* Camera off overlay */}
             {!camEnabled && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
                 <div className="text-center">
@@ -823,17 +1103,13 @@ export default function TeacherLiveKitClassroomLoader({
                 </div>
               </div>
             )}
-            {/* Mic off badge */}
             {!micEnabled && (
               <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-rose-600 flex items-center justify-center shadow-lg">
                 <MicOff className="h-3 w-3 text-white" />
               </div>
             )}
-            {/* Name badge */}
             <div className="absolute bottom-1.5 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-white">
-                You (Host)
-              </p>
+              <p className="text-[10px] font-bold text-white">You (Host)</p>
             </div>
           </div>
         </div>
@@ -855,6 +1131,27 @@ export default function TeacherLiveKitClassroomLoader({
               <Mic className="h-5 w-5" />
             ) : (
               <MicOff className="h-5 w-5" />
+            )}
+          </button>
+
+          {/* ✅ Noise Cancellation Toggle */}
+          <button
+            type="button"
+            onClick={toggleNoiseCancellation}
+            className={`inline-flex items-center justify-center h-12 w-12 rounded-full transition active:scale-95 relative ${
+              noiseCancellation
+                ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white hover:from-violet-400 hover:to-purple-500 ring-2 ring-violet-400/40'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+            title={
+              noiseCancellation
+                ? `AI Noise Cancellation ON${!krispAvailable ? ' (browser mode)' : ''}`
+                : 'Enable AI Noise Cancellation'
+            }
+          >
+            <AudioLines className="h-5 w-5" />
+            {noiseCancellation && (
+              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-500 border-2 border-slate-950" />
             )}
           </button>
 
@@ -894,43 +1191,77 @@ export default function TeacherLiveKitClassroomLoader({
             )}
           </button>
 
-          {/* Divider */}
           <div className="w-px h-8 bg-white/10 mx-1" />
 
-          {/* Code Editor whiteboard */}
+          {/* SHARE TOGGLE */}
           <button
             type="button"
-            onClick={() => setWhiteboard('code')}
-            className="inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 transition active:scale-95"
+            onClick={toggleWhiteboardSharing}
+            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full text-xs font-bold shadow-lg transition active:scale-95 ${
+              isSharingWhiteboard
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white ring-2 ring-emerald-400/50'
+                : 'bg-white/10 text-white/80 hover:bg-white/20 border border-white/20'
+            }`}
+            title={
+              isSharingWhiteboard
+                ? 'Stop sharing whiteboard with students'
+                : 'Share whiteboard with students'
+            }
+          >
+            {isSharingWhiteboard ? (
+              <>
+                <Eye className="h-4 w-4" />
+                <span className="hidden sm:inline">Sharing ON</span>
+              </>
+            ) : (
+              <>
+                <EyeOff className="h-4 w-4" />
+                <span className="hidden sm:inline">Share Board</span>
+              </>
+            )}
+          </button>
+
+          <div className="w-px h-8 bg-white/10 mx-1" />
+
+          {/* Code */}
+          <button
+            type="button"
+            onClick={() => openWhiteboard('code')}
+            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 transition active:scale-95 ${
+              whiteboard === 'code' ? 'ring-2 ring-sky-400/60' : ''
+            }`}
             title="Open Code Editor"
           >
             <Code2 className="h-4 w-4" />
             <span className="hidden sm:inline">Code</span>
           </button>
 
-          {/* ✅ STEM Board — Math, Physics, Biology, Chemistry */}
+          {/* STEM */}
           <button
             type="button"
-            onClick={() => setWhiteboard('stem')}
-            className="inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-bold shadow-lg shadow-violet-500/20 transition active:scale-95"
-            title="Open STEM Board (Math, Physics, Biology, Chemistry)"
+            onClick={() => openWhiteboard('stem')}
+            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-bold shadow-lg shadow-violet-500/20 transition active:scale-95 ${
+              whiteboard === 'stem' ? 'ring-2 ring-violet-400/60' : ''
+            }`}
+            title="Open STEM Board"
           >
             <Zap className="h-4 w-4" />
             <span className="hidden sm:inline">STEM</span>
           </button>
 
-          {/* Design Studio whiteboard */}
+          {/* Design */}
           <button
             type="button"
-            onClick={() => setWhiteboard('design')}
-            className="inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/20 transition active:scale-95"
+            onClick={() => openWhiteboard('design')}
+            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/20 transition active:scale-95 ${
+              whiteboard === 'design' ? 'ring-2 ring-fuchsia-400/60' : ''
+            }`}
             title="Open Design Studio"
           >
             <Palette className="h-4 w-4" />
             <span className="hidden sm:inline">Design</span>
           </button>
 
-          {/* Divider */}
           <div className="w-px h-8 bg-white/10 mx-1" />
 
           {/* End class */}
@@ -943,6 +1274,35 @@ export default function TeacherLiveKitClassroomLoader({
             <PhoneOff className="h-4 w-4" />
             <span className="hidden sm:inline">End Class</span>
           </button>
+        </div>
+
+        {/* ✅ Bottom status strip — Noise Cancellation info */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-950/60 border-t border-white/5 text-[10px]">
+          <div className="flex items-center gap-2 text-white/50">
+            <AudioLines
+              className={`h-3 w-3 ${
+                noiseCancellation ? 'text-violet-400' : 'text-white/30'
+              }`}
+            />
+            <span className="font-semibold">
+              AI Noise Cancellation:{' '}
+              <span
+                className={
+                  noiseCancellation ? 'text-violet-300' : 'text-white/40'
+                }
+              >
+                {noiseCancellation
+                  ? krispAvailable
+                    ? 'Active (Krisp)'
+                    : 'Active (Browser)'
+                  : 'Off'}
+              </span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-white/40">
+            <Waves className="h-3 w-3" />
+            <span>Echo & background noise reduced</span>
+          </div>
         </div>
       </div>
 
@@ -960,7 +1320,6 @@ export default function TeacherLiveKitClassroomLoader({
               type="button"
               onClick={() => setShowParticipants(false)}
               className="text-white/40 hover:text-white/80 transition"
-              title="Close"
             >
               ✕
             </button>
@@ -983,12 +1342,8 @@ export default function TeacherLiveKitClassroomLoader({
                     {p.isLocal ? 'Host · You' : 'Student'}
                   </p>
                 </div>
-
-                {/* Status icons */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {!p.hasAudio && (
-                    <MicOff className="h-3 w-3 text-rose-400" />
-                  )}
+                  {!p.hasAudio && <MicOff className="h-3 w-3 text-rose-400" />}
                   {p.hasAudio && p.isSpeaking && (
                     <Volume2 className="h-3 w-3 text-emerald-400 animate-pulse" />
                   )}
@@ -999,7 +1354,7 @@ export default function TeacherLiveKitClassroomLoader({
         </div>
       )}
 
-      {/* ============ ERROR TOAST (during session) ============ */}
+      {/* ============ ERROR TOAST ============ */}
       {error && room && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-md">
           <div className="bg-rose-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3">
@@ -1016,15 +1371,33 @@ export default function TeacherLiveKitClassroomLoader({
         </div>
       )}
 
+      {/* ============ SHARING INDICATOR ============ */}
+      {isSharingWhiteboard && whiteboard && (
+        <div className="fixed bottom-4 left-4 z-[100] flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-600 text-white shadow-2xl text-xs font-bold">
+          <Share2 className="h-3.5 w-3.5" />
+          Sharing {whiteboard.toUpperCase()} with {studentCount} student
+          {studentCount !== 1 ? 's' : ''}
+        </div>
+      )}
+
       {/* ============ WHITEBOARDS ============ */}
       {whiteboard === 'code' && (
-        <CodeEditorOverlay onClose={() => setWhiteboard(null)} />
+        <CodeEditor
+          onClose={closeWhiteboard}
+          onStateChange={(state) => handleBoardStateChange('code', state)}
+        />
       )}
       {whiteboard === 'stem' && (
-        <STEMBoardOverlay onClose={() => setWhiteboard(null)} />
+        <STEMBoard
+          onClose={closeWhiteboard}
+          onStateChange={(state) => handleBoardStateChange('stem', state)}
+        />
       )}
       {whiteboard === 'design' && (
-        <DesignStudioOverlay onClose={() => setWhiteboard(null)} />
+        <DesignBoard
+          onClose={closeWhiteboard}
+          onStateChange={(state) => handleBoardStateChange('design', state)}
+        />
       )}
     </>
   );
@@ -1050,13 +1423,10 @@ function RemoteVideoTile({
     if (!container) return;
 
     if (videoEl) {
-      // Clear and attach
       container.innerHTML = '';
       videoEl.className = 'w-full h-full object-cover';
       container.appendChild(videoEl);
-      videoEl.play().catch(() => {
-        /* autoplay may be blocked */
-      });
+      videoEl.play().catch(() => {});
     } else {
       container.innerHTML = '';
     }
@@ -1070,10 +1440,8 @@ function RemoteVideoTile({
           : 'ring-1 ring-white/5'
       }`}
     >
-      {/* Video container */}
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Avatar fallback when no video */}
       {!videoEl && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
@@ -1087,7 +1455,6 @@ function RemoteVideoTile({
         </div>
       )}
 
-      {/* Name badge */}
       <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm flex items-center gap-2">
         <p className="text-xs font-bold text-white">{participant.name}</p>
         {isActiveSpeaker && (
@@ -1100,7 +1467,6 @@ function RemoteVideoTile({
         )}
       </div>
 
-      {/* Mic off badge */}
       {!participant.hasAudio && (
         <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-rose-600 flex items-center justify-center shadow-lg">
           <MicOff className="h-3 w-3 text-white" />

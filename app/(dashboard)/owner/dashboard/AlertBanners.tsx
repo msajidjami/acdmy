@@ -9,27 +9,16 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 
-/* ============================================================
-   TYPES
-   ============================================================ */
+type AlertType = 'success' | 'deleted' | 'error' | 'warning';
 
-export type AlertType = 'success' | 'deleted' | 'error' | 'warning';
-
-export interface AlertBannerProps {
+interface Props {
   type: AlertType;
   title: string;
   message: string;
   /** URL param key to remove on dismiss (e.g. "success", "deleted") */
   paramKey?: string;
-  /** Auto-dismiss after N milliseconds */
   autoDismissMs?: number;
-  /** Legacy: manual dismiss callback (optional) */
-  onDismiss?: () => void;
 }
-
-/* ============================================================
-   STYLES
-   ============================================================ */
 
 const STYLES: Record<
   AlertType,
@@ -71,27 +60,18 @@ const STYLES: Record<
   },
 };
 
-/* ============================================================
-   COMPONENT
-   ============================================================ */
-
 export default function AlertBanner({
   type,
   title,
   message,
   paramKey,
   autoDismissMs,
-  onDismiss,
-}: AlertBannerProps) {
+}: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const s = STYLES[type];
 
   const dismiss = () => {
-    // 1. Call custom callback if provided
-    if (onDismiss) onDismiss();
-
-    // 2. Remove URL param if provided
     if (!paramKey) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete(paramKey);
@@ -99,7 +79,7 @@ export default function AlertBanner({
     router.replace(q ? `?${q}` : '?', { scroll: false });
   };
 
-  // Auto-dismiss
+  // Auto dismiss
   useEffect(() => {
     if (!autoDismissMs || !paramKey) return;
     const t = setTimeout(dismiss, autoDismissMs);
