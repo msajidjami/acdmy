@@ -11,7 +11,6 @@ const ALLOWED_ROLES = ["user", "student", "owner"];
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. عارضی Google token حاصل کریں
     const tempToken = req.cookies.get("google_temp")?.value;
     if (!tempToken) {
       return NextResponse.json(
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Role لیں
     const { role } = await req.json();
     if (!role || !ALLOWED_ROLES.includes(role)) {
       return NextResponse.json(
@@ -48,15 +46,12 @@ export async function POST(req: NextRequest) {
 
     await dbConnect();
 
-    // 3. دوبارہ چیک کریں کہ user پہلے سے موجود نہ ہو
     let user = await User.findOne({ email: decoded.email });
     if (user) {
-      // اگر بن چکا ہے تو سیدھا لاگ ان
       user.lastLogin = new Date();
       user.loginCount = (user.loginCount || 0) + 1;
       await user.save();
     } else {
-      // 4. نیا user بنائیں
       user = await User.create({
         name: decoded.name,
         email: decoded.email,
@@ -70,7 +65,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5. Main JWT بنائیں
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -83,10 +77,13 @@ export async function POST(req: NextRequest) {
       { expiresIn: "7d" }
     );
 
-    // 6. Response + cookies
+    // ✅ redirect منزل decoded سے لیں (default '/')
+    const redirectTo = decoded.redirectTo || "/";
+
     const response = NextResponse.json(
       {
         message: "Account created successfully!",
+        redirect: redirectTo, // ✅ client کو بتائیں کہاں جانا ہے
         user: {
           id: user._id,
           name: user.name,
@@ -97,7 +94,6 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
 
-    // مرکزی token سیٹ کریں
     response.cookies.set({
       name: "token",
       value: token,
@@ -108,7 +104,6 @@ export async function POST(req: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    // عارضی token صاف کریں
     response.cookies.set({
       name: "google_temp",
       value: "",

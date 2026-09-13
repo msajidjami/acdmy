@@ -15,8 +15,18 @@ const REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || `${APP_URL}/api/auth/google/callback`;
 
 export async function GET(req: NextRequest) {
+  // ✅ state سے redirect منزل لیں
+  const redirectTo = req.nextUrl.searchParams.get("state") || "/";
+
   try {
     const code = req.nextUrl.searchParams.get("code");
+    const errorParam = req.nextUrl.searchParams.get("error");
+
+    if (errorParam) {
+      return NextResponse.redirect(
+        new URL(`/login?error=${errorParam}`, req.url)
+      );
+    }
 
     if (!code) {
       return NextResponse.redirect(new URL("/login?error=NoCode", req.url));
@@ -51,7 +61,9 @@ export async function GET(req: NextRequest) {
 
     if (!profileResponse.ok) {
       console.error("Google Profile Error:", profile);
-      return NextResponse.redirect(new URL("/login?error=ProfileError", req.url));
+      return NextResponse.redirect(
+        new URL("/login?error=ProfileError", req.url)
+      );
     }
 
     const { id: googleId, email, name, picture } = profile;
@@ -68,7 +80,6 @@ export async function GET(req: NextRequest) {
     // ✅ نیا user — Role انتخاب کرنے کے لیے بھیجیں
     // ═══════════════════════════════════════════════════════
     if (!user) {
-      // عارضی JWT بنائیں جس میں Google کی info ہو
       const tempToken = jwt.sign(
         {
           type: "google-signup",
@@ -76,6 +87,7 @@ export async function GET(req: NextRequest) {
           email: email.toLowerCase(),
           name: name || email.split("@")[0],
           avatar: picture || "",
+          redirectTo, // ✅ اگلے مرحلے کے لیے محفوظ
         },
         JWT_SECRET,
         { expiresIn: "15m" }
@@ -89,13 +101,13 @@ export async function GET(req: NextRequest) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
-        maxAge: 60 * 15, // 15 منٹ
+        maxAge: 60 * 15,
       });
       return response;
     }
 
     // ═══════════════════════════════════════════════════════
-    // ✅ پرانا user — سیدھا لاگ ان
+    // ✅ پرانا user — سیدھا ہوم پیج پر بھیجیں
     // ═══════════════════════════════════════════════════════
     user.provider = user.provider || "google";
     user.googleId = googleId;
@@ -105,7 +117,6 @@ export async function GET(req: NextRequest) {
     user.loginCount = (user.loginCount || 0) + 1;
     await user.save();
 
-    // JWT بنائیں
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -118,7 +129,8 @@ export async function GET(req: NextRequest) {
       { expiresIn: "7d" }
     );
 
-    const response = NextResponse.redirect(new URL("/dashboard", req.url));
+    // ✅ '/' پر بھیجیں، '/dashboard' پر نہیں
+    const response = NextResponse.redirect(new URL(redirectTo, req.url));
     response.cookies.set({
       name: "token",
       value: token,
