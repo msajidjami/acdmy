@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 const JWT_SECRET = process.env.JWT_SECRET;
 
 /* ============================================================
-   GET — Academy کی تمام unique course categories
+   GET — Academy کی تمام subjects (category + title + name)
    ============================================================ */
 
 export async function GET(req: NextRequest) {
@@ -71,18 +71,50 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    /* ---------- Unique categories ---------- */
+    /* ------------------------------------------------------------
+       ✅ FIXED: category + title + name — سب سے subjects بنائیں
+       
+       یہ یقینی بناتا ہے کہ:
+       - اگر course میں category ہے → وہ شامل
+       - اگر title ہے → وہ شامل
+       - اگر name ہے → وہ شامل
+       - تمام courses کی ہر ممکن unique value
+       ------------------------------------------------------------ */
     const courses = await Course.find({ academyId: academy._id })
-      .select('category')
+      .select('category title name subjects')
       .lean();
 
-    const subjects = Array.from(
-      new Set(
-        courses
-          .map((c: any) => String(c.category || '').trim())
-          .filter((c: string) => c.length > 0)
-      )
-    ).sort((a, b) => a.localeCompare(b));
+    const subjectSet = new Set<string>();
+
+    courses.forEach((c: any) => {
+      // Category field
+      const cat = String(c.category || '').trim();
+      if (cat) subjectSet.add(cat);
+
+      // Title field
+      const title = String(c.title || '').trim();
+      if (title) subjectSet.add(title);
+
+      // Name field (alternative to title)
+      const name = String(c.name || '').trim();
+      if (name) subjectSet.add(name);
+
+      // Subjects array (if course has its own subjects list)
+      if (Array.isArray(c.subjects)) {
+        c.subjects.forEach((s: any) => {
+          const sub = String(s || '').trim();
+          if (sub) subjectSet.add(sub);
+        });
+      }
+    });
+
+    const subjects = Array.from(subjectSet).sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+    console.log(
+      `[subjects] Found ${subjects.length} subjects for academy ${academy._id}`
+    );
 
     return NextResponse.json({ subjects });
   } catch (error) {
