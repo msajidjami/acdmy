@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+
+// ✅ Heroicons — names end with "Icon"
 import {
   UserPlusIcon,
   PencilSquareIcon,
@@ -23,7 +26,18 @@ import {
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 
-/* ------------------ Types ------------------ */
+// ✅ Lucide React — no suffix
+import {
+  Lock,
+  Crown,
+  AlertTriangle,
+  TrendingUp,
+  ArrowRight,
+} from 'lucide-react';
+
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 interface Student {
   _id: string;
@@ -34,20 +48,35 @@ interface Student {
   parentPhone: string;
   address: string;
   subjects: string[];
-  status: 'active' | 'inactive' | 'pending';
+  status: 'active' | 'inactive' | 'pending' | 'graduated';
   enrollmentDate: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
 }
 
-/* ------------------ Helpers ------------------ */
+interface PlanInfo {
+  planId: string;
+  planName: string;
+  studentLimit: number;
+  currentCount: number;
+  isActive: boolean;
+  isPublic: boolean;
+  isFree: boolean;
+  isUnlimited: boolean;
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
 
 function getInitials(name: string): string {
   if (!name) return '?';
   const parts = name.trim().split(' ');
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  return (
+    parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
 }
 
 function formatDate(date: string): string {
@@ -62,15 +91,22 @@ function formatDate(date: string): string {
   }
 }
 
-/* ------------------ Component ------------------ */
+/* ============================================================
+   MAIN COMPONENT
+   ============================================================ */
 
 export default function OwnerStudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState('');
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'pending' | 'inactive'>('all');
+  const [filterStatus, setFilterStatus] = useState<
+    'all' | 'active' | 'pending' | 'inactive' | 'graduated'
+  >('all');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -79,94 +115,111 @@ export default function OwnerStudentsPage() {
     parentPhone: '',
     address: '',
     subjects: '',
-    status: 'active',
+    status: 'active' as Student['status'],
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
-  /* ------------------ Data ------------------ */
+  /* ============================================================
+     DATA FETCH
+     ============================================================ */
 
   const fetchStudents = async () => {
     try {
-      const res = await fetch('/api/owner/students');
+      const res = await fetch('/api/owner/students', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setStudents(data);
-    } catch (error) {
+      setStudents(Array.isArray(data) ? data : []);
+    } catch {
       toast.error('Error loading students');
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const fetchPlanInfo = async () => {
+    try {
+      const res = await fetch('/api/subscription/status', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const sub = data.subscription;
+      const academy = data.academy;
+
+      const studentLimit = academy?.studentLimit ?? 0;
+      const isUnlimited = studentLimit === -1;
+
+      setPlanInfo({
+        planId: academy?.planId || 'free',
+        planName: sub?.planName || 'Free',
+        studentLimit,
+        currentCount: academy?.currentStudentCount ?? 0,
+        isActive:
+          sub?.status === 'active' || sub?.status === 'trial',
+        isPublic: academy?.isPublic ?? false,
+        isFree: !sub || academy?.planId === 'free',
+        isUnlimited,
+      });
+    } catch {
+      /* ignore */
     }
   };
 
   useEffect(() => {
-    fetchStudents();
+    (async () => {
+      setLoading(true);
+      await Promise.all([fetchStudents(), fetchPlanInfo()]);
+      setLoading(false);
+    })();
   }, []);
 
-  /* ------------------ Actions ------------------ */
+  /* ============================================================
+     PLAN CHECKS
+     ============================================================ */
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+  const limitReached = useMemo(() => {
+    if (!planInfo) return false;
+    if (planInfo.isFree) return true;
+    if (planInfo.isUnlimited) return false;
+    return planInfo.currentCount >= planInfo.studentLimit;
+  }, [planInfo]);
 
-    const payload = {
-      ...formData,
-      subjects: formData.subjects.split(',').map((s) => s.trim()).filter(Boolean),
-    };
+  const usagePercent = useMemo(() => {
+    if (!planInfo || planInfo.isUnlimited || planInfo.studentLimit <= 0)
+      return 0;
+    return Math.min(
+      100,
+      Math.round((planInfo.currentCount / planInfo.studentLimit) * 100)
+    );
+  }, [planInfo]);
 
-    try {
-      const url = editingStudent
-        ? `/api/owner/students/${editingStudent._id}`
-        : '/api/owner/students';
-      const method = editingStudent ? 'PUT' : 'POST';
+  const remaining = useMemo(() => {
+    if (!planInfo) return 0;
+    if (planInfo.isUnlimited) return -1;
+    return Math.max(0, planInfo.studentLimit - planInfo.currentCount);
+  }, [planInfo]);
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+  /* ============================================================
+     MODAL OPEN
+     ============================================================ */
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Operation failed');
-      }
-
-      toast.success(editingStudent ? 'Student updated' : 'Student added');
-      setShowModal(false);
-      setEditingStudent(null);
-      resetForm();
-      fetchStudents();
-    } catch (error: any) {
-      toast.error(error.message || 'Error saving student');
-    } finally {
-      setSubmitting(false);
+  const openAddModal = () => {
+    if (limitReached) {
+      setUpgradeReason(
+        planInfo?.isFree
+          ? 'You are on the Free plan. Upgrade to add students and make your academy public.'
+          : `You have reached your limit of ${planInfo?.studentLimit} students. Upgrade your plan to add more.`
+      );
+      setShowUpgradeModal(true);
+      return;
     }
-  };
-
-  const deleteStudent = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this student?')) return;
-    try {
-      const res = await fetch(`/api/owner/students/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      toast.success('Student deleted');
-      setStudents((prev) => prev.filter((s) => s._id !== id));
-    } catch (error) {
-      toast.error('Error deleting student');
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      parentName: '',
-      parentPhone: '',
-      address: '',
-      subjects: '',
-      status: 'active',
-      notes: '',
-    });
+    setEditingStudent(null);
+    resetForm();
+    setShowModal(true);
   };
 
   const openEditModal = (student: Student) => {
@@ -185,24 +238,114 @@ export default function OwnerStudentsPage() {
     setShowModal(true);
   };
 
-  const openAddModal = () => {
-    setEditingStudent(null);
-    resetForm();
-    setShowModal(true);
+  /* ============================================================
+     SUBMIT
+     ============================================================ */
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const payload = {
+      ...formData,
+      subjects: formData.subjects
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    };
+
+    try {
+      const url = editingStudent
+        ? `/api/owner/students/${editingStudent._id}`
+        : '/api/owner/students';
+      const method = editingStudent ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      /* ✅ 402 — Payment Required */
+      if (res.status === 402) {
+        const errorData = await res.json();
+        setUpgradeReason(
+          errorData.error || 'Plan limit reached. Please upgrade.'
+        );
+        setShowUpgradeModal(true);
+        setShowModal(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Operation failed');
+      }
+
+      toast.success(editingStudent ? 'Student updated' : 'Student added');
+      setShowModal(false);
+      setEditingStudent(null);
+      resetForm();
+
+      await Promise.all([fetchStudents(), fetchPlanInfo()]);
+    } catch (error: any) {
+      toast.error(error.message || 'Error saving student');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  /* ------------------ Derived ------------------ */
+  /* ============================================================
+     DELETE
+     ============================================================ */
+
+  const deleteStudent = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this student?')) return;
+    try {
+      const res = await fetch(`/api/owner/students/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      toast.success('Student deleted');
+      setStudents((prev) => prev.filter((s) => s._id !== id));
+      await fetchPlanInfo();
+    } catch {
+      toast.error('Error deleting student');
+    }
+  };
+
+  /* ============================================================
+     HELPERS
+     ============================================================ */
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      parentName: '',
+      parentPhone: '',
+      address: '',
+      subjects: '',
+      status: 'active',
+      notes: '',
+    });
+  };
 
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
+      const q = searchQuery.toLowerCase();
       const matchesSearch =
         searchQuery === '' ||
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.parentName && s.parentName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        s.subjects.some((sub) => sub.toLowerCase().includes(searchQuery.toLowerCase()));
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        (s.parentName && s.parentName.toLowerCase().includes(q)) ||
+        s.subjects.some((sub) => sub.toLowerCase().includes(q));
 
-      const matchesFilter = filterStatus === 'all' || s.status === filterStatus;
+      const matchesFilter =
+        filterStatus === 'all' || s.status === filterStatus;
 
       return matchesSearch && matchesFilter;
     });
@@ -218,20 +361,26 @@ export default function OwnerStudentsPage() {
     [students]
   );
 
-  /* ------------------ Loading ------------------ */
+  /* ============================================================
+     LOADING
+     ============================================================ */
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-emerald-600 mx-auto" />
-          <p className="text-slate-500 mt-4 text-sm font-medium">Loading students...</p>
+          <p className="text-slate-500 mt-4 text-sm font-medium">
+            Loading students...
+          </p>
         </div>
       </div>
     );
   }
 
-  /* ------------------ Render ------------------ */
+  /* ============================================================
+     RENDER
+     ============================================================ */
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -265,75 +414,177 @@ export default function OwnerStudentsPage() {
 
           <button
             onClick={openAddModal}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white text-emerald-700 hover:bg-emerald-50 font-semibold text-sm rounded-xl shadow-lg transition whitespace-nowrap shrink-0"
+            className={`inline-flex items-center justify-center gap-2 px-5 py-3 font-semibold text-sm rounded-xl shadow-lg transition whitespace-nowrap shrink-0 ${
+              limitReached
+                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                : 'bg-white text-emerald-700 hover:bg-emerald-50'
+            }`}
           >
-            <UserPlusIcon className="h-4 w-4" />
-            Add Student
+            {limitReached ? (
+              <>
+                <Lock className="h-4 w-4" />
+                Upgrade to Add
+              </>
+            ) : (
+              <>
+                <UserPlusIcon className="h-4 w-4" />
+                Add Student
+              </>
+            )}
           </button>
         </div>
       </div>
 
       {/* ============================================
+          PLAN STATUS BANNER
+      ============================================ */}
+      {planInfo && (
+        <div
+          className={`rounded-2xl border-2 p-4 sm:p-5 ${
+            planInfo.isFree
+              ? 'bg-amber-50 border-amber-300'
+              : limitReached
+              ? 'bg-rose-50 border-rose-300'
+              : usagePercent >= 80
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-emerald-50 border-emerald-200'
+          }`}
+        >
+          <div className="flex items-start gap-4 flex-wrap">
+            <div
+              className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                planInfo.isFree
+                  ? 'bg-amber-500'
+                  : limitReached
+                  ? 'bg-rose-500'
+                  : 'bg-emerald-500'
+              }`}
+            >
+              {planInfo.isFree ? (
+                <Lock className="h-6 w-6 text-white" />
+              ) : limitReached ? (
+                <AlertTriangle className="h-6 w-6 text-white" />
+              ) : (
+                <Crown className="h-6 w-6 text-white" />
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-slate-900 text-base">
+                  {planInfo.isFree
+                    ? 'Free Plan — Upgrade Required'
+                    : limitReached
+                    ? 'Student Limit Reached'
+                    : `${planInfo.planName} Plan Active`}
+                </h3>
+
+                {!planInfo.isFree && !planInfo.isUnlimited && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      limitReached
+                        ? 'bg-rose-100 text-rose-700'
+                        : usagePercent >= 80
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
+                    {planInfo.currentCount} / {planInfo.studentLimit}
+                  </span>
+                )}
+
+                {planInfo.isUnlimited && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                    Unlimited
+                  </span>
+                )}
+              </div>
+
+              {/* Usage bar */}
+              {!planInfo.isUnlimited && planInfo.studentLimit > 0 && (
+                <div className="mt-2 max-w-md">
+                  <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        limitReached
+                          ? 'bg-rose-500'
+                          : usagePercent >= 80
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${usagePercent}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1.5 font-medium">
+                    {planInfo.isFree
+                      ? 'Free plan does not allow adding students.'
+                      : limitReached
+                      ? `You've used all ${planInfo.studentLimit} student slots.`
+                      : `${remaining} student slot${
+                          remaining !== 1 ? 's' : ''
+                        } remaining.`}
+                  </p>
+                </div>
+              )}
+
+              {(planInfo.isFree || limitReached) && (
+                <Link
+                  href="/pricing"
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  {planInfo.isFree ? 'View Plans' : 'Upgrade Plan'}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================
           STATS CARDS
       ============================================ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total */}
-        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between mb-3">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-50 flex items-center justify-center">
-              <UsersIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-            </div>
-          </div>
-          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.total}</p>
-          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">
-            Total Students
-          </p>
-        </div>
-
-        {/* Active */}
-        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between mb-3">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <CheckCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-            </div>
-          </div>
-          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.active}</p>
-          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Active</p>
-        </div>
-
-        {/* Pending */}
-        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between mb-3">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-50 flex items-center justify-center">
-              <ClockIcon className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
-            </div>
-          </div>
-          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.pending}</p>
-          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Pending</p>
-        </div>
-
-        {/* Inactive */}
-        <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-400 to-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="flex items-start justify-between mb-3">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-slate-100 flex items-center justify-center">
-              <XCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
-            </div>
-          </div>
-          <p className="text-xl sm:text-3xl font-bold text-slate-900">{stats.inactive}</p>
-          <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">Inactive</p>
-        </div>
+        <StatCard
+          label="Total Students"
+          value={stats.total}
+          icon={<UsersIcon className="h-5 w-5" />}
+          gradient="from-blue-500 to-indigo-600"
+          bg="bg-blue-50"
+          text="text-blue-600"
+        />
+        <StatCard
+          label="Active"
+          value={stats.active}
+          icon={<CheckCircleIcon className="h-5 w-5" />}
+          gradient="from-emerald-500 to-teal-600"
+          bg="bg-emerald-50"
+          text="text-emerald-600"
+        />
+        <StatCard
+          label="Pending"
+          value={stats.pending}
+          icon={<ClockIcon className="h-5 w-5" />}
+          gradient="from-amber-500 to-orange-600"
+          bg="bg-amber-50"
+          text="text-amber-600"
+        />
+        <StatCard
+          label="Inactive"
+          value={stats.inactive}
+          icon={<XCircleIcon className="h-5 w-5" />}
+          gradient="from-slate-400 to-slate-600"
+          bg="bg-slate-100"
+          text="text-slate-600"
+        />
       </div>
 
       {/* ============================================
-          SEARCH + FILTER BAR
+          SEARCH + FILTER
       ============================================ */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
           <div className="relative flex-1">
             <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
@@ -345,7 +596,6 @@ export default function OwnerStudentsPage() {
             />
           </div>
 
-          {/* Filter pills */}
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 overflow-x-auto">
             <FunnelIcon className="h-4 w-4 text-slate-400 ml-2 shrink-0" />
             {(
@@ -354,6 +604,7 @@ export default function OwnerStudentsPage() {
                 { key: 'active', label: 'Active' },
                 { key: 'pending', label: 'Pending' },
                 { key: 'inactive', label: 'Inactive' },
+                { key: 'graduated', label: 'Graduated' },
               ] as const
             ).map((opt) => (
               <button
@@ -394,7 +645,7 @@ export default function OwnerStudentsPage() {
       </div>
 
       {/* ============================================
-          EMPTY STATES
+          LIST
       ============================================ */}
       {students.length === 0 ? (
         <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border-2 border-dashed border-emerald-200 shadow-sm">
@@ -405,14 +656,29 @@ export default function OwnerStudentsPage() {
             No Students Yet
           </h3>
           <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm sm:text-base">
-            Start growing your academy by enrolling your first student.
+            {planInfo?.isFree
+              ? 'Upgrade your plan to start adding students.'
+              : 'Start growing your academy by enrolling your first student.'}
           </p>
           <button
             onClick={openAddModal}
-            className="inline-flex items-center gap-2 mt-6 px-7 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-600/20 transition"
+            className={`inline-flex items-center gap-2 mt-6 px-7 py-3.5 font-semibold rounded-2xl shadow-lg transition ${
+              limitReached
+                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700'
+            }`}
           >
-            <UserPlusIcon className="h-5 w-5" />
-            Add Your First Student
+            {limitReached ? (
+              <>
+                <Crown className="h-5 w-5" />
+                Upgrade to Add Students
+              </>
+            ) : (
+              <>
+                <UserPlusIcon className="h-5 w-5" />
+                Add Your First Student
+              </>
+            )}
           </button>
         </div>
       ) : filteredStudents.length === 0 ? (
@@ -420,16 +686,16 @@ export default function OwnerStudentsPage() {
           <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
             <MagnifyingGlassIcon className="h-6 w-6 text-slate-400" />
           </div>
-          <h3 className="text-lg font-bold text-slate-800">No matches found</h3>
+          <h3 className="text-lg font-bold text-slate-800">
+            No matches found
+          </h3>
           <p className="text-slate-500 mt-1 text-sm">
             Try adjusting your search or filters.
           </p>
         </div>
       ) : (
         <>
-          {/* ============================================
-              DESKTOP TABLE
-          ============================================ */}
+          {/* DESKTOP TABLE */}
           <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100">
@@ -464,7 +730,6 @@ export default function OwnerStudentsPage() {
                       key={student._id}
                       className="hover:bg-slate-50/50 transition-colors"
                     >
-                      {/* Student */}
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm">
@@ -483,7 +748,6 @@ export default function OwnerStudentsPage() {
                         </div>
                       </td>
 
-                      {/* Contact */}
                       <td className="px-5 py-4">
                         <div className="text-xs text-slate-600 flex items-center gap-1.5">
                           <EnvelopeIcon className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -499,7 +763,6 @@ export default function OwnerStudentsPage() {
                         )}
                       </td>
 
-                      {/* Parent */}
                       <td className="px-5 py-4">
                         {student.parentName ? (
                           <>
@@ -518,7 +781,6 @@ export default function OwnerStudentsPage() {
                         )}
                       </td>
 
-                      {/* Subjects */}
                       <td className="px-5 py-4">
                         {student.subjects.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-xs">
@@ -541,34 +803,14 @@ export default function OwnerStudentsPage() {
                         )}
                       </td>
 
-                      {/* Status */}
                       <td className="px-5 py-4">
-                        {student.status === 'active' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                            <CheckCircleIcon className="h-3 w-3" />
-                            Active
-                          </span>
-                        )}
-                        {student.status === 'pending' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
-                            <ClockIcon className="h-3 w-3" />
-                            Pending
-                          </span>
-                        )}
-                        {student.status === 'inactive' && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            <XCircleIcon className="h-3 w-3" />
-                            Inactive
-                          </span>
-                        )}
+                        <StatusBadge status={student.status} />
                       </td>
 
-                      {/* Enrolled */}
                       <td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">
                         {formatDate(student.enrollmentDate)}
                       </td>
 
-                      {/* Actions */}
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -594,16 +836,13 @@ export default function OwnerStudentsPage() {
             </div>
           </div>
 
-          {/* ============================================
-              MOBILE CARDS
-          ============================================ */}
+          {/* MOBILE CARDS */}
           <div className="md:hidden space-y-3">
             {filteredStudents.map((student) => (
               <div
                 key={student._id}
                 className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm"
               >
-                {/* Header */}
                 <div className="flex items-start gap-3">
                   <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-base font-bold shrink-0 shadow-sm">
                     {getInitials(student.name)}
@@ -617,24 +856,9 @@ export default function OwnerStudentsPage() {
                       {student.email}
                     </p>
                   </div>
-                  {student.status === 'active' && (
-                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
-                      Active
-                    </span>
-                  )}
-                  {student.status === 'pending' && (
-                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
-                      Pending
-                    </span>
-                  )}
-                  {student.status === 'inactive' && (
-                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                      Inactive
-                    </span>
-                  )}
+                  <StatusBadge status={student.status} compact />
                 </div>
 
-                {/* Details grid */}
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
                   {student.phone && (
                     <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2">
@@ -650,7 +874,6 @@ export default function OwnerStudentsPage() {
                   )}
                 </div>
 
-                {/* Subjects */}
                 {student.subjects.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-3">
                     {student.subjects.slice(0, 3).map((subject) => (
@@ -669,7 +892,6 @@ export default function OwnerStudentsPage() {
                   </div>
                 )}
 
-                {/* Footer */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <p className="text-[11px] text-slate-400">
                     Enrolled {formatDate(student.enrollmentDate)}
@@ -678,14 +900,12 @@ export default function OwnerStudentsPage() {
                     <button
                       onClick={() => openEditModal(student)}
                       className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition"
-                      aria-label="Edit student"
                     >
                       <PencilSquareIcon className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => deleteStudent(student._id)}
                       className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
-                      aria-label="Delete student"
                     >
                       <TrashIcon className="h-4 w-4" />
                     </button>
@@ -698,18 +918,17 @@ export default function OwnerStudentsPage() {
       )}
 
       {/* ============================================
-          MODAL
+          STUDENT FORM MODAL
       ============================================ */}
       {showModal && (
         <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
           onClick={() => !submitting && setShowModal(false)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b border-slate-100 px-5 sm:px-6 py-4 z-10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -743,16 +962,14 @@ export default function OwnerStudentsPage() {
                   onClick={() => !submitting && setShowModal(false)}
                   disabled={submitting}
                   className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
-                  aria-label="Close"
                 >
                   <XMarkIcon className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
-            {/* Modal Body */}
             <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5">
-              {/* Section: Basic Info */}
+              {/* Basic Info */}
               <div>
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <UserIcon className="h-3.5 w-3.5" />
@@ -760,17 +977,11 @@ export default function OwnerStudentsPage() {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Name */}
                   <div className="space-y-2 sm:col-span-2">
-                    <label
-                      htmlFor="student-name"
-                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      Full Name
-                      <span className="text-rose-500">*</span>
+                    <label className="text-sm font-semibold text-slate-700">
+                      Full Name <span className="text-rose-500">*</span>
                     </label>
                     <input
-                      id="student-name"
                       type="text"
                       value={formData.name}
                       onChange={(e) =>
@@ -778,22 +989,16 @@ export default function OwnerStudentsPage() {
                       }
                       required
                       placeholder="e.g. Muhammad Ali"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                     />
                   </div>
 
-                  {/* Email */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor="student-email"
-                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                       <EnvelopeIcon className="h-3.5 w-3.5 text-slate-400" />
-                      Email
-                      <span className="text-rose-500">*</span>
+                      Email <span className="text-rose-500">*</span>
                     </label>
                     <input
-                      id="student-email"
                       type="email"
                       value={formData.email}
                       onChange={(e) =>
@@ -801,34 +1006,29 @@ export default function OwnerStudentsPage() {
                       }
                       required
                       placeholder="student@example.com"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                     />
                   </div>
 
-                  {/* Phone */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor="student-phone"
-                      className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
+                    <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                       <PhoneIcon className="h-3.5 w-3.5 text-slate-400" />
                       Phone
                     </label>
                     <input
-                      id="student-phone"
                       type="text"
                       value={formData.phone}
                       onChange={(e) =>
                         setFormData({ ...formData, phone: e.target.value })
                       }
                       placeholder="+92 300 1234567"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Section: Guardian */}
+              {/* Guardian Info */}
               <div className="pt-2">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <UsersIcon className="h-3.5 w-3.5" />
@@ -836,64 +1036,56 @@ export default function OwnerStudentsPage() {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Parent Name */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor="parent-name"
-                      className="text-sm font-semibold text-slate-700"
-                    >
+                    <label className="text-sm font-semibold text-slate-700">
                       Parent Name
                     </label>
                     <input
-                      id="parent-name"
                       type="text"
                       value={formData.parentName}
                       onChange={(e) =>
-                        setFormData({ ...formData, parentName: e.target.value })
+                        setFormData({
+                          ...formData,
+                          parentName: e.target.value,
+                        })
                       }
                       placeholder="e.g. Ahmed Khan"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                     />
                   </div>
 
-                  {/* Parent Phone */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor="parent-phone"
-                      className="text-sm font-semibold text-slate-700"
-                    >
+                    <label className="text-sm font-semibold text-slate-700">
                       Parent Phone
                     </label>
                     <input
-                      id="parent-phone"
                       type="text"
                       value={formData.parentPhone}
                       onChange={(e) =>
-                        setFormData({ ...formData, parentPhone: e.target.value })
+                        setFormData({
+                          ...formData,
+                          parentPhone: e.target.value,
+                        })
                       }
                       placeholder="+92 300 7654321"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Section: Academic */}
+              {/* Academic */}
               <div className="pt-2">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <BookOpenIcon className="h-3.5 w-3.5" />
                   Academic Details
                 </p>
 
-                {/* Status */}
                 <div className="space-y-2 mb-4">
-                  <label
-                    htmlFor="student-status"
-                    className="text-sm font-semibold text-slate-700"
-                  >
+                  <label className="text-sm font-semibold text-slate-700">
                     Status
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     {(
                       [
                         {
@@ -914,19 +1106,28 @@ export default function OwnerStudentsPage() {
                           Icon: XCircleIcon,
                           color: 'slate',
                         },
+                        {
+                          key: 'graduated',
+                          label: 'Graduated',
+                          Icon: SparklesIcon,
+                          color: 'violet',
+                        },
                       ] as const
                     ).map(({ key, label, Icon, color }) => {
                       const isSelected = formData.status === key;
                       const colorClasses = {
                         emerald: isSelected
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                          : 'border-slate-200 text-slate-600 hover:border-emerald-200 hover:bg-emerald-50/30',
+                          : 'border-slate-200 text-slate-600 hover:border-emerald-200',
                         amber: isSelected
                           ? 'border-amber-500 bg-amber-50 text-amber-700'
-                          : 'border-slate-200 text-slate-600 hover:border-amber-200 hover:bg-amber-50/30',
+                          : 'border-slate-200 text-slate-600 hover:border-amber-200',
                         slate: isSelected
                           ? 'border-slate-500 bg-slate-100 text-slate-700'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300',
+                        violet: isSelected
+                          ? 'border-violet-500 bg-violet-50 text-violet-700'
+                          : 'border-slate-200 text-slate-600 hover:border-violet-200',
                       }[color];
 
                       return (
@@ -934,9 +1135,12 @@ export default function OwnerStudentsPage() {
                           key={key}
                           type="button"
                           onClick={() =>
-                            setFormData({ ...formData, status: key })
+                            setFormData({
+                              ...formData,
+                              status: key as Student['status'],
+                            })
                           }
-                          className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition text-xs font-semibold ${colorClasses}`}
+                          className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition text-[11px] font-semibold ${colorClasses}`}
                         >
                           <Icon className="h-4 w-4" />
                           {label}
@@ -946,24 +1150,19 @@ export default function OwnerStudentsPage() {
                   </div>
                 </div>
 
-                {/* Subjects */}
                 <div className="space-y-2">
-                  <label
-                    htmlFor="student-subjects"
-                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                  >
+                  <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                     <BookOpenIcon className="h-3.5 w-3.5 text-slate-400" />
                     Subjects
                   </label>
                   <input
-                    id="student-subjects"
                     type="text"
                     value={formData.subjects}
                     onChange={(e) =>
                       setFormData({ ...formData, subjects: e.target.value })
                     }
                     placeholder="Quran, Math, English"
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                   />
                   <p className="text-[11px] text-slate-400">
                     Separate multiple subjects with commas.
@@ -971,40 +1170,31 @@ export default function OwnerStudentsPage() {
                 </div>
               </div>
 
-              {/* Section: Additional */}
+              {/* Additional */}
               <div className="pt-2">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                   <DocumentTextIcon className="h-3.5 w-3.5" />
                   Additional Information
                 </p>
 
-                {/* Address */}
                 <div className="space-y-2 mb-4">
-                  <label
-                    htmlFor="student-address"
-                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                  >
+                  <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                     <MapPinIcon className="h-3.5 w-3.5 text-slate-400" />
                     Address
                   </label>
                   <input
-                    id="student-address"
                     type="text"
                     value={formData.address}
                     onChange={(e) =>
                       setFormData({ ...formData, address: e.target.value })
                     }
                     placeholder="House #12, Street 5, Islamabad"
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
                   />
                 </div>
 
-                {/* Notes */}
                 <div className="space-y-2">
-                  <label
-                    htmlFor="student-notes"
-                    className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"
-                  >
+                  <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                     <SparklesIcon className="h-3.5 w-3.5 text-slate-400" />
                     Notes
                     <span className="text-slate-400 text-xs font-normal">
@@ -1012,24 +1202,22 @@ export default function OwnerStudentsPage() {
                     </span>
                   </label>
                   <textarea
-                    id="student-notes"
                     value={formData.notes}
                     onChange={(e) =>
                       setFormData({ ...formData, notes: e.target.value })
                     }
                     rows={3}
                     placeholder="Any additional information about the student..."
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm resize-none placeholder:text-slate-400 leading-relaxed"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm resize-none"
                   />
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all duration-300 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg transition disabled:opacity-60"
                 >
                   {submitting ? (
                     <>
@@ -1057,6 +1245,177 @@ export default function OwnerStudentsPage() {
           </div>
         </div>
       )}
+
+      {/* ============================================
+          UPGRADE MODAL
+      ============================================ */}
+      {showUpgradeModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+          onClick={() => setShowUpgradeModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="relative bg-gradient-to-br from-violet-600 to-fuchsia-600 p-6 text-white overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/20 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative flex items-start gap-4">
+                <div className="h-14 w-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 border border-white/30">
+                  <Crown className="h-7 w-7 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold">Upgrade Required</h3>
+                  <p className="text-sm text-white/90 mt-1">
+                    Unlock more students by upgrading your plan.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-900 leading-relaxed">
+                    {upgradeReason}
+                  </p>
+                </div>
+              </div>
+
+              {/* Plan suggestions */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { name: 'Starter', students: 10, price: '$3.99' },
+                  { name: 'Growth', students: 30, price: '$9.99' },
+                  { name: 'Pro', students: 75, price: '$19.99' },
+                ].map((plan) => (
+                  <div
+                    key={plan.name}
+                    className="rounded-xl border border-slate-200 p-3 text-center"
+                  >
+                    <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                      {plan.name}
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 mt-1">
+                      {plan.students}
+                    </p>
+                    <p className="text-[10px] text-slate-500">students</p>
+                    <p className="text-xs font-bold text-violet-600 mt-1">
+                      {plan.price}/mo
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2">
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg hover:from-violet-700 hover:to-fuchsia-700 transition"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  View All Plans
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(false)}
+                  className="w-full rounded-xl px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/* ============================================================
+   SUB COMPONENTS
+   ============================================================ */
+
+function StatCard({
+  label,
+  value,
+  icon,
+  gradient,
+  bg,
+  text,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  gradient: string;
+  bg: string;
+  text: string;
+}) {
+  return (
+    <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
+      <div
+        className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient} opacity-0 group-hover:opacity-100 transition-opacity`}
+      />
+      <div className="flex items-start justify-between mb-3">
+        <div
+          className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${bg} flex items-center justify-center ${text}`}
+        >
+          {icon}
+        </div>
+      </div>
+      <p className="text-xl sm:text-3xl font-bold text-slate-900">{value}</p>
+      <p className="text-[11px] sm:text-sm text-slate-500 mt-1 font-medium">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function StatusBadge({
+  status,
+  compact,
+}: {
+  status: Student['status'];
+  compact?: boolean;
+}) {
+  const map = {
+    active: {
+      bg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+      Icon: CheckCircleIcon,
+      label: 'Active',
+    },
+    pending: {
+      bg: 'bg-amber-50 text-amber-700 border-amber-100',
+      Icon: ClockIcon,
+      label: 'Pending',
+    },
+    inactive: {
+      bg: 'bg-slate-100 text-slate-600 border-slate-200',
+      Icon: XCircleIcon,
+      label: 'Inactive',
+    },
+    graduated: {
+      bg: 'bg-violet-50 text-violet-700 border-violet-100',
+      Icon: SparklesIcon,
+      label: 'Graduated',
+    },
+  }[status];
+
+  const { Icon } = map;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${map.bg} ${
+        compact ? 'text-[10px] px-2' : ''
+      }`}
+    >
+      <Icon className="h-3 w-3" />
+      {map.label}
+    </span>
   );
 }

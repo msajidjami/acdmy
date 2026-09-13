@@ -1,68 +1,136 @@
 'use client';
 
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
+import {
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  TrashIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 
-interface AlertBannerProps {
-  type: 'success' | 'error' | 'warning' | 'info' | 'deleted';
+/* ============================================================
+   TYPES
+   ============================================================ */
+
+export type AlertType = 'success' | 'deleted' | 'error' | 'warning';
+
+export interface AlertBannerProps {
+  type: AlertType;
   title: string;
   message: string;
+  /** URL param key to remove on dismiss (e.g. "success", "deleted") */
+  paramKey?: string;
+  /** Auto-dismiss after N milliseconds */
+  autoDismissMs?: number;
+  /** Legacy: manual dismiss callback (optional) */
   onDismiss?: () => void;
 }
 
-export default function AlertBanner({ type, title, message, onDismiss }: AlertBannerProps) {
-  const styles = {
-    success: {
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-      text: 'text-green-800',
-      icon: '✅',
-    },
-    error: {
-      bg: 'bg-red-50',
-      border: 'border-red-200',
-      text: 'text-red-800',
-      icon: '❌',
-    },
-    warning: {
-      bg: 'bg-yellow-50',
-      border: 'border-yellow-200',
-      text: 'text-yellow-800',
-      icon: '⚠️',
-    },
-    info: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      text: 'text-blue-800',
-      icon: 'ℹ️',
-    },
-    deleted: {
-      bg: 'bg-gray-50',
-      border: 'border-gray-200',
-      text: 'text-gray-800',
-      icon: '🗑️',
-    },
+/* ============================================================
+   STYLES
+   ============================================================ */
+
+const STYLES: Record<
+  AlertType,
+  {
+    wrapper: string;
+    icon: string;
+    title: string;
+    text: string;
+    button: string;
+  }
+> = {
+  success: {
+    wrapper: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    icon: 'text-emerald-600',
+    title: 'text-emerald-900',
+    text: 'text-emerald-700',
+    button: 'text-emerald-600 hover:text-emerald-800',
+  },
+  deleted: {
+    wrapper: 'bg-rose-50 border-rose-200 text-rose-800',
+    icon: 'text-rose-600',
+    title: 'text-rose-900',
+    text: 'text-rose-700',
+    button: 'text-rose-600 hover:text-rose-800',
+  },
+  error: {
+    wrapper: 'bg-rose-50 border-rose-200 text-rose-800',
+    icon: 'text-rose-600',
+    title: 'text-rose-900',
+    text: 'text-rose-700',
+    button: 'text-rose-600 hover:text-rose-800',
+  },
+  warning: {
+    wrapper: 'bg-amber-50 border-amber-200 text-amber-800',
+    icon: 'text-amber-600',
+    title: 'text-amber-900',
+    text: 'text-amber-700',
+    button: 'text-amber-600 hover:text-amber-800',
+  },
+};
+
+/* ============================================================
+   COMPONENT
+   ============================================================ */
+
+export default function AlertBanner({
+  type,
+  title,
+  message,
+  paramKey,
+  autoDismissMs,
+  onDismiss,
+}: AlertBannerProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const s = STYLES[type];
+
+  const dismiss = () => {
+    // 1. Call custom callback if provided
+    if (onDismiss) onDismiss();
+
+    // 2. Remove URL param if provided
+    if (!paramKey) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(paramKey);
+    const q = params.toString();
+    router.replace(q ? `?${q}` : '?', { scroll: false });
   };
 
-  const style = styles[type] || styles.info;
+  // Auto-dismiss
+  useEffect(() => {
+    if (!autoDismissMs || !paramKey) return;
+    const t = setTimeout(dismiss, autoDismissMs);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDismissMs, paramKey]);
+
+  const Icon =
+    type === 'success'
+      ? CheckCircleIcon
+      : type === 'deleted'
+      ? TrashIcon
+      : ExclamationTriangleIcon;
 
   return (
-    <div className={`${style.bg} ${style.border} border rounded-xl p-4 mb-4 flex items-start justify-between`}>
-      <div className="flex items-start gap-3">
-        <span className="text-xl">{style.icon}</span>
-        <div>
-          <h4 className={`font-semibold ${style.text}`}>{title}</h4>
-          <p className={`text-sm ${style.text} opacity-90`}>{message}</p>
-        </div>
+    <div
+      className={`p-4 rounded-2xl border flex items-start gap-3 shadow-sm ${s.wrapper}`}
+    >
+      <Icon className={`h-6 w-6 shrink-0 mt-0.5 ${s.icon}`} />
+      <div className="min-w-0 flex-1">
+        <p className={`font-semibold ${s.title}`}>{title}</p>
+        <p className={`text-sm mt-0.5 ${s.text}`}>{message}</p>
       </div>
-      {onDismiss && (
-        <button
-          onClick={onDismiss}
-          className="p-1 hover:bg-white/50 rounded-lg transition"
-          aria-label="Dismiss"
-        >
-          <XMarkIcon className="h-5 w-5 text-gray-500" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={dismiss}
+        className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center transition ${s.button}`}
+        aria-label="Dismiss"
+      >
+        <XMarkIcon className="h-4 w-4" />
+      </button>
     </div>
   );
 }

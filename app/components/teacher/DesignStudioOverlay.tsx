@@ -30,6 +30,8 @@ import {
   Plus,
 } from 'lucide-react';
 
+import type { DesignBoardState } from '@/app/lib/livekit/whiteboardChannel';
+
 /* ============================================================ */
 /* TYPES                                                        */
 /* ============================================================ */
@@ -46,7 +48,7 @@ type DShape = {
   stroke: string;
   strokeWidth: number;
   opacity: number;
-  points?: { x: number; y: number }[]; // for pen path
+  points?: { x: number; y: number }[];
   text?: string;
   fontSize?: number;
   locked?: boolean;
@@ -54,7 +56,19 @@ type DShape = {
   name: string;
 };
 
-type DTool = 'select' | 'rect' | 'ellipse' | 'triangle' | 'line' | 'pen' | 'text';
+type DTool =
+  | 'select'
+  | 'rect'
+  | 'ellipse'
+  | 'triangle'
+  | 'line'
+  | 'pen'
+  | 'text';
+
+interface Props {
+  onClose: () => void;
+  onStateChange?: (state: DesignBoardState) => void;
+}
 
 /* ============================================================ */
 /* CONSTANTS                                                    */
@@ -98,7 +112,10 @@ function uid() {
 /* COMPONENT                                                    */
 /* ============================================================ */
 
-export default function DesignStudioOverlay({ onClose }: { onClose: () => void }) {
+export default function DesignStudioOverlay({
+  onClose,
+  onStateChange,
+}: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [shapes, setShapes] = useState<DShape[]>([]);
   const [tool, setTool] = useState<DTool>('select');
@@ -125,10 +142,45 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     currentY: number;
   } | null>(null);
 
-  const [penPath, setPenPath] = useState<{ x: number; y: number }[] | null>(null);
+  const [penPath, setPenPath] = useState<{ x: number; y: number }[] | null>(
+    null
+  );
 
   const historyRef = useRef<DShape[][]>([]);
   const futureRef = useRef<DShape[][]>([]);
+
+  /* ============================================================ */
+  /* ✅ STATE BROADCAST — ہر تبدیلی پر Student کو بھیجیں          */
+  /* ============================================================ */
+
+  useEffect(() => {
+    if (!onStateChange) return;
+    onStateChange({
+      shapes: shapes.map((s) => ({
+        id: s.id,
+        type: s.type,
+        x: s.x,
+        y: s.y,
+        w: s.w,
+        h: s.h,
+        rotation: s.rotation,
+        fill: s.fill,
+        stroke: s.stroke,
+        strokeWidth: s.strokeWidth,
+        opacity: s.opacity,
+        points: s.points,
+        text: s.text,
+        fontSize: s.fontSize,
+      })),
+      showGrid,
+      zoom,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shapes, showGrid, zoom]);
+
+  /* ============================================================ */
+  /* HISTORY                                                      */
+  /* ============================================================ */
 
   const pushHistory = () => {
     historyRef.current.push(JSON.parse(JSON.stringify(shapes)));
@@ -150,7 +202,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     setShapes(next);
   };
 
-  /* ---------------- Canvas coordinate helpers ---------------- */
+  /* ============================================================ */
+  /* CANVAS COORDINATES                                           */
+  /* ============================================================ */
 
   const getCanvasPoint = (e: { clientX: number; clientY: number }) => {
     const el = canvasRef.current;
@@ -162,7 +216,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     };
   };
 
-  /* ---------------- Pointer on artboard ---------------- */
+  /* ============================================================ */
+  /* CANVAS EVENTS                                                */
+  /* ============================================================ */
 
   const handleCanvasPointerDown = (e: React.PointerEvent) => {
     if (tool === 'select') {
@@ -267,7 +323,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     setTool('select');
   };
 
-  /* ---------------- Object drag / resize / rotate ---------------- */
+  /* ============================================================ */
+  /* DRAG / RESIZE / ROTATE                                       */
+  /* ============================================================ */
 
   const startMove = (e: React.PointerEvent, shape: DShape) => {
     if (tool !== 'select' || shape.locked) return;
@@ -361,7 +419,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging, zoom]);
 
-  /* ---------------- Selection actions ---------------- */
+  /* ============================================================ */
+  /* SELECTED SHAPE                                               */
+  /* ============================================================ */
 
   const selectedShape = useMemo(
     () => shapes.find((s) => s.id === selectedId) || null,
@@ -420,7 +480,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     });
   };
 
-  /* ---------------- Add text ---------------- */
+  /* ============================================================ */
+  /* ADD TEXT                                                     */
+  /* ============================================================ */
 
   const addText = () => {
     pushHistory();
@@ -445,11 +507,14 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     setTool('select');
   };
 
-  /* ---------------- Export PNG ---------------- */
+  /* ============================================================ */
+  /* EXPORT PNG                                                   */
+  /* ============================================================ */
 
   const exportPNG = () => {
-    // Simple: serialize SVG to PNG
-    const svg = document.getElementById('design-svg-inner') as SVGSVGElement | null;
+    const svg = document.getElementById(
+      'design-svg-inner'
+    ) as SVGSVGElement | null;
     if (!svg) return;
     const xml = new XMLSerializer().serializeToString(svg);
     const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
@@ -476,7 +541,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     img.src = url;
   };
 
-  /* ---------------- Keyboard ---------------- */
+  /* ============================================================ */
+  /* KEYBOARD                                                     */
+  /* ============================================================ */
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -496,7 +563,10 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
         e.preventDefault();
         undo();
       }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === 'y' || (e.shiftKey && e.key === 'z'))
+      ) {
         e.preventDefault();
         redo();
       }
@@ -513,6 +583,8 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, onClose, shapes]);
 
+  /* ============================================================ */
+  /* RENDER                                                       */
   /* ============================================================ */
 
   return (
@@ -588,14 +660,52 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
       <div className="flex-1 min-h-0 flex">
         {/* Left: tools */}
         <aside className="w-14 shrink-0 bg-[#1f2937] border-r border-white/5 flex flex-col items-center py-3 gap-1.5">
-          <DesignToolBtn active={tool === 'select'} onClick={() => setTool('select')} title="Select (V)" icon={<MousePointer2 className="h-5 w-5" />} />
+          <DesignToolBtn
+            active={tool === 'select'}
+            onClick={() => setTool('select')}
+            title="Select (V)"
+            icon={<MousePointer2 className="h-5 w-5" />}
+          />
           <div className="w-8 h-px bg-white/10 my-1" />
-          <DesignToolBtn active={tool === 'rect'} onClick={() => setTool('rect')} title="Rectangle (R)" icon={<Square className="h-5 w-5" />} />
-          <DesignToolBtn active={tool === 'ellipse'} onClick={() => setTool('ellipse')} title="Ellipse (O)" icon={<Circle className="h-5 w-5" />} />
-          <DesignToolBtn active={tool === 'triangle'} onClick={() => setTool('triangle')} title="Triangle" icon={<Triangle className="h-5 w-5" />} />
-          <DesignToolBtn active={tool === 'line'} onClick={() => setTool('line')} title="Line (L)" icon={<Minus className="h-5 w-5" />} />
-          <DesignToolBtn active={tool === 'pen'} onClick={() => setTool('pen')} title="Pen (P)" icon={<Pen className="h-5 w-5" />} />
-          <DesignToolBtn active={tool === 'text'} onClick={() => { setTool('text'); addText(); }} title="Text" icon={<Type className="h-5 w-5" />} />
+          <DesignToolBtn
+            active={tool === 'rect'}
+            onClick={() => setTool('rect')}
+            title="Rectangle (R)"
+            icon={<Square className="h-5 w-5" />}
+          />
+          <DesignToolBtn
+            active={tool === 'ellipse'}
+            onClick={() => setTool('ellipse')}
+            title="Ellipse (O)"
+            icon={<Circle className="h-5 w-5" />}
+          />
+          <DesignToolBtn
+            active={tool === 'triangle'}
+            onClick={() => setTool('triangle')}
+            title="Triangle"
+            icon={<Triangle className="h-5 w-5" />}
+          />
+          <DesignToolBtn
+            active={tool === 'line'}
+            onClick={() => setTool('line')}
+            title="Line (L)"
+            icon={<Minus className="h-5 w-5" />}
+          />
+          <DesignToolBtn
+            active={tool === 'pen'}
+            onClick={() => setTool('pen')}
+            title="Pen (P)"
+            icon={<Pen className="h-5 w-5" />}
+          />
+          <DesignToolBtn
+            active={tool === 'text'}
+            onClick={() => {
+              setTool('text');
+              addText();
+            }}
+            title="Text"
+            icon={<Type className="h-5 w-5" />}
+          />
         </aside>
 
         {/* Canvas area */}
@@ -658,7 +768,7 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                   ))}
               </svg>
 
-              {/* Interactive overlay for each shape (move/resize/select) */}
+              {/* Interactive overlay for each shape */}
               {shapes
                 .filter((s) => !s.hidden && !s.locked)
                 .map((s) => {
@@ -674,17 +784,14 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                         width: s.w,
                         height: s.h,
                         transform: `rotate(${s.rotation}deg)`,
-                        cursor:
-                          tool === 'select' ? 'move' : 'default',
+                        cursor: tool === 'select' ? 'move' : 'default',
                         pointerEvents: tool === 'select' ? 'auto' : 'none',
                         touchAction: 'none',
                       }}
                     >
                       {isSel && (
                         <>
-                          {/* Bounding box */}
                           <div className="absolute inset-0 border-2 border-fuchsia-500 pointer-events-none" />
-                          {/* Handles */}
                           {[
                             { pos: 'nw', x: 0, y: 0, c: 'nwse-resize' },
                             { pos: 'ne', x: 1, y: 0, c: 'nesw-resize' },
@@ -704,7 +811,6 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                               }}
                             />
                           ))}
-                          {/* Rotate handle */}
                           <div
                             onPointerDown={(e) => startRotate(e, s)}
                             className="absolute left-1/2 -top-7 -translate-x-1/2 w-5 h-5 bg-white border-2 border-fuchsia-500 rounded-full flex items-center justify-center cursor-grab"
@@ -807,7 +913,8 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                       <div
                         className="h-4 w-4 rounded-sm border border-white/20 shrink-0"
                         style={{
-                          background: s.fill === 'none' ? 'transparent' : s.fill,
+                          background:
+                            s.fill === 'none' ? 'transparent' : s.fill,
                           borderColor: s.stroke,
                         }}
                       />
@@ -858,7 +965,7 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
 
             {/* Properties */}
             <div className="flex-1 overflow-y-auto border-t border-white/5 p-3 space-y-4">
-              {/* Colors */}
+              {/* Fill */}
               <div>
                 <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Palette className="h-3 w-3" /> Fill
@@ -903,7 +1010,7 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                 </div>
               </div>
 
-              {/* Stroke color */}
+              {/* Stroke */}
               <div>
                 <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">
                   Stroke
@@ -933,7 +1040,7 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
               {/* Stroke width */}
               <div>
                 <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">
-                  Stroke Width · {(selectedShape?.strokeWidth ?? strokeWidth)}px
+                  Stroke Width · {selectedShape?.strokeWidth ?? strokeWidth}px
                 </p>
                 <input
                   type="range"
@@ -978,38 +1085,54 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                     </p>
                     <div className="grid grid-cols-2 gap-1.5">
                       <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1">
-                        <span className="text-[10px] text-white/40 font-mono">X</span>
+                        <span className="text-[10px] text-white/40 font-mono">
+                          X
+                        </span>
                         <input
                           type="number"
                           value={Math.round(selectedShape.x)}
-                          onChange={(e) => updateSelected({ x: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateSelected({ x: Number(e.target.value) })
+                          }
                           className="w-full bg-transparent text-white text-[11px] font-mono outline-none"
                         />
                       </div>
                       <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1">
-                        <span className="text-[10px] text-white/40 font-mono">Y</span>
+                        <span className="text-[10px] text-white/40 font-mono">
+                          Y
+                        </span>
                         <input
                           type="number"
                           value={Math.round(selectedShape.y)}
-                          onChange={(e) => updateSelected({ y: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateSelected({ y: Number(e.target.value) })
+                          }
                           className="w-full bg-transparent text-white text-[11px] font-mono outline-none"
                         />
                       </div>
                       <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1">
-                        <span className="text-[10px] text-white/40 font-mono">W</span>
+                        <span className="text-[10px] text-white/40 font-mono">
+                          W
+                        </span>
                         <input
                           type="number"
                           value={Math.round(selectedShape.w)}
-                          onChange={(e) => updateSelected({ w: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateSelected({ w: Number(e.target.value) })
+                          }
                           className="w-full bg-transparent text-white text-[11px] font-mono outline-none"
                         />
                       </div>
                       <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1">
-                        <span className="text-[10px] text-white/40 font-mono">H</span>
+                        <span className="text-[10px] text-white/40 font-mono">
+                          H
+                        </span>
                         <input
                           type="number"
                           value={Math.round(selectedShape.h)}
-                          onChange={(e) => updateSelected({ h: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateSelected({ h: Number(e.target.value) })
+                          }
                           className="w-full bg-transparent text-white text-[11px] font-mono outline-none"
                         />
                       </div>
@@ -1018,7 +1141,8 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
 
                   <div>
                     <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <RotateCw className="h-3 w-3" /> Rotation · {Math.round(selectedShape.rotation)}°
+                      <RotateCw className="h-3 w-3" /> Rotation ·{' '}
+                      {Math.round(selectedShape.rotation)}°
                     </p>
                     <input
                       type="range"
@@ -1040,7 +1164,9 @@ export default function DesignStudioOverlay({ onClose }: { onClose: () => void }
                       </p>
                       <textarea
                         value={selectedShape.text || ''}
-                        onChange={(e) => updateSelected({ text: e.target.value })}
+                        onChange={(e) =>
+                          updateSelected({ text: e.target.value })
+                        }
                         className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-[11px] text-white outline-none focus:border-fuchsia-400/50 resize-none"
                         rows={3}
                       />
@@ -1110,7 +1236,9 @@ function DesignShapeSVG({ shape }: { shape: DShape }) {
     stroke: shape.stroke,
     strokeWidth: shape.strokeWidth,
     opacity: shape.opacity,
-    transform: `rotate(${shape.rotation} ${shape.x + shape.w / 2} ${shape.y + shape.h / 2})`,
+    transform: `rotate(${shape.rotation} ${shape.x + shape.w / 2} ${
+      shape.y + shape.h / 2
+    })`,
   };
 
   if (shape.type === 'rect') {
@@ -1187,7 +1315,9 @@ function DesignShapeSVG({ shape }: { shape: DShape }) {
         fontFamily="system-ui, sans-serif"
         fontWeight={600}
         opacity={shape.opacity}
-        transform={`rotate(${shape.rotation} ${shape.x + shape.w / 2} ${shape.y + shape.h / 2})`}
+        transform={`rotate(${shape.rotation} ${shape.x + shape.w / 2} ${
+          shape.y + shape.h / 2
+        })`}
       >
         {shape.text}
       </text>

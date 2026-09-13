@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   School,
@@ -22,7 +22,9 @@ import {
   Inbox,
 } from 'lucide-react';
 
-/* ------------------ Types ------------------ */
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 interface NavItem {
   name: string;
@@ -31,16 +33,22 @@ interface NavItem {
   badge?: string;
 }
 
-/* ----------------------------------------------------------
-   🎯 SITE NAVBAR HEIGHT
-   اپنی ویب سائٹ کی navbar کی height کے مطابق تبدیل کریں:
-   • h-16 (64px)  →  '4rem'
-   • h-20 (80px)  →  '5rem'
-   • h-24 (96px)  →  '6rem'
----------------------------------------------------------- */
-const NAVBAR_H = '4rem'; // 64px
+interface OwnerLayoutProps {
+  children: React.ReactNode;
+}
 
-/* ------------------ Navigation ------------------ */
+/* ============================================================
+   NAVBAR HEIGHT — اپنی ویب سائٹ کی navbar کے مطابق
+   • h-16 (64px) → '4rem'
+   • h-20 (80px) → '5rem'
+   • h-24 (96px) → '6rem'
+   ============================================================ */
+
+const NAVBAR_H = '4rem';
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
 
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/owner/dashboard', icon: LayoutDashboard },
@@ -55,19 +63,19 @@ const contentNavItems: NavItem[] = [
 ];
 
 const systemNavItems: NavItem[] = [
-  { name: 'Messages', href: '/owner/messages', icon: MessageSquare }, // ✅ نیا
+  { name: 'Messages', href: '/owner/messages', icon: MessageSquare },
   { name: 'Inquiries', href: '/owner/inquiries', icon: Inbox },
+  { name: 'Billing', href: '/owner/billing', icon: Sparkles }, // ✅ نیا
   { name: 'Settings', href: '/owner/settings', icon: Settings },
 ];
 
-/* ------------------ Layout ------------------ */
-
-interface OwnerLayoutProps {
-  children: React.ReactNode;
-}
+/* ============================================================
+   LAYOUT
+   ============================================================ */
 
 export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
@@ -75,13 +83,13 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
-    window.location.href = '/login';
+    router.push('/login');
   };
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  /* ---- Shared Nav Item renderer ---- */
+  /* ---------- Nav Item ---------- */
   const renderNavItem = (item: NavItem, onClick?: () => void) => {
     const active = isActive(item.href);
     const Icon = item.icon;
@@ -101,7 +109,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           }
         `}
       >
-        {/* Active left indicator */}
         {active && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-emerald-600 rounded-r-full" />
         )}
@@ -132,7 +139,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     );
   };
 
-  /* ---- Section renderer ---- */
+  /* ---------- Section ---------- */
   const renderSection = (
     label: string,
     items: NavItem[],
@@ -149,7 +156,10 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50" style={{ paddingTop: NAVBAR_H }}>
+    <div
+      className="min-h-screen bg-slate-50"
+      style={{ paddingTop: NAVBAR_H }}
+    >
       {/* =========================================
           MOBILE HEADER
       ========================================= */}
@@ -200,14 +210,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       ========================================= */}
       {isSidebarOpen && (
         <>
-          {/* Overlay */}
           <div
             className="fixed left-0 right-0 bottom-0 bg-slate-900/40 backdrop-blur-[2px] z-30 lg:hidden"
             style={{ top: `calc(${NAVBAR_H} + 3.5rem)` }}
             onClick={closeSidebar}
           />
 
-          {/* Dropdown */}
           <div
             className="
               fixed left-0 right-0
@@ -246,14 +254,11 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       ========================================= */}
       <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
         {/* =========================================
-            DESKTOP SIDEBAR — sticky
+            DESKTOP SIDEBAR
         ========================================= */}
         <aside className="hidden lg:block w-72 shrink-0">
           <div
-            className="
-              sticky bg-white border-r border-slate-200
-              flex flex-col
-            "
+            className="sticky bg-white border-r border-slate-200 flex flex-col"
             style={{
               top: NAVBAR_H,
               height: `calc(100vh - ${NAVBAR_H})`,
