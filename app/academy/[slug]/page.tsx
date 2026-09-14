@@ -26,7 +26,6 @@ import {
   CheckBadgeIcon,
   StarIcon,
   BuildingOfficeIcon,
-  PhotoIcon,
 } from '@heroicons/react/24/outline';
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +66,7 @@ async function getAcademyDetails(slug: string) {
       .lean(),
   ]);
 
+  /* ✅ TeacherCard کو academy کی معلومات بھی چاہیے */
   const sanitizedTeachers = teachers
     .filter((t: any) => t && t._id)
     .map((t: any) => ({
@@ -79,6 +79,17 @@ async function getAcademyDetails(slug: string) {
       audioUrl: t.audioUrl || '',
       profileImage: t.profileImage || '',
       isAvailable: t.isAvailable ?? true,
+
+      /* ✅ academy کے fields — TeacherCard کے لیے لازمی */
+      academyName: String((academy as any).name || ''),
+      academySlug: String((academy as any).slug || ''),
+      academyAccent: String((academy as any).accentColor || '#10b981'),
+
+      /* ✅ Teacher کے اپنے counts (اگر schema میں ہیں تو) */
+      followerCount: Number(t.followerCount) || 0,
+      avgRating: Number(t.avgRating) || 0,
+      ratingCount: Number(t.ratingCount) || 0,
+
       createdAt: t.createdAt
         ? new Date(t.createdAt).toISOString()
         : new Date().toISOString(),
@@ -131,7 +142,6 @@ async function getAcademyDetails(slug: string) {
     userId: String(r.userId),
   }));
 
-  /* ✅ Thumbnail — trim + check */
   const rawThumbnail = String((academy as any).thumbnail || '').trim();
   const rawLogo = String((academy as any).logo || '').trim();
 
@@ -246,15 +256,6 @@ export default async function AcademyDetailPage({
   const canFollow = Boolean(user) && !isOwner;
   const canRate = Boolean(user) && !isOwner;
 
-  /* ============================================================
-     HERO BACKGROUND STYLE
-     
-     ✅ Using background-image instead of <img> tag
-     - More reliable
-     - No z-index issues
-     - Works with absolute positioning everywhere
-  ============================================================ */
-
   const heroStyle: React.CSSProperties = hasHeroImage
     ? {
         backgroundImage: `url(${academy.thumbnail})`,
@@ -272,11 +273,7 @@ export default async function AcademyDetailPage({
           HERO SECTION
       ============================================ */}
 
-      <section
-        className="relative overflow-hidden"
-        style={heroStyle}
-      >
-        {/* ✅ Overlay — text readable، image visible */}
+      <section className="relative overflow-hidden" style={heroStyle}>
         <div
           className="absolute inset-0"
           style={{
@@ -286,7 +283,6 @@ export default async function AcademyDetailPage({
           }}
         />
 
-        {/* Dark bottom gradient */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -296,7 +292,6 @@ export default async function AcademyDetailPage({
           }}
         />
 
-        {/* Decorative blobs (only when no image) */}
         {!hasHeroImage && (
           <div className="absolute inset-0 opacity-20 pointer-events-none">
             <div className="absolute -top-32 -right-32 w-96 h-96 bg-white rounded-full blur-3xl" />
@@ -315,17 +310,6 @@ export default async function AcademyDetailPage({
             <span className="sm:hidden">Back</span>
           </Link>
         </div>
-
-        {/* Debug badge — thumbnail status (delete later) */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="absolute top-4 right-4 z-20 px-2 py-1 rounded-md bg-black/70 backdrop-blur-md border border-white/20">
-            <p className="text-[9px] font-mono text-white/70">
-              {hasHeroImage
-                ? `✓ ${academy.thumbnail.slice(0, 30)}...`
-                : '✗ No thumbnail'}
-            </p>
-          </div>
-        )}
 
         {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-16 md:py-20 min-h-[480px] sm:min-h-[520px] md:min-h-[560px] flex items-center">
@@ -361,7 +345,10 @@ export default async function AcademyDetailPage({
                 Verified Academy
               </div>
 
-              <h1 className="mt-3 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight break-words" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}>
+              <h1
+                className="mt-3 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight break-words"
+                style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}
+              >
                 {academy.name}
               </h1>
 
