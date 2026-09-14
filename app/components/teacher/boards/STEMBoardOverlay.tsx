@@ -1,58 +1,35 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-
+import Whiteboard from './Whiteboard';
+import AIExplainPanel from './AIExplainPanel';
 import {
-  X,
-  Calculator,
-  Atom,
-  Dna,
-  FlaskConical,
-  FunctionSquare,
-  Play,
-  RotateCcw,
-  Plus,
-  Minus,
-  Trash2,
-  Maximize2,
-  Minimize2,
-  Copy,
-  Check,
-  ChevronRight,
-  ChevronDown,
-  Zap,
-  Waves,
-  Circle,
-  Square,
-  Triangle,
-  Ruler,
-  Scale,
-  Beaker,
-  Thermometer,
-  Gauge,
-  ArrowRight,
-  Layers,
-  Settings,
-  Save,
-  Download,
+  X, Calculator, Atom, Dna, FlaskConical, FunctionSquare,
+  Play, Plus, Maximize2, Minimize2, Copy, ChevronRight,
+  Zap, Circle, Square, Triangle, Ruler, Layers, PenTool,
+  BookOpen, GraduationCap, Sigma, LineChart, Compass,
+  TrendingUp, BarChart3, Settings, ArrowRight, Gauge,
+  Beaker, Thermometer, RotateCcw, Sparkles,
 } from 'lucide-react';
 
-/* ============================================================ */
-/* TYPES                                                        */
-/* ============================================================ */
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 type Subject = 'math' | 'physics' | 'biology' | 'chemistry';
+type BoardMode = 'content' | 'whiteboard' | 'ai';
+type Formula = { name: string; latex: string; note?: string };
 
 interface Props {
   onClose: () => void;
   initialSubject?: Subject;
 }
 
-/* ============================================================ */
-/* KATEX HELPER                                                 */
-/* ============================================================ */
+/* ============================================================
+   HELPERS
+   ============================================================ */
 
 function renderLatex(latex: string, displayMode = true): string {
   try {
@@ -63,24 +40,13 @@ function renderLatex(latex: string, displayMode = true): string {
       output: 'html',
     });
   } catch {
-    return `<span class="text-rose-400">Invalid formula</span>`;
+    return `<span style="color:#f87171">Invalid formula</span>`;
   }
 }
 
-function KatexBlock({
-  latex,
-  className = '',
-}: {
-  latex: string;
-  className?: string;
-}) {
+function KatexBlock({ latex, className = '' }: { latex: string; className?: string }) {
   const html = useMemo(() => renderLatex(latex), [latex]);
-  return (
-    <div
-      className={className}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function KatexInline({ latex }: { latex: string }) {
@@ -88,9 +54,9 @@ function KatexInline({ latex }: { latex: string }) {
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-/* ============================================================ */
-/* MAIN COMPONENT                                               */
-/* ============================================================ */
+/* ============================================================
+   MAIN
+   ============================================================ */
 
 export default function STEMBoardOverlay({
   onClose,
@@ -98,8 +64,8 @@ export default function STEMBoardOverlay({
 }: Props) {
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [presentMode, setPresentMode] = useState(false);
+  const [boardMode, setBoardMode] = useState<BoardMode>('content');
 
-  /* Keyboard */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -111,29 +77,19 @@ export default function STEMBoardOverlay({
     return () => window.removeEventListener('keydown', handler);
   }, [onClose, presentMode]);
 
-  /* Present mode */
   if (presentMode) {
     return (
       <div className="fixed inset-0 z-[10000] bg-[#0b1220] flex flex-col">
         <div className="shrink-0 h-10 flex items-center justify-between px-3 bg-[#0f172a] border-b border-white/5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-white/70">
-              {subject === 'math'
-                ? '📐 Math'
-                : subject === 'physics'
-                ? '⚛️ Physics'
-                : subject === 'biology'
-                ? '🧬 Biology'
-                : '🧪 Chemistry'}{' '}
-              — Present Mode
-            </span>
-          </div>
+          <span className="text-xs font-bold text-white/70">
+            {subject === 'math' ? '📐 Math' : subject === 'physics' ? '⚛️ Physics' : subject === 'biology' ? '🧬 Biology' : '🧪 Chemistry'}{' '}
+            — Present Mode
+          </span>
           <button
             onClick={() => setPresentMode(false)}
             className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-[11px] font-semibold transition"
           >
-            <Minimize2 className="h-3 w-3" />
-            Exit
+            <Minimize2 className="h-3 w-3" /> Exit
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto">
@@ -146,53 +102,61 @@ export default function STEMBoardOverlay({
     );
   }
 
-  /* Normal mode */
   return (
     <div className="fixed inset-0 z-[10000] bg-[#0b1220] flex flex-col">
-      {/* Top bar */}
       <div className="shrink-0 h-12 flex items-center justify-between gap-2 px-3 bg-[#0f172a] border-b border-white/5">
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <Zap className="h-4 w-4 text-white" />
+            <GraduationCap className="h-4 w-4 text-white" />
           </div>
           <p className="text-xs font-bold text-white/80 hidden sm:block">
-            STEM Board
+            STEM Teaching Board
           </p>
         </div>
 
-        {/* Subject tabs */}
         <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1 overflow-x-auto">
-          <SubjectTab
-            active={subject === 'math'}
-            onClick={() => setSubject('math')}
-            icon={<Calculator className="h-3.5 w-3.5" />}
-            label="Math"
-            color="sky"
-          />
-          <SubjectTab
-            active={subject === 'physics'}
-            onClick={() => setSubject('physics')}
-            icon={<Atom className="h-3.5 w-3.5" />}
-            label="Physics"
-            color="violet"
-          />
-          <SubjectTab
-            active={subject === 'biology'}
-            onClick={() => setSubject('biology')}
-            icon={<Dna className="h-3.5 w-3.5" />}
-            label="Biology"
-            color="emerald"
-          />
-          <SubjectTab
-            active={subject === 'chemistry'}
-            onClick={() => setSubject('chemistry')}
-            icon={<FlaskConical className="h-3.5 w-3.5" />}
-            label="Chemistry"
-            color="amber"
-          />
+          <SubjectTab active={subject === 'math'} onClick={() => setSubject('math')} icon={<Calculator className="h-3.5 w-3.5" />} label="Math" color="sky" />
+          <SubjectTab active={subject === 'physics'} onClick={() => setSubject('physics')} icon={<Atom className="h-3.5 w-3.5" />} label="Physics" color="violet" />
+          <SubjectTab active={subject === 'biology'} onClick={() => setSubject('biology')} icon={<Dna className="h-3.5 w-3.5" />} label="Biology" color="emerald" />
+          <SubjectTab active={subject === 'chemistry'} onClick={() => setSubject('chemistry')} icon={<FlaskConical className="h-3.5 w-3.5" />} label="Chemistry" color="amber" />
         </div>
 
-        {/* Actions */}
+        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+          <button
+            onClick={() => setBoardMode('content')}
+            className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-bold transition ${
+              boardMode === 'content'
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Content</span>
+          </button>
+          <button
+            onClick={() => setBoardMode('whiteboard')}
+            className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-bold transition ${
+              boardMode === 'whiteboard'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <PenTool className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Write</span>
+          </button>
+          <button
+            onClick={() => setBoardMode('ai')}
+            className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-bold transition ${
+              boardMode === 'ai'
+                ? 'bg-gradient-to-r from-fuchsia-500 to-pink-600 text-white shadow-md'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">AI</span>
+          </button>
+        </div>
+
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setPresentMode(true)}
@@ -210,27 +174,24 @@ export default function STEMBoardOverlay({
         </div>
       </div>
 
-      {/* Board */}
-      <div className="flex-1 min-h-0 overflow-auto">
-        {subject === 'math' && <MathBoard />}
-        {subject === 'physics' && <PhysicsBoard />}
-        {subject === 'biology' && <BiologyBoard />}
-        {subject === 'chemistry' && <ChemistryBoard />}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {boardMode === 'whiteboard' && <Whiteboard />}
+        {boardMode === 'ai' && <AIExplainPanel subject={subject} />}
+        {boardMode === 'content' && (
+          <div className="w-full h-full overflow-auto">
+            {subject === 'math' && <MathBoard />}
+            {subject === 'physics' && <PhysicsBoard />}
+            {subject === 'biology' && <BiologyBoard />}
+            {subject === 'chemistry' && <ChemistryBoard />}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ============================================================ */
-/* SUBJECT TAB                                                  */
-/* ============================================================ */
-
 function SubjectTab({
-  active,
-  onClick,
-  icon,
-  label,
-  color,
+  active, onClick, icon, label, color,
 }: {
   active: boolean;
   onClick: () => void;
@@ -261,130 +222,85 @@ function SubjectTab({
   );
 }
 
-/* ============================================================ */
-/* MATH BOARD                                                   */
-/* ============================================================ */
+/* ============================================================
+   MATH BOARD
+   ============================================================ */
 
 function MathBoard({ presentMode = false }: { presentMode?: boolean }) {
+  const [topic, setTopic] = useState<string>('algebra');
   const [formula, setFormula] = useState('\\int_{0}^{\\infty} e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}');
   const [formulaInput, setFormulaInput] = useState(formula);
   const [funcInput, setFuncInput] = useState('x^2');
-  const [showGraph, setShowGraph] = useState(true);
-  const [activeShape, setActiveShape] = useState<'triangle' | 'circle' | 'square'>('triangle');
+  const [activeShape, setActiveShape] = useState<'triangle' | 'circle' | 'square' | 'polygon'>('triangle');
 
-  const applyFormula = () => setFormula(formulaInput);
+  const topics = [
+    { id: 'algebra', label: 'Algebra', icon: Sigma },
+    { id: 'geometry', label: 'Geometry', icon: Compass },
+    { id: 'trig', label: 'Trigonometry', icon: Triangle },
+    { id: 'calculus', label: 'Calculus', icon: LineChart },
+    { id: 'graph', label: 'Graphing', icon: TrendingUp },
+    { id: 'stats', label: 'Statistics', icon: BarChart3 },
+  ];
 
   return (
-    <div className={`grid ${presentMode ? 'grid-cols-1' : 'lg:grid-cols-[1fr_360px]'} gap-3 p-3 sm:p-4`}>
-      {/* LEFT — Main formula display + graph */}
-      <div className="space-y-3">
-        {/* Formula display */}
-        <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-6 sm:p-8">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[10px] font-bold uppercase tracking-wider">
-              <FunctionSquare className="h-3 w-3" />
-              Formula Display
-            </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(formula);
-              }}
-              className="inline-flex items-center gap-1 text-[10px] font-semibold text-white/40 hover:text-white/80 transition"
-            >
-              <Copy className="h-3 w-3" />
-              Copy LaTeX
-            </button>
-          </div>
-
-          <div className={`flex items-center justify-center py-6 sm:py-10 ${presentMode ? 'text-4xl sm:text-6xl' : 'text-2xl sm:text-4xl'}`}>
-            <div className="text-white overflow-x-auto max-w-full">
-              <KatexBlock latex={formula} />
-            </div>
-          </div>
-        </div>
-
-        {/* Graph */}
-        {showGraph && (
-          <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-violet-500/15 border border-violet-400/30 text-violet-300 text-[10px] font-bold uppercase tracking-wider">
-                <Waves className="h-3 w-3" />
-                Function Grapher
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-white/50">f(x) =</span>
-                <input
-                  type="text"
-                  value={funcInput}
-                  onChange={(e) => setFuncInput(e.target.value)}
-                  className="h-7 px-2 w-32 bg-white/5 border border-white/10 rounded-md text-xs font-mono text-white outline-none focus:border-violet-400/60"
-                />
-              </div>
-            </div>
-            <FunctionPlot fn={funcInput} />
-          </div>
-        )}
-
-        {/* Geometry quick view */}
+    <div className={`grid ${presentMode ? 'grid-cols-1' : 'lg:grid-cols-[240px_1fr_340px]'} gap-3 p-3`}>
+      <aside className="space-y-3">
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-400/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-              <Ruler className="h-3 w-3" />
-              Geometry Formulas
-            </div>
-            <div className="flex items-center gap-1">
-              {(['triangle', 'circle', 'square'] as const).map((s) => (
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="h-4 w-4 text-sky-400" />
+            <span className="text-sm font-bold text-white">Topics</span>
+          </div>
+          <div className="space-y-1">
+            {topics.map((t) => {
+              const Icon = t.icon;
+              return (
                 <button
-                  key={s}
-                  onClick={() => setActiveShape(s)}
-                  className={`inline-flex items-center justify-center h-7 w-7 rounded-md transition ${
-                    activeShape === s
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
-                      : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                  key={t.id}
+                  onClick={() => setTopic(t.id)}
+                  className={`w-full inline-flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold transition ${
+                    topic === t.id
+                      ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40'
+                      : 'text-white/60 hover:text-white hover:bg-white/5 border border-transparent'
                   }`}
                 >
-                  {s === 'triangle' && <Triangle className="h-3.5 w-3.5" />}
-                  {s === 'circle' && <Circle className="h-3.5 w-3.5" />}
-                  {s === 'square' && <Square className="h-3.5 w-3.5" />}
+                  <Icon className="h-3.5 w-3.5" />
+                  {t.label}
+                  <ChevronRight className="h-3 w-3 ml-auto" />
                 </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="flex items-center justify-center bg-white/5 rounded-xl p-4 min-h-[160px]">
-              {activeShape === 'triangle' && <TriangleSVG />}
-              {activeShape === 'circle' && <CircleSVG />}
-              {activeShape === 'square' && <SquareSVG />}
-            </div>
-            <div className="space-y-2 text-white/80 text-sm">
-              {activeShape === 'triangle' && (
-                <>
-                  <p><KatexInline latex="A = \tfrac{1}{2} b h" /></p>
-                  <p><KatexInline latex="P = a + b + c" /></p>
-                  <p><KatexInline latex="\angle A + \angle B + \angle C = 180°" /></p>
-                </>
-              )}
-              {activeShape === 'circle' && (
-                <>
-                  <p><KatexInline latex="A = \pi r^2" /></p>
-                  <p><KatexInline latex="C = 2\pi r" /></p>
-                  <p><KatexInline latex="d = 2r" /></p>
-                </>
-              )}
-              {activeShape === 'square' && (
-                <>
-                  <p><KatexInline latex="A = a^2" /></p>
-                  <p><KatexInline latex="P = 4a" /></p>
-                  <p><KatexInline latex="d = a\sqrt{2}" /></p>
-                </>
-              )}
-            </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* RIGHT — Formula editor */}
+      <main className="space-y-3 min-w-0">
+        {topic === 'algebra' && <AlgebraPanel />}
+        {topic === 'geometry' && (
+          <GeometryPanel activeShape={activeShape} setActiveShape={setActiveShape} />
+        )}
+        {topic === 'trig' && <TrigPanel />}
+        {topic === 'calculus' && <CalculusPanel />}
+        {topic === 'graph' && (
+          <GraphPanel funcInput={funcInput} setFuncInput={setFuncInput} />
+        )}
+        {topic === 'stats' && <StatsPanel />}
+
+        <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[10px] font-bold uppercase tracking-wider mb-3">
+            <FunctionSquare className="h-3 w-3" /> Live Formula
+          </div>
+          <div className="text-white text-center py-4 overflow-x-auto">
+            <KatexBlock latex={formula} />
+          </div>
+          <button
+            onClick={() => navigator.clipboard.writeText(formula)}
+            className="mx-auto flex items-center gap-1 text-[10px] text-white/40 hover:text-white/80 transition"
+          >
+            <Copy className="h-3 w-3" /> Copy LaTeX
+          </button>
+        </div>
+      </main>
+
       <aside className="space-y-3">
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -395,50 +311,45 @@ function MathBoard({ presentMode = false }: { presentMode?: boolean }) {
             value={formulaInput}
             onChange={(e) => setFormulaInput(e.target.value)}
             rows={4}
-            placeholder="Write LaTeX here..."
             className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-xs font-mono text-white/90 outline-none focus:border-sky-400/60 resize-none"
           />
           <button
-            onClick={applyFormula}
-            className="w-full mt-3 inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold transition"
+            onClick={() => setFormula(formulaInput)}
+            className="w-full mt-3 inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-sky-500 to-blue-600 text-white text-xs font-bold transition"
           >
-            <Play className="h-3.5 w-3.5" />
-            Render Formula
+            <Play className="h-3.5 w-3.5" /> Render
           </button>
         </div>
 
-        {/* Quick insert */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Plus className="h-4 w-4 text-emerald-400" />
-            <span className="text-sm font-bold text-white">Quick Insert</span>
+            <span className="text-sm font-bold text-white">Quick Symbols</span>
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {QUICK_MATH.map((item, i) => (
+          <div className="grid grid-cols-5 gap-1.5">
+            {QUICK_SYMBOLS.map((s, i) => (
               <button
                 key={i}
                 onClick={() => {
-                  const next = formulaInput + ' ' + item.latex;
+                  const next = formulaInput + ' ' + s.latex;
                   setFormulaInput(next);
                   setFormula(next);
                 }}
-                className="inline-flex items-center justify-center h-9 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 transition text-xs"
-                title={item.name}
+                className="h-9 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 transition text-[11px]"
               >
-                <KatexInline latex={item.display} />
+                <KatexInline latex={s.display} />
               </button>
             ))}
           </div>
         </div>
 
-        {/* Preset formulas */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Layers className="h-4 w-4 text-violet-400" />
             <span className="text-sm font-bold text-white">Preset Formulas</span>
           </div>
-          <div className="space-y-1.5">
-            {PRESET_MATH.map((p, i) => (
+          <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+            {PRESET_FORMULAS.map((p, i) => (
               <button
                 key={i}
                 onClick={() => {
@@ -447,7 +358,7 @@ function MathBoard({ presentMode = false }: { presentMode?: boolean }) {
                 }}
                 className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
               >
-                <div className="text-white/80">
+                <div className="text-white/90 text-xs overflow-x-auto">
                   <KatexInline latex={p.latex} />
                 </div>
                 <p className="text-[10px] text-white/40 mt-0.5">{p.name}</p>
@@ -460,150 +371,255 @@ function MathBoard({ presentMode = false }: { presentMode?: boolean }) {
   );
 }
 
-/* ---------- Function Plot (SVG) ---------- */
-
-function FunctionPlot({ fn }: { fn: string }) {
-  const W = 500;
-  const H = 240;
-  const range = 5;
-
-  const toPixel = (x: number, y: number) => ({
-    px: (x / range) * (W / 2) + W / 2,
-    py: -((y / range) * (H / 2)) + H / 2,
-  });
-
-  const points = useMemo(() => {
-    const pts: string[] = [];
-    const N = 200;
-    let lastValid = false;
-
-    for (let i = 0; i <= N; i++) {
-      const x = -range + (2 * range * i) / N;
-      let y: number;
-      try {
-        // eslint-disable-next-line no-new-func
-        y = new Function('x', `return (${fn});`)(x);
-        if (!Number.isFinite(y) || Math.abs(y) > 50) {
-          lastValid = false;
-          continue;
-        }
-      } catch {
-        lastValid = false;
-        continue;
-      }
-      const { px, py } = toPixel(x, y);
-      if (py < -200 || py > H + 200) {
-        lastValid = false;
-        continue;
-      }
-      pts.push(`${lastValid ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`);
-      lastValid = true;
-    }
-    return pts.join(' ');
-  }, [fn]);
-
+function AlgebraPanel() {
   return (
-    <div className="bg-white/5 rounded-xl overflow-hidden">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
-        {/* Grid */}
-        {Array.from({ length: 11 }).map((_, i) => {
-          const x = (i / 10) * W;
-          return (
-            <line
-              key={`v${i}`}
-              x1={x}
-              y1={0}
-              x2={x}
-              y2={H}
-              stroke="rgba(255,255,255,0.06)"
-              strokeWidth="1"
-            />
-          );
-        })}
-        {Array.from({ length: 6 }).map((_, i) => {
-          const y = (i / 5) * H;
-          return (
-            <line
-              key={`h${i}`}
-              x1={0}
-              y1={y}
-              x2={W}
-              y2={y}
-              stroke="rgba(255,255,255,0.06)"
-              strokeWidth="1"
-            />
-          );
-        })}
-        {/* Axes */}
-        <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
-        <line x1={W / 2} y1={0} x2={W / 2} y2={H} stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" />
-        {/* Function */}
-        <path
-          d={points}
-          fill="none"
-          stroke="#a78bfa"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        {/* Origin label */}
-        <text x={W / 2 + 6} y={H / 2 - 6} fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="monospace">
-          0
-        </text>
-      </svg>
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[10px] font-bold uppercase tracking-wider mb-4">
+        <Sigma className="h-3 w-3" /> Algebra Essentials
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {ALGEBRA_FORMULAS.map((f, i) => (
+          <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3">
+            <p className="text-[10px] font-bold text-sky-300 uppercase tracking-wider mb-2">
+              {f.name}
+            </p>
+            <div className="text-white text-sm overflow-x-auto">
+              <KatexInline latex={f.latex} />
+            </div>
+            {f.note && <p className="text-[10px] text-white/40 mt-1">{f.note}</p>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-/* ---------- Geometry SVGs ---------- */
-
-function TriangleSVG() {
+function GeometryPanel({
+  activeShape, setActiveShape,
+}: {
+  activeShape: 'triangle' | 'circle' | 'square' | 'polygon';
+  setActiveShape: (s: 'triangle' | 'circle' | 'square' | 'polygon') => void;
+}) {
   return (
-    <svg viewBox="0 0 160 140" className="w-40 h-auto">
-      <polygon
-        points="80,20 20,120 140,120"
-        fill="rgba(251,191,36,0.15)"
-        stroke="#fbbf24"
-        strokeWidth="2"
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-400/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+          <Ruler className="h-3 w-3" /> Geometry
+        </div>
+        <div className="flex items-center gap-1">
+          {(['triangle', 'circle', 'square', 'polygon'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setActiveShape(s)}
+              className={`h-7 px-2 rounded-md text-[10px] font-bold transition ${
+                activeShape === s
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                  : 'text-white/50 hover:bg-white/5'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="flex items-center justify-center bg-white/5 rounded-xl p-4 min-h-[200px]">
+          {activeShape === 'triangle' && <TriangleSVG />}
+          {activeShape === 'circle' && <CircleSVG />}
+          {activeShape === 'square' && <SquareSVG />}
+          {activeShape === 'polygon' && <PolygonSVG />}
+        </div>
+        <div className="space-y-2">
+          {GEOMETRY_FORMULAS[activeShape].map((f, i) => (
+            <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <p className="text-[10px] text-white/40 mb-1">{f.name}</p>
+              <div className="text-white text-sm">
+                <KatexInline latex={f.latex} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrigPanel() {
+  return (
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-4">
+        <Triangle className="h-3 w-3" /> Trigonometry
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-white/5 rounded-xl p-4 flex items-center justify-center">
+          <UnitCircleSVG />
+        </div>
+        <div className="space-y-2">
+          {TRIG_FORMULAS.map((f, i) => (
+            <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <p className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider mb-1">
+                {f.name}
+              </p>
+              <div className="text-white text-sm">
+                <KatexInline latex={f.latex} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalculusPanel() {
+  return (
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-violet-500/15 border border-violet-400/30 text-violet-300 text-[10px] font-bold uppercase tracking-wider mb-4">
+        <LineChart className="h-3 w-3" /> Calculus
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {CALCULUS_FORMULAS.map((f, i) => (
+          <div key={i} className="rounded-lg bg-white/5 border border-white/10 p-3">
+            <p className="text-[10px] text-violet-300 font-bold uppercase tracking-wider mb-1">
+              {f.name}
+            </p>
+            <div className="text-white text-sm overflow-x-auto">
+              <KatexInline latex={f.latex} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GraphPanel({
+  funcInput, setFuncInput,
+}: {
+  funcInput: string;
+  setFuncInput: (v: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-fuchsia-500/15 border border-fuchsia-400/30 text-fuchsia-300 text-[10px] font-bold uppercase tracking-wider">
+          <TrendingUp className="h-3 w-3" /> Function Grapher
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white/50">f(x) =</span>
+          <input
+            type="text"
+            value={funcInput}
+            onChange={(e) => setFuncInput(e.target.value)}
+            className="h-7 px-2 w-40 bg-white/5 border border-white/10 rounded-md text-xs font-mono text-white outline-none focus:border-fuchsia-400/60"
+          />
+        </div>
+      </div>
+      <FunctionPlot fn={funcInput} />
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {['x^2', 'x^3', 'sin(x)', 'cos(x)', 'tan(x)', 'e^x', 'ln(x)', '1/x', 'sqrt(x)', 'x^2-4'].map((f) => (
+          <button
+            key={f}
+            onClick={() => setFuncInput(f)}
+            className="px-2 py-1 rounded-md text-[10px] font-mono bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 transition"
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatsPanel() {
+  const [dataInput, setDataInput] = useState('2, 4, 4, 4, 5, 5, 7, 9');
+  const [stats, setStats] = useState({ mean: 0, median: 0, mode: '-', range: 0, sd: 0 });
+
+  useEffect(() => {
+    const nums = dataInput
+      .split(/[,\s]+/)
+      .map((n) => Number(n))
+      .filter((n) => Number.isFinite(n));
+
+    if (nums.length === 0) {
+      setStats({ mean: 0, median: 0, mode: '-', range: 0, sd: 0 });
+      return;
+    }
+
+    const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
+    const sorted = [...nums].sort((a, b) => a - b);
+    const median =
+      sorted.length % 2 === 0
+        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+        : sorted[Math.floor(sorted.length / 2)];
+
+    const freq: Record<number, number> = {};
+    nums.forEach((n) => (freq[n] = (freq[n] || 0) + 1));
+    const maxFreq = Math.max(...Object.values(freq));
+    const modes = Object.entries(freq)
+      .filter(([, f]) => f === maxFreq)
+      .map(([k]) => k);
+    const mode = maxFreq > 1 ? modes.join(', ') : '-';
+
+    const range = sorted[sorted.length - 1] - sorted[0];
+    const variance = nums.reduce((a, n) => a + (n - mean) ** 2, 0) / nums.length;
+    const sd = Math.sqrt(variance);
+
+    setStats({ mean, median, mode, range, sd });
+  }, [dataInput]);
+
+  return (
+    <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[10px] font-bold uppercase tracking-wider mb-4">
+        <BarChart3 className="h-3 w-3" /> Statistics Calculator
+      </div>
+
+      <input
+        type="text"
+        value={dataInput}
+        onChange={(e) => setDataInput(e.target.value)}
+        placeholder="2, 4, 4, 5, 9"
+        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none focus:border-cyan-400/60 mb-3"
       />
-      <line x1="80" y1="20" x2="80" y2="120" stroke="rgba(255,255,255,0.4)" strokeDasharray="4 3" strokeWidth="1.5" />
-      <text x="84" y="75" fill="#fff" fontSize="12" fontFamily="monospace">h</text>
-      <text x="45" y="135" fill="#fff" fontSize="12" fontFamily="monospace">b</text>
-    </svg>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <StatBox label="Mean" value={stats.mean.toFixed(2)} tone="cyan" />
+        <StatBox label="Median" value={stats.median.toFixed(2)} tone="emerald" />
+        <StatBox label="Mode" value={stats.mode} tone="violet" />
+        <StatBox label="Range" value={stats.range.toFixed(2)} tone="amber" />
+        <StatBox label="Std Dev" value={stats.sd.toFixed(2)} tone="rose" />
+      </div>
+    </div>
   );
 }
 
-function CircleSVG() {
+function StatBox({ label, value, tone }: { label: string; value: string; tone: string }) {
+  const colorMap: Record<string, string> = {
+    cyan: 'bg-cyan-500/10 border-cyan-400/30 text-cyan-300',
+    emerald: 'bg-emerald-500/10 border-emerald-400/30 text-emerald-300',
+    violet: 'bg-violet-500/10 border-violet-400/30 text-violet-300',
+    amber: 'bg-amber-500/10 border-amber-400/30 text-amber-300',
+    rose: 'bg-rose-500/10 border-rose-400/30 text-rose-300',
+  };
   return (
-    <svg viewBox="0 0 160 140" className="w-40 h-auto">
-      <circle cx="80" cy="70" r="50" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
-      <line x1="80" y1="70" x2="130" y2="70" stroke="#fff" strokeWidth="1.5" />
-      <circle cx="80" cy="70" r="3" fill="#fff" />
-      <text x="100" y="65" fill="#fff" fontSize="12" fontFamily="monospace">r</text>
-    </svg>
+    <div className={`rounded-lg border ${colorMap[tone]} px-2 py-2 text-center`}>
+      <p className="text-[9px] font-bold uppercase tracking-wider opacity-70">{label}</p>
+      <p className="text-sm font-bold mt-0.5 font-mono truncate">{value}</p>
+    </div>
   );
 }
 
-function SquareSVG() {
-  return (
-    <svg viewBox="0 0 160 140" className="w-40 h-auto">
-      <rect x="30" y="20" width="100" height="100" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
-      <text x="75" y="135" fill="#fff" fontSize="12" fontFamily="monospace">a</text>
-      <text x="20" y="75" fill="#fff" fontSize="12" fontFamily="monospace">a</text>
-    </svg>
-  );
-}
-
-/* ============================================================ */
-/* PHYSICS BOARD                                                */
-/* ============================================================ */
+/* ============================================================
+   PHYSICS BOARD
+   ============================================================ */
 
 function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
-  const [v, setV] = useState(20); // velocity m/s
-  const [a, setA] = useState(2); // acceleration m/s^2
-  const [t, setT] = useState(5); // time s
+  const [v, setV] = useState(20);
+  const [a, setA] = useState(2);
+  const [t, setT] = useState(5);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-
   const [selectedFormula, setSelectedFormula] = useState(0);
 
   useEffect(() => {
@@ -631,19 +647,16 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
 
   return (
     <div className={`grid ${presentMode ? 'grid-cols-1' : 'lg:grid-cols-[1fr_360px]'} gap-3 p-3 sm:p-4`}>
-      {/* LEFT */}
       <div className="space-y-3">
-        {/* Simulation */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-violet-500/15 border border-violet-400/30 text-violet-300 text-[10px] font-bold uppercase tracking-wider">
-              <Zap className="h-3 w-3" />
-              Motion Simulator
+              <Zap className="h-3 w-3" /> Motion Simulator
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsPlaying((p) => !p)}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold transition"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold transition"
               >
                 <Play className="h-3.5 w-3.5" />
                 {isPlaying ? 'Pause' : 'Play'}
@@ -657,12 +670,9 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
             </div>
           </div>
 
-          {/* Canvas */}
           <div className="relative bg-white/5 rounded-xl overflow-hidden">
             <svg viewBox="0 0 600 200" className="w-full h-auto">
-              {/* Ground */}
               <line x1="20" y1="160" x2="580" y2="160" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-              {/* Distance ruler */}
               <g>
                 {Array.from({ length: 11 }).map((_, i) => {
                   const x = 20 + (i / 10) * 560;
@@ -676,26 +686,19 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
                   );
                 })}
               </g>
-              {/* Velocity arrow */}
               <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                   <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
                 </marker>
+                <radialGradient id="ballGradient">
+                  <stop offset="0%" stopColor="#a78bfa" />
+                  <stop offset="100%" stopColor="#7c3aed" />
+                </radialGradient>
               </defs>
-              {/* Ball */}
               <g transform={`translate(${20 + (currentTime / t) * 560}, 140)`}>
                 <circle cx="0" cy="0" r="18" fill="url(#ballGradient)" stroke="#a78bfa" strokeWidth="2" />
-                <defs>
-                  <radialGradient id="ballGradient">
-                    <stop offset="0%" stopColor="#a78bfa" />
-                    <stop offset="100%" stopColor="#7c3aed" />
-                  </radialGradient>
-                </defs>
-                <text x="0" y="5" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold" fontFamily="monospace">
-                  ⚽
-                </text>
+                <text x="0" y="5" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">⚽</text>
               </g>
-              {/* Vector arrow from ball */}
               <line
                 x1={20 + (currentTime / t) * 560}
                 y1="140"
@@ -705,20 +708,9 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
                 strokeWidth="3"
                 markerEnd="url(#arrowhead)"
               />
-              <text
-                x={20 + (currentTime / t) * 560 + Math.min(80, currentVelocity * 2) + 5}
-                y="135"
-                fill="#10b981"
-                fontSize="11"
-                fontWeight="bold"
-                fontFamily="monospace"
-              >
-                v = {currentVelocity.toFixed(1)} m/s
-              </text>
             </svg>
           </div>
 
-          {/* Live stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
             <LiveStat label="Time" value={`${currentTime.toFixed(1)} s`} tone="sky" />
             <LiveStat label="Velocity" value={`${currentVelocity.toFixed(1)} m/s`} tone="emerald" />
@@ -727,7 +719,6 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
           </div>
         </div>
 
-        {/* Selected formula */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
           <div className="text-white/80 text-center py-4">
             <div className="text-lg sm:text-2xl">
@@ -739,16 +730,12 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
           </div>
         </div>
 
-        {/* Vector diagram */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-3">
-            <ArrowRight className="h-3 w-3" />
-            Vector Diagrams
+            <ArrowRight className="h-3 w-3" /> Vector Diagrams
           </div>
           <div className="bg-white/5 rounded-xl p-4">
             <svg viewBox="0 0 500 200" className="w-full h-auto">
-              {/* F1 vector */}
-              <line x1="100" y1="100" x2="200" y2="100" stroke="#60a5fa" strokeWidth="3" markerEnd="url(#arrowBlue)" />
               <defs>
                 <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                   <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
@@ -760,28 +747,21 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
                   <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
                 </marker>
               </defs>
-              <text x="80" y="90" fill="#60a5fa" fontSize="12" fontWeight="bold" fontFamily="monospace">F₁</text>
-
-              {/* F2 vector */}
+              <line x1="100" y1="100" x2="200" y2="100" stroke="#60a5fa" strokeWidth="3" markerEnd="url(#arrowBlue)" />
+              <text x="80" y="90" fill="#60a5fa" fontSize="12" fontWeight="bold">F₁</text>
               <line x1="200" y1="100" x2="200" y2="30" stroke="#ef4444" strokeWidth="3" markerEnd="url(#arrowRed)" />
-              <text x="205" y="25" fill="#ef4444" fontSize="12" fontWeight="bold" fontFamily="monospace">F₂</text>
-
-              {/* Resultant */}
+              <text x="205" y="25" fill="#ef4444" fontSize="12" fontWeight="bold">F₂</text>
               <line x1="100" y1="100" x2="200" y2="30" stroke="#10b981" strokeWidth="3" markerEnd="url(#arrowGreen)" strokeDasharray="6 3" />
-              <text x="130" y="55" fill="#10b981" fontSize="12" fontWeight="bold" fontFamily="monospace">R</text>
-
-              {/* Labels */}
-              <text x="200" y="160" fill="rgba(255,255,255,0.5)" fontSize="11" textAnchor="middle">
-                Resultant R = √(F₁² + F₂²)
+              <text x="130" y="55" fill="#10b981" fontSize="12" fontWeight="bold">R</text>
+              <text x="250" y="160" fill="rgba(255,255,255,0.5)" fontSize="11">
+                R = √(F₁² + F₂²)
               </text>
             </svg>
           </div>
         </div>
       </div>
 
-      {/* RIGHT */}
       <aside className="space-y-3">
-        {/* Controls */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Settings className="h-4 w-4 text-violet-400" />
@@ -794,7 +774,6 @@ function PhysicsBoard({ presentMode = false }: { presentMode?: boolean }) {
           </div>
         </div>
 
-        {/* Formula library */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Layers className="h-4 w-4 text-emerald-400" />
@@ -870,26 +849,25 @@ function LiveStat({
 
   return (
     <div className={`rounded-lg border ${colorMap} px-3 py-2`}>
-      <p className="text-[9px] font-bold uppercase tracking-wider opacity-70">
-        {label}
-      </p>
+      <p className="text-[9px] font-bold uppercase tracking-wider opacity-70">{label}</p>
       <p className="text-sm font-bold mt-0.5 font-mono">{value}</p>
     </div>
   );
 }
 
-/* ============================================================ */
-/* BIOLOGY BOARD                                                */
-/* ============================================================ */
+/* ============================================================
+   BIOLOGY BOARD
+   ============================================================ */
 
 function BiologyBoard({ presentMode = false }: { presentMode?: boolean }) {
-  const [activeSystem, setActiveSystem] = useState<'cell' | 'dna' | 'heart' | 'digestive' | 'photosynthesis'>('cell');
+  const [activeSystem, setActiveSystem] = useState<
+    'cell' | 'dna' | 'heart' | 'digestive' | 'photosynthesis'
+  >('cell');
   const [cellType, setCellType] = useState<'plant' | 'animal'>('plant');
   const [selectedPart, setSelectedPart] = useState<string>('');
 
   return (
     <div className={`grid ${presentMode ? 'grid-cols-1' : 'lg:grid-cols-[260px_1fr]'} gap-3 p-3 sm:p-4`}>
-      {/* LEFT sidebar */}
       <aside className="space-y-3">
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -955,14 +933,9 @@ function BiologyBoard({ presentMode = false }: { presentMode?: boolean }) {
         )}
       </aside>
 
-      {/* Main canvas */}
       <div className="space-y-3">
         {activeSystem === 'cell' && (
-          <CellDiagram
-            type={cellType}
-            onSelect={setSelectedPart}
-            selected={selectedPart}
-          />
+          <CellDiagram type={cellType} onSelect={setSelectedPart} selected={selectedPart} />
         )}
         {activeSystem === 'dna' && <DNADiagram />}
         {activeSystem === 'heart' && <HeartDiagram onSelect={setSelectedPart} selected={selectedPart} />}
@@ -974,9 +947,7 @@ function BiologyBoard({ presentMode = false }: { presentMode?: boolean }) {
 }
 
 function CellDiagram({
-  type,
-  onSelect,
-  selected,
+  type, onSelect, selected,
 }: {
   type: 'plant' | 'animal';
   onSelect: (s: string) => void;
@@ -986,21 +957,19 @@ function CellDiagram({
     ? [
         { id: 'wall', name: 'Cell Wall', desc: 'Rigid outer layer — provides structure', color: '#84cc16' },
         { id: 'membrane', name: 'Cell Membrane', desc: 'Controls what enters/exits the cell', color: '#f59e0b' },
-        { id: 'nucleus', name: 'Nucleus', desc: 'Contains DNA — the control center', color: '#a78bfa' },
+        { id: 'nucleus', name: 'Nucleus', desc: 'Contains DNA — control center', color: '#a78bfa' },
         { id: 'chloroplast', name: 'Chloroplast', desc: 'Photosynthesis — makes food using sunlight', color: '#10b981' },
         { id: 'vacuole', name: 'Vacuole', desc: 'Stores water and nutrients', color: '#38bdf8' },
         { id: 'mitochondria', name: 'Mitochondria', desc: 'Powerhouse — produces energy (ATP)', color: '#ef4444' },
       ]
     : [
         { id: 'membrane', name: 'Cell Membrane', desc: 'Controls what enters/exits the cell', color: '#f59e0b' },
-        { id: 'nucleus', name: 'Nucleus', desc: 'Contains DNA — the control center', color: '#a78bfa' },
+        { id: 'nucleus', name: 'Nucleus', desc: 'Contains DNA — control center', color: '#a78bfa' },
         { id: 'mitochondria', name: 'Mitochondria', desc: 'Powerhouse — produces energy (ATP)', color: '#ef4444' },
         { id: 'ribosome', name: 'Ribosome', desc: 'Makes proteins', color: '#fb7185' },
         { id: 'er', name: 'Endoplasmic Reticulum', desc: 'Transports materials', color: '#60a5fa' },
         { id: 'golgi', name: 'Golgi Apparatus', desc: 'Packages and ships proteins', color: '#fbbf24' },
       ];
-
-  const current = parts.find((p) => p.id === selected);
 
   return (
     <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
@@ -1010,169 +979,38 @@ function CellDiagram({
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        {/* SVG Cell */}
         <div className="bg-white/5 rounded-xl p-4 flex items-center justify-center">
           <svg viewBox="0 0 400 400" className="w-full max-w-[400px]">
             {type === 'plant' ? (
               <>
-                {/* Cell wall */}
-                <rect
-                  x="20"
-                  y="20"
-                  width="360"
-                  height="360"
-                  rx="20"
-                  fill="rgba(132,204,22,0.15)"
-                  stroke="#84cc16"
-                  strokeWidth={selected === 'wall' ? 4 : 3}
-                  onClick={() => onSelect('wall')}
-                  className="cursor-pointer"
-                />
-                {/* Membrane */}
-                <rect
-                  x="40"
-                  y="40"
-                  width="320"
-                  height="320"
-                  rx="15"
-                  fill="rgba(245,158,11,0.1)"
-                  stroke="#f59e0b"
-                  strokeWidth={selected === 'membrane' ? 3 : 2}
-                  onClick={() => onSelect('membrane')}
-                  className="cursor-pointer"
-                />
-                {/* Vacuole */}
-                <ellipse
-                  cx="200"
-                  cy="220"
-                  rx="90"
-                  ry="70"
-                  fill="rgba(56,189,248,0.25)"
-                  stroke="#38bdf8"
-                  strokeWidth={selected === 'vacuole' ? 3 : 2}
-                  onClick={() => onSelect('vacuole')}
-                  className="cursor-pointer"
-                />
-                {/* Nucleus */}
-                <circle
-                  cx="130"
-                  cy="150"
-                  r="45"
-                  fill="rgba(167,139,250,0.3)"
-                  stroke="#a78bfa"
-                  strokeWidth={selected === 'nucleus' ? 3 : 2}
-                  onClick={() => onSelect('nucleus')}
-                  className="cursor-pointer"
-                />
+                <rect x="20" y="20" width="360" height="360" rx="20" fill="rgba(132,204,22,0.15)" stroke="#84cc16" strokeWidth={selected === 'wall' ? 4 : 3} onClick={() => onSelect('wall')} className="cursor-pointer" />
+                <rect x="40" y="40" width="320" height="320" rx="15" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" strokeWidth={selected === 'membrane' ? 3 : 2} onClick={() => onSelect('membrane')} className="cursor-pointer" />
+                <ellipse cx="200" cy="220" rx="90" ry="70" fill="rgba(56,189,248,0.25)" stroke="#38bdf8" strokeWidth={selected === 'vacuole' ? 3 : 2} onClick={() => onSelect('vacuole')} className="cursor-pointer" />
+                <circle cx="130" cy="150" r="45" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" strokeWidth={selected === 'nucleus' ? 3 : 2} onClick={() => onSelect('nucleus')} className="cursor-pointer" />
                 <circle cx="130" cy="150" r="15" fill="#a78bfa" opacity="0.6" />
-                {/* Chloroplasts */}
                 {[[280, 120], [300, 180], [280, 260]].map(([x, y], i) => (
-                  <ellipse
-                    key={i}
-                    cx={x}
-                    cy={y}
-                    rx="22"
-                    ry="14"
-                    fill="rgba(16,185,129,0.35)"
-                    stroke="#10b981"
-                    strokeWidth={selected === 'chloroplast' ? 3 : 2}
-                    transform={`rotate(-30 ${x} ${y})`}
-                    onClick={() => onSelect('chloroplast')}
-                    className="cursor-pointer"
-                  />
+                  <ellipse key={i} cx={x} cy={y} rx="22" ry="14" fill="rgba(16,185,129,0.35)" stroke="#10b981" strokeWidth={selected === 'chloroplast' ? 3 : 2} transform={`rotate(-30 ${x} ${y})`} onClick={() => onSelect('chloroplast')} className="cursor-pointer" />
                 ))}
-                {/* Mitochondria */}
-                <ellipse
-                  cx="200"
-                  cy="80"
-                  rx="30"
-                  ry="16"
-                  fill="rgba(239,68,68,0.3)"
-                  stroke="#ef4444"
-                  strokeWidth={selected === 'mitochondria' ? 3 : 2}
-                  onClick={() => onSelect('mitochondria')}
-                  className="cursor-pointer"
-                />
+                <ellipse cx="200" cy="80" rx="30" ry="16" fill="rgba(239,68,68,0.3)" stroke="#ef4444" strokeWidth={selected === 'mitochondria' ? 3 : 2} onClick={() => onSelect('mitochondria')} className="cursor-pointer" />
               </>
             ) : (
               <>
-                {/* Membrane */}
-                <circle
-                  cx="200"
-                  cy="200"
-                  r="170"
-                  fill="rgba(245,158,11,0.1)"
-                  stroke="#f59e0b"
-                  strokeWidth={selected === 'membrane' ? 4 : 2.5}
-                  onClick={() => onSelect('membrane')}
-                  className="cursor-pointer"
-                />
-                {/* Nucleus */}
-                <circle
-                  cx="150"
-                  cy="160"
-                  r="50"
-                  fill="rgba(167,139,250,0.3)"
-                  stroke="#a78bfa"
-                  strokeWidth={selected === 'nucleus' ? 3 : 2}
-                  onClick={() => onSelect('nucleus')}
-                  className="cursor-pointer"
-                />
+                <circle cx="200" cy="200" r="170" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" strokeWidth={selected === 'membrane' ? 4 : 2.5} onClick={() => onSelect('membrane')} className="cursor-pointer" />
+                <circle cx="150" cy="160" r="50" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" strokeWidth={selected === 'nucleus' ? 3 : 2} onClick={() => onSelect('nucleus')} className="cursor-pointer" />
                 <circle cx="150" cy="160" r="18" fill="#a78bfa" opacity="0.6" />
-                {/* Mitochondria */}
                 {[[280, 150], [300, 250], [250, 300]].map(([x, y], i) => (
-                  <ellipse
-                    key={i}
-                    cx={x}
-                    cy={y}
-                    rx="28"
-                    ry="15"
-                    fill="rgba(239,68,68,0.3)"
-                    stroke="#ef4444"
-                    strokeWidth={selected === 'mitochondria' ? 3 : 2}
-                    onClick={() => onSelect('mitochondria')}
-                    transform={`rotate(${i * 40} ${x} ${y})`}
-                    className="cursor-pointer"
-                  />
+                  <ellipse key={i} cx={x} cy={y} rx="28" ry="15" fill="rgba(239,68,68,0.3)" stroke="#ef4444" strokeWidth={selected === 'mitochondria' ? 3 : 2} onClick={() => onSelect('mitochondria')} transform={`rotate(${i * 40} ${x} ${y})`} className="cursor-pointer" />
                 ))}
-                {/* Ribosomes */}
                 {[[100, 280], [130, 300], [160, 280], [180, 310]].map(([x, y], i) => (
-                  <circle
-                    key={i}
-                    cx={x}
-                    cy={y}
-                    r="7"
-                    fill="#fb7185"
-                    stroke={selected === 'ribosome' ? '#fff' : 'transparent'}
-                    strokeWidth="2"
-                    onClick={() => onSelect('ribosome')}
-                    className="cursor-pointer"
-                  />
+                  <circle key={i} cx={x} cy={y} r="7" fill="#fb7185" stroke={selected === 'ribosome' ? '#fff' : 'transparent'} strokeWidth="2" onClick={() => onSelect('ribosome')} className="cursor-pointer" />
                 ))}
-                {/* ER */}
-                <path
-                  d="M 100 100 Q 130 80 160 100 T 220 100"
-                  fill="none"
-                  stroke="#60a5fa"
-                  strokeWidth={selected === 'er' ? 3 : 2}
-                  onClick={() => onSelect('er')}
-                  className="cursor-pointer"
-                />
-                {/* Golgi */}
-                <path
-                  d="M 250 100 Q 270 90 290 100 Q 270 110 250 100"
-                  fill="rgba(251,191,36,0.3)"
-                  stroke="#fbbf24"
-                  strokeWidth={selected === 'golgi' ? 3 : 2}
-                  onClick={() => onSelect('golgi')}
-                  className="cursor-pointer"
-                />
+                <path d="M 100 100 Q 130 80 160 100 T 220 100" fill="none" stroke="#60a5fa" strokeWidth={selected === 'er' ? 3 : 2} onClick={() => onSelect('er')} className="cursor-pointer" />
+                <path d="M 250 100 Q 270 90 290 100 Q 270 110 250 100" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" strokeWidth={selected === 'golgi' ? 3 : 2} onClick={() => onSelect('golgi')} className="cursor-pointer" />
               </>
             )}
           </svg>
         </div>
 
-        {/* Parts legend */}
         <div className="space-y-2">
           <div className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
             Click parts to learn
@@ -1187,16 +1025,11 @@ function CellDiagram({
                   : 'bg-white/5 border border-white/10 hover:bg-white/10'
               }`}
             >
-              <div
-                className="h-3 w-3 rounded-full shrink-0"
-                style={{ backgroundColor: p.color }}
-              />
+              <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-white">{p.name}</p>
                 {selected === p.id && (
-                  <p className="text-[10px] text-white/60 mt-0.5 leading-relaxed">
-                    {p.desc}
-                  </p>
+                  <p className="text-[10px] text-white/60 mt-0.5 leading-relaxed">{p.desc}</p>
                 )}
               </div>
             </button>
@@ -1211,61 +1044,39 @@ function DNADiagram() {
   return (
     <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-        <Dna className="h-3 w-3" />
-        DNA Double Helix
+        <Dna className="h-3 w-3" /> DNA Double Helix
       </div>
-
       <div className="bg-white/5 rounded-xl p-6">
         <svg viewBox="0 0 500 300" className="w-full h-auto">
-          {/* Two helical strands */}
-          <path
-            d="M 50 150 Q 100 50, 150 150 T 250 150 T 350 150 T 450 150"
-            fill="none"
-            stroke="#60a5fa"
-            strokeWidth="4"
-          />
-          <path
-            d="M 50 150 Q 100 250, 150 150 T 250 150 T 350 150 T 450 150"
-            fill="none"
-            stroke="#f472b6"
-            strokeWidth="4"
-          />
-
-          {/* Base pairs */}
-          {[
-            { x: 100, color1: '#fbbf24', color2: '#10b981' },
-            { x: 150, color1: '#ef4444', color2: '#8b5cf6' },
-            { x: 200, color1: '#10b981', color2: '#fbbf24' },
-            { x: 250, color1: '#8b5cf6', color2: '#ef4444' },
-            { x: 300, color1: '#fbbf24', color2: '#10b981' },
-            { x: 350, color1: '#ef4444', color2: '#8b5cf6' },
-            { x: 400, color1: '#10b981', color2: '#fbbf24' },
-          ].map((bp, i) => {
-            const y1 = 150 - Math.sin((bp.x - 50) / 100 * Math.PI) * 50;
-            const y2 = 150 + Math.sin((bp.x - 50) / 100 * Math.PI) * 50;
+          <path d="M 50 150 Q 100 50, 150 150 T 250 150 T 350 150 T 450 150" fill="none" stroke="#60a5fa" strokeWidth="4" />
+          <path d="M 50 150 Q 100 250, 150 150 T 250 150 T 350 150 T 450 150" fill="none" stroke="#f472b6" strokeWidth="4" />
+          {[100, 150, 200, 250, 300, 350, 400].map((x, i) => {
+            const y1 = 150 - Math.sin(((x - 50) / 100) * Math.PI) * 50;
+            const y2 = 150 + Math.sin(((x - 50) / 100) * Math.PI) * 50;
+            const colors: [string, string][] = [
+              ['#fbbf24', '#10b981'],
+              ['#ef4444', '#8b5cf6'],
+            ];
+            const [c1, c2] = colors[i % 2];
             return (
               <g key={i}>
-                <line x1={bp.x} y1={y1} x2={bp.x} y2={y2} stroke="rgba(255,255,255,0.15)" strokeWidth="6" strokeLinecap="round" />
-                <circle cx={bp.x} cy={y1 + 8} r="5" fill={bp.color1} />
-                <circle cx={bp.x} cy={y2 - 8} r="5" fill={bp.color2} />
+                <line x1={x} y1={y1} x2={x} y2={y2} stroke="rgba(255,255,255,0.15)" strokeWidth="6" strokeLinecap="round" />
+                <circle cx={x} cy={y1 + 8} r="5" fill={c1} />
+                <circle cx={x} cy={y2 - 8} r="5" fill={c2} />
               </g>
             );
           })}
-
-          <text x="250" y="280" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="11">
-            A-T and G-C base pairing
-          </text>
+          <text x="250" y="280" textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="11">A-T and G-C base pairing</text>
         </svg>
       </div>
-
-      <div className="grid sm:grid-cols-2 gap-3 mt-4 text-white/80 text-sm">
+      <div className="grid sm:grid-cols-2 gap-3 mt-4">
         <div className="rounded-lg bg-white/5 border border-white/10 p-3">
-          <p className="font-bold text-white mb-1">Adenine (A) ↔ Thymine (T)</p>
-          <p className="text-xs text-white/50">2 hydrogen bonds</p>
+          <p className="text-xs font-bold text-white">Adenine (A) ↔ Thymine (T)</p>
+          <p className="text-[11px] text-white/50">2 hydrogen bonds</p>
         </div>
         <div className="rounded-lg bg-white/5 border border-white/10 p-3">
-          <p className="font-bold text-white mb-1">Guanine (G) ↔ Cytosine (C)</p>
-          <p className="text-xs text-white/50">3 hydrogen bonds</p>
+          <p className="text-xs font-bold text-white">Guanine (G) ↔ Cytosine (C)</p>
+          <p className="text-[11px] text-white/50">3 hydrogen bonds</p>
         </div>
       </div>
     </div>
@@ -1276,76 +1087,21 @@ function HeartDiagram({ onSelect, selected }: { onSelect: (s: string) => void; s
   return (
     <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-red-500/15 border border-red-400/30 text-red-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-        <Gauge className="h-3 w-3" />
-        Human Heart
+        <Gauge className="h-3 w-3" /> Human Heart
       </div>
-
       <div className="bg-white/5 rounded-xl p-6 flex items-center justify-center">
         <svg viewBox="0 0 400 400" className="w-full max-w-[400px]">
-          {/* Heart shape */}
-          <path
-            d="M 200 100 C 200 60, 260 40, 290 80 C 320 120, 300 180, 200 320 C 100 180, 80 120, 110 80 C 140 40, 200 60, 200 100 Z"
-            fill="rgba(239,68,68,0.2)"
-            stroke="#ef4444"
-            strokeWidth="3"
-          />
-
-          {/* Atria (top chambers) */}
-          <ellipse
-            cx="150"
-            cy="140"
-            rx="35"
-            ry="30"
-            fill="rgba(96,165,250,0.3)"
-            stroke="#60a5fa"
-            strokeWidth={selected === 'ra' ? 3 : 2}
-            onClick={() => onSelect('ra')}
-            className="cursor-pointer"
-          />
-          <ellipse
-            cx="250"
-            cy="140"
-            rx="35"
-            ry="30"
-            fill="rgba(96,165,250,0.3)"
-            stroke="#60a5fa"
-            strokeWidth={selected === 'la' ? 3 : 2}
-            onClick={() => onSelect('la')}
-            className="cursor-pointer"
-          />
-
-          {/* Ventricles (bottom chambers) */}
-          <ellipse
-            cx="160"
-            cy="240"
-            rx="45"
-            ry="55"
-            fill="rgba(251,191,36,0.25)"
-            stroke="#fbbf24"
-            strokeWidth={selected === 'rv' ? 3 : 2}
-            onClick={() => onSelect('rv')}
-            className="cursor-pointer"
-          />
-          <ellipse
-            cx="240"
-            cy="240"
-            rx="45"
-            ry="55"
-            fill="rgba(251,191,36,0.25)"
-            stroke="#fbbf24"
-            strokeWidth={selected === 'lv' ? 3 : 2}
-            onClick={() => onSelect('lv')}
-            className="cursor-pointer"
-          />
-
-          {/* Labels */}
+          <path d="M 200 100 C 200 60, 260 40, 290 80 C 320 120, 300 180, 200 320 C 100 180, 80 120, 110 80 C 140 40, 200 60, 200 100 Z" fill="rgba(239,68,68,0.2)" stroke="#ef4444" strokeWidth="3" />
+          <ellipse cx="150" cy="140" rx="35" ry="30" fill="rgba(96,165,250,0.3)" stroke="#60a5fa" strokeWidth={selected === 'ra' ? 3 : 2} onClick={() => onSelect('ra')} className="cursor-pointer" />
+          <ellipse cx="250" cy="140" rx="35" ry="30" fill="rgba(96,165,250,0.3)" stroke="#60a5fa" strokeWidth={selected === 'la' ? 3 : 2} onClick={() => onSelect('la')} className="cursor-pointer" />
+          <ellipse cx="160" cy="240" rx="45" ry="55" fill="rgba(251,191,36,0.25)" stroke="#fbbf24" strokeWidth={selected === 'rv' ? 3 : 2} onClick={() => onSelect('rv')} className="cursor-pointer" />
+          <ellipse cx="240" cy="240" rx="45" ry="55" fill="rgba(251,191,36,0.25)" stroke="#fbbf24" strokeWidth={selected === 'lv' ? 3 : 2} onClick={() => onSelect('lv')} className="cursor-pointer" />
           <text x="150" y="145" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">RA</text>
           <text x="250" y="145" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">LA</text>
           <text x="160" y="245" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">RV</text>
           <text x="240" y="245" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">LV</text>
         </svg>
       </div>
-
       <div className="grid sm:grid-cols-2 gap-3 mt-4">
         <div className="rounded-lg bg-white/5 border border-white/10 p-3">
           <p className="text-xs font-bold text-sky-300">Atria (RA, LA)</p>
@@ -1364,50 +1120,24 @@ function DigestiveDiagram() {
   return (
     <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-orange-500/15 border border-orange-400/30 text-orange-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-        <Beaker className="h-3 w-3" />
-        Digestive System
+        <Beaker className="h-3 w-3" /> Digestive System
       </div>
-
       <div className="bg-white/5 rounded-xl p-6">
         <svg viewBox="0 0 400 500" className="w-full h-auto max-w-[400px] mx-auto">
-          {/* Mouth */}
           <ellipse cx="200" cy="40" rx="30" ry="20" fill="rgba(251,113,133,0.3)" stroke="#fb7185" strokeWidth="2" />
           <text x="200" y="45" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">Mouth</text>
-
-          {/* Esophagus */}
           <rect x="192" y="60" width="16" height="80" fill="rgba(96,165,250,0.3)" stroke="#60a5fa" strokeWidth="2" />
           <text x="240" y="105" fill="white" fontSize="10">Esophagus</text>
-
-          {/* Stomach */}
           <ellipse cx="190" cy="200" rx="55" ry="50" fill="rgba(239,68,68,0.25)" stroke="#ef4444" strokeWidth="2" />
           <text x="190" y="205" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">Stomach</text>
-
-          {/* Small intestine (coiled) */}
-          <path
-            d="M 190 260 Q 140 300, 190 340 T 190 420 Q 240 440, 200 460"
-            fill="none"
-            stroke="#10b981"
-            strokeWidth="12"
-            strokeLinecap="round"
-            opacity="0.5"
-          />
+          <path d="M 190 260 Q 140 300, 190 340 T 190 420 Q 240 440, 200 460" fill="none" stroke="#10b981" strokeWidth="12" strokeLinecap="round" opacity="0.5" />
           <text x="270" y="360" fill="white" fontSize="10">Small</text>
           <text x="270" y="375" fill="white" fontSize="10">Intestine</text>
-
-          {/* Large intestine outline */}
-          <path
-            d="M 130 280 L 130 440 L 270 440 L 270 280"
-            fill="none"
-            stroke="#a78bfa"
-            strokeWidth="10"
-            strokeLinecap="round"
-            opacity="0.35"
-          />
+          <path d="M 130 280 L 130 440 L 270 440 L 270 280" fill="none" stroke="#a78bfa" strokeWidth="10" strokeLinecap="round" opacity="0.35" />
           <text x="60" y="360" fill="white" fontSize="10">Large</text>
           <text x="60" y="375" fill="white" fontSize="10">Intestine</text>
         </svg>
       </div>
-
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
         {[
           { name: 'Mouth', desc: 'Chewing & saliva' },
@@ -1429,58 +1159,31 @@ function PhotosynthesisDiagram() {
   return (
     <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
       <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-        <Thermometer className="h-3 w-3" />
-        Photosynthesis
+        <Thermometer className="h-3 w-3" /> Photosynthesis
       </div>
-
       <div className="bg-white/5 rounded-xl p-6">
         <div className="text-center py-4 text-white">
           <div className="text-lg sm:text-2xl">
             <KatexBlock latex="6CO_2 + 6H_2O \xrightarrow{light} C_6H_{12}O_6 + 6O_2" />
           </div>
         </div>
-
         <svg viewBox="0 0 500 250" className="w-full h-auto mt-4">
-          {/* Sun */}
           <circle cx="80" cy="60" r="35" fill="rgba(251,191,36,0.6)" stroke="#fbbf24" strokeWidth="2" />
           <text x="80" y="65" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">☀️</text>
-
-          {/* Sun rays */}
           {[0, 45, 90, 135].map((angle) => (
-            <line
-              key={angle}
-              x1={80 + Math.cos((angle * Math.PI) / 180) * 40}
-              y1={60 + Math.sin((angle * Math.PI) / 180) * 40}
-              x2={80 + Math.cos((angle * Math.PI) / 180) * 80}
-              y2={60 + Math.sin((angle * Math.PI) / 180) * 80}
-              stroke="#fbbf24"
-              strokeWidth="2"
-              strokeDasharray="4 3"
-            />
+            <line key={angle} x1={80 + Math.cos((angle * Math.PI) / 180) * 40} y1={60 + Math.sin((angle * Math.PI) / 180) * 40} x2={80 + Math.cos((angle * Math.PI) / 180) * 80} y2={60 + Math.sin((angle * Math.PI) / 180) * 80} stroke="#fbbf24" strokeWidth="2" strokeDasharray="4 3" />
           ))}
-
-          {/* Plant */}
           <g transform="translate(250, 130)">
-            {/* Stem */}
             <line x1="0" y1="50" x2="0" y2="-30" stroke="#10b981" strokeWidth="6" />
-            {/* Leaves */}
             <ellipse cx="-40" cy="-10" rx="35" ry="18" fill="rgba(16,185,129,0.4)" stroke="#10b981" strokeWidth="2" transform="rotate(-20 -40 -10)" />
             <ellipse cx="40" cy="-30" rx="35" ry="18" fill="rgba(16,185,129,0.4)" stroke="#10b981" strokeWidth="2" transform="rotate(20 40 -30)" />
-            {/* Roots */}
             <line x1="0" y1="50" x2="-20" y2="80" stroke="#78716c" strokeWidth="3" />
             <line x1="0" y1="50" x2="20" y2="80" stroke="#78716c" strokeWidth="3" />
-            {/* Water drops */}
             <text x="-60" y="70" fill="#60a5fa" fontSize="10">💧 H₂O</text>
           </g>
-
-          {/* CO2 */}
           <text x="350" y="80" fill="#94a3b8" fontSize="11">CO₂</text>
           <text x="350" y="100" fill="#94a3b8" fontSize="11">↓</text>
-
-          {/* O2 out */}
           <text x="350" y="220" fill="#38bdf8" fontSize="11">O₂ ↑</text>
-
-          {/* Glucose */}
           <text x="50" y="220" fill="#fbbf24" fontSize="11">C₆H₁₂O₆</text>
         </svg>
       </div>
@@ -1488,9 +1191,9 @@ function PhotosynthesisDiagram() {
   );
 }
 
-/* ============================================================ */
-/* CHEMISTRY BOARD                                              */
-/* ============================================================ */
+/* ============================================================
+   CHEMISTRY BOARD
+   ============================================================ */
 
 function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
   const [equation, setEquation] = useState('2H_2 + O_2 \\rightarrow 2H_2O');
@@ -1500,11 +1203,9 @@ function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
   return (
     <div className={`grid ${presentMode ? 'grid-cols-1' : 'lg:grid-cols-[1fr_360px]'} gap-3 p-3 sm:p-4`}>
       <div className="space-y-3">
-        {/* Equation display */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-6">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-400/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-            <FlaskConical className="h-3 w-3" />
-            Chemical Equation
+            <FlaskConical className="h-3 w-3" /> Chemical Equation
           </div>
           <div className="text-center py-8">
             <div className="text-2xl sm:text-3xl text-white overflow-x-auto">
@@ -1513,73 +1214,41 @@ function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
           </div>
         </div>
 
-        {/* pH Scale */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-            <Beaker className="h-3 w-3" />
-            pH Scale
+            <Beaker className="h-3 w-3" /> pH Scale
           </div>
-
           <div className="relative">
             <div className="h-8 rounded-lg overflow-hidden flex">
-              {[
-                '#dc2626', '#ea580c', '#f97316', '#f59e0b',
-                '#eab308', '#84cc16', '#22c55e', '#10b981',
-                '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
-                '#6366f1', '#8b5cf6',
-              ].map((color, i) => (
-                <div
-                  key={i}
-                  className="flex-1 h-full"
-                  style={{ backgroundColor: color }}
-                />
+              {['#dc2626', '#ea580c', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6'].map((color, i) => (
+                <div key={i} className="flex-1 h-full" style={{ backgroundColor: color }} />
               ))}
             </div>
-
-            <input
-              type="range"
-              min="0"
-              max="14"
-              value={ph}
-              onChange={(e) => setPh(Number(e.target.value))}
-              className="w-full mt-3 accent-white"
-            />
-
+            <input type="range" min="0" max="14" value={ph} onChange={(e) => setPh(Number(e.target.value))} className="w-full mt-3 accent-white" />
             <div className="flex justify-between text-[10px] text-white/60 mt-1 font-mono">
               <span>0</span>
               <span>7 (neutral)</span>
               <span>14</span>
             </div>
-
             <div className="mt-3 text-center">
-              <span
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
-                  ph < 7
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-400/40'
-                    : ph === 7
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
-                    : 'bg-blue-500/20 text-blue-300 border border-blue-400/40'
-                }`}
-              >
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
+                ph < 7 ? 'bg-rose-500/20 text-rose-300 border border-rose-400/40'
+                : ph === 7 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                : 'bg-blue-500/20 text-blue-300 border border-blue-400/40'
+              }`}>
                 pH = {ph} · {ph < 7 ? 'Acidic' : ph === 7 ? 'Neutral' : 'Basic'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Mini periodic table */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-5">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-violet-500/15 border border-violet-400/30 text-violet-300 text-[10px] font-bold uppercase tracking-wider mb-4">
-            <Atom className="h-3 w-3" />
-            Common Elements
+            <Atom className="h-3 w-3" /> Common Elements
           </div>
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
             {COMMON_ELEMENTS.map((el) => (
-              <div
-                key={el.symbol}
-                className="rounded-lg bg-white/5 border border-white/10 p-2 text-center hover:bg-white/10 transition cursor-pointer"
-                title={el.name}
-              >
+              <div key={el.symbol} className="rounded-lg bg-white/5 border border-white/10 p-2 text-center hover:bg-white/10 transition cursor-pointer" title={el.name}>
                 <div className="text-[9px] text-white/40 font-mono">{el.number}</div>
                 <div className="text-base font-bold text-white">{el.symbol}</div>
                 <div className="text-[9px] text-white/60 truncate">{el.name}</div>
@@ -1590,28 +1259,17 @@ function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
       </div>
 
       <aside className="space-y-3">
-        {/* Equation editor */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <FlaskConical className="h-4 w-4 text-amber-400" />
             <span className="text-sm font-bold text-white">Equation Editor</span>
           </div>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            rows={3}
-            className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-xs font-mono text-white/90 outline-none focus:border-amber-400/60 resize-none"
-          />
-          <button
-            onClick={() => setEquation(input)}
-            className="w-full mt-3 inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs font-bold transition"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Render
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={3} className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-xs font-mono text-white/90 outline-none focus:border-amber-400/60 resize-none" />
+          <button onClick={() => setEquation(input)} className="w-full mt-3 inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-bold transition">
+            <Play className="h-3.5 w-3.5" /> Render
           </button>
         </div>
 
-        {/* Preset equations */}
         <div className="rounded-2xl bg-[#0f172a] border border-white/10 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Layers className="h-4 w-4 text-emerald-400" />
@@ -1619,14 +1277,7 @@ function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
           </div>
           <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
             {CHEMISTRY_EQUATIONS.map((e, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setInput(e.latex);
-                  setEquation(e.latex);
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition"
-              >
+              <button key={i} onClick={() => { setInput(e.latex); setEquation(e.latex); }} className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition">
                 <div className="text-white/80 text-xs overflow-x-auto">
                   <KatexInline latex={e.latex} />
                 </div>
@@ -1640,66 +1291,245 @@ function ChemistryBoard({ presentMode = false }: { presentMode?: boolean }) {
   );
 }
 
-/* ============================================================ */
-/* DATA                                                         */
-/* ============================================================ */
+/* ============================================================
+   SVG HELPERS
+   ============================================================ */
 
-const QUICK_MATH = [
+function TriangleSVG() {
+  return (
+    <svg viewBox="0 0 200 170" className="w-44 h-auto">
+      <polygon points="100,20 20,150 180,150" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
+      <line x1="100" y1="20" x2="100" y2="150" stroke="rgba(255,255,255,0.4)" strokeDasharray="4 3" strokeWidth="1.5" />
+      <text x="106" y="90" fill="#fff" fontSize="12" fontFamily="monospace">h</text>
+      <text x="60" y="165" fill="#fff" fontSize="12" fontFamily="monospace">b</text>
+      <text x="60" y="35" fill="#fbbf24" fontSize="10">a</text>
+      <text x="140" y="35" fill="#fbbf24" fontSize="10">c</text>
+    </svg>
+  );
+}
+
+function CircleSVG() {
+  return (
+    <svg viewBox="0 0 200 170" className="w-44 h-auto">
+      <circle cx="100" cy="85" r="65" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
+      <line x1="100" y1="85" x2="165" y2="85" stroke="#fff" strokeWidth="1.5" />
+      <circle cx="100" cy="85" r="3" fill="#fff" />
+      <text x="125" y="80" fill="#fff" fontSize="12" fontFamily="monospace">r</text>
+    </svg>
+  );
+}
+
+function SquareSVG() {
+  return (
+    <svg viewBox="0 0 200 170" className="w-44 h-auto">
+      <rect x="40" y="20" width="120" height="120" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
+      <line x1="40" y1="20" x2="160" y2="140" stroke="rgba(255,255,255,0.3)" strokeDasharray="4 3" strokeWidth="1" />
+      <text x="100" y="160" textAnchor="middle" fill="#fff" fontSize="12" fontFamily="monospace">a</text>
+      <text x="20" y="85" fill="#fff" fontSize="12" fontFamily="monospace">a</text>
+    </svg>
+  );
+}
+
+function PolygonSVG() {
+  return (
+    <svg viewBox="0 0 200 170" className="w-44 h-auto">
+      <polygon points="100,20 165,65 140,140 60,140 35,65" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="2" />
+      <circle cx="100" cy="85" r="3" fill="#fff" />
+      {[[100, 20], [165, 65], [140, 140], [60, 140], [35, 65]].map(([x, y], i) => (
+        <line key={i} x1="100" y1="85" x2={x} y2={y} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+      ))}
+      <text x="100" y="165" textAnchor="middle" fill="#60a5fa" fontSize="10">Regular Pentagon</text>
+    </svg>
+  );
+}
+
+function UnitCircleSVG() {
+  return (
+    <svg viewBox="0 0 240 240" className="w-52 h-auto">
+      <line x1="0" y1="120" x2="240" y2="120" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+      <line x1="120" y1="0" x2="120" y2="240" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+      <circle cx="120" cy="120" r="90" fill="none" stroke="#10b981" strokeWidth="2" />
+      <line x1="120" y1="120" x2="200" y2="60" stroke="#fbbf24" strokeWidth="2" />
+      <path d="M 160 120 A 40 40 0 0 0 150 95" fill="none" stroke="#60a5fa" strokeWidth="1.5" />
+      <text x="165" y="112" fill="#60a5fa" fontSize="11">θ</text>
+      <text x="205" y="55" fill="#fbbf24" fontSize="11">(cos θ, sin θ)</text>
+      <text x="10" y="115" fill="#fff" fontSize="10">-1</text>
+      <text x="225" y="115" fill="#fff" fontSize="10">1</text>
+    </svg>
+  );
+}
+
+function FunctionPlot({ fn }: { fn: string }) {
+  const W = 500;
+  const H = 240;
+  const range = 5;
+
+  const toPixel = (x: number, y: number) => ({
+    px: (x / range) * (W / 2) + W / 2,
+    py: -((y / range) * (H / 2)) + H / 2,
+  });
+
+  const points = useMemo(() => {
+    const pts: string[] = [];
+    const N = 240;
+    let lastValid = false;
+
+    for (let i = 0; i <= N; i++) {
+      const x = -range + (2 * range * i) / N;
+      let y: number;
+      try {
+        // eslint-disable-next-line no-new-func
+        y = new Function('x', `return (${fn});`)(x);
+        if (!Number.isFinite(y) || Math.abs(y) > 50) {
+          lastValid = false;
+          continue;
+        }
+      } catch {
+        lastValid = false;
+        continue;
+      }
+      const { px, py } = toPixel(x, y);
+      if (py < -200 || py > H + 200) {
+        lastValid = false;
+        continue;
+      }
+      pts.push(`${lastValid ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`);
+      lastValid = true;
+    }
+    return pts.join(' ');
+  }, [fn]);
+
+  return (
+    <div className="bg-white/5 rounded-xl overflow-hidden">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        {Array.from({ length: 11 }).map((_, i) => {
+          const x = (i / 10) * W;
+          return <line key={`v${i}`} x1={x} y1={0} x2={x} y2={H} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />;
+        })}
+        {Array.from({ length: 6 }).map((_, i) => {
+          const y = (i / 5) * H;
+          return <line key={`h${i}`} x1={0} y1={y} x2={W} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />;
+        })}
+        <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
+        <line x1={W / 2} y1={0} x2={W / 2} y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
+        <path d={points} fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" />
+        <text x={W / 2 + 6} y={H / 2 - 6} fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="monospace">0</text>
+      </svg>
+    </div>
+  );
+}
+
+/* ============================================================
+   DATA
+   ============================================================ */
+
+const QUICK_SYMBOLS: { name: string; display: string; latex: string }[] = [
   { name: 'Sum', display: '\\sum', latex: '\\sum_{i=1}^{n}' },
   { name: 'Integral', display: '\\int', latex: '\\int_{a}^{b}' },
   { name: 'Fraction', display: '\\frac{a}{b}', latex: '\\frac{a}{b}' },
-  { name: 'Square root', display: '\\sqrt{x}', latex: '\\sqrt{x}' },
+  { name: 'Sqrt', display: '\\sqrt{x}', latex: '\\sqrt{x}' },
   { name: 'Pi', display: '\\pi', latex: '\\pi' },
   { name: 'Infinity', display: '\\infty', latex: '\\infty' },
-  { name: 'Limit', display: '\\lim', latex: '\\lim_{x \\to 0}' },
-  { name: 'Derivative', display: "f'", latex: "f'(x)" },
-  { name: 'Arrow', display: '\\to', latex: '\\to' },
+  { name: 'Limit', display: '\\lim', latex: '\\lim_{x\\to 0}' },
+  { name: 'Deriv', display: "f'", latex: "f'(x)" },
   { name: 'Alpha', display: '\\alpha', latex: '\\alpha' },
   { name: 'Beta', display: '\\beta', latex: '\\beta' },
   { name: 'Theta', display: '\\theta', latex: '\\theta' },
+  { name: 'Delta', display: '\\Delta', latex: '\\Delta' },
+  { name: 'Lambda', display: '\\lambda', latex: '\\lambda' },
+  { name: 'Mu', display: '\\mu', latex: '\\mu' },
+  { name: 'Sigma', display: '\\sigma', latex: '\\sigma' },
 ];
 
-const PRESET_MATH = [
-  {
-    name: 'Quadratic Formula',
-    latex: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}',
-  },
-  {
-    name: "Pythagorean Theorem",
-    latex: 'a^2 + b^2 = c^2',
-  },
-  {
-    name: "Euler's Identity",
-    latex: 'e^{i\\pi} + 1 = 0',
-  },
-  {
-    name: 'Gaussian Integral',
-    latex: '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}',
-  },
-  {
-    name: 'Derivative Power Rule',
-    latex: '\\frac{d}{dx} x^n = n x^{n-1}',
-  },
-  {
-    name: 'Binomial Expansion',
-    latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k',
-  },
+const PRESET_FORMULAS: Formula[] = [
+  { name: 'Quadratic Formula', latex: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}' },
+  { name: 'Pythagorean Theorem', latex: 'a^2 + b^2 = c^2' },
+  { name: "Euler's Identity", latex: 'e^{i\\pi} + 1 = 0' },
+  { name: 'Gaussian Integral', latex: '\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}' },
+  { name: 'Derivative Power Rule', latex: '\\frac{d}{dx} x^n = n x^{n-1}' },
+  { name: 'Binomial Expansion', latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k' },
+  { name: 'Slope-Intercept', latex: 'y = mx + b' },
+  { name: 'Distance Formula', latex: 'd = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}' },
 ];
 
-const PHYSICS_FORMULAS = [
-  { name: 'Newton\'s 2nd Law', latex: 'F = m \\cdot a' },
-  { name: 'Kinematic Equation', latex: 'v = v_0 + a t' },
-  { name: 'Distance', latex: 's = v_0 t + \\tfrac{1}{2} a t^2' },
+const ALGEBRA_FORMULAS: Formula[] = [
+  { name: 'Quadratic', latex: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}', note: 'Solves ax² + bx + c = 0' },
+  { name: 'Difference of Squares', latex: 'a^2 - b^2 = (a-b)(a+b)' },
+  { name: 'Perfect Square', latex: '(a \\pm b)^2 = a^2 \\pm 2ab + b^2' },
+  { name: 'Sum of Cubes', latex: 'a^3 + b^3 = (a+b)(a^2-ab+b^2)' },
+  { name: 'Difference of Cubes', latex: 'a^3 - b^3 = (a-b)(a^2+ab+b^2)' },
+  { name: 'Log Product', latex: '\\log(xy) = \\log x + \\log y' },
+  { name: 'Log Power', latex: '\\log(x^n) = n\\log x' },
+  { name: 'Exponent Product', latex: 'x^a \\cdot x^b = x^{a+b}' },
+  { name: 'Exponent Quotient', latex: '\\frac{x^a}{x^b} = x^{a-b}' },
+  { name: 'Exponent Power', latex: '(x^a)^b = x^{ab}' },
+];
+
+const GEOMETRY_FORMULAS: Record<string, Formula[]> = {
+  triangle: [
+    { name: 'Area', latex: 'A = \\tfrac{1}{2} b h' },
+    { name: 'Perimeter', latex: 'P = a + b + c' },
+    { name: 'Angle Sum', latex: 'A + B + C = 180°' },
+    { name: 'Law of Cosines', latex: 'c^2 = a^2 + b^2 - 2ab\\cos C' },
+    { name: "Heron's Formula", latex: 'A = \\sqrt{s(s-a)(s-b)(s-c)}' },
+  ],
+  circle: [
+    { name: 'Area', latex: 'A = \\pi r^2' },
+    { name: 'Circumference', latex: 'C = 2\\pi r' },
+    { name: 'Diameter', latex: 'd = 2r' },
+    { name: 'Arc Length', latex: 'L = r\\theta' },
+    { name: 'Sector Area', latex: 'A = \\tfrac{1}{2} r^2 \\theta' },
+  ],
+  square: [
+    { name: 'Area', latex: 'A = a^2' },
+    { name: 'Perimeter', latex: 'P = 4a' },
+    { name: 'Diagonal', latex: 'd = a\\sqrt{2}' },
+    { name: 'Inscribed Circle', latex: 'r = \\tfrac{a}{2}' },
+  ],
+  polygon: [
+    { name: 'Sum of Interior Angles', latex: 'S = (n-2)\\times 180°' },
+    { name: 'Each Interior Angle', latex: '\\theta = \\frac{(n-2)\\times 180°}{n}' },
+    { name: 'Each Exterior Angle', latex: '\\theta_e = \\frac{360°}{n}' },
+    { name: 'Regular Polygon Area', latex: 'A = \\frac{1}{4}n s^2 \\cot\\frac{\\pi}{n}' },
+  ],
+};
+
+const TRIG_FORMULAS: Formula[] = [
+  { name: 'Pythagorean Identity', latex: '\\sin^2\\theta + \\cos^2\\theta = 1' },
+  { name: 'Tangent Identity', latex: '\\tan\\theta = \\frac{\\sin\\theta}{\\cos\\theta}' },
+  { name: 'Sum Formula (sin)', latex: '\\sin(A+B) = \\sin A \\cos B + \\cos A \\sin B' },
+  { name: 'Sum Formula (cos)', latex: '\\cos(A+B) = \\cos A \\cos B - \\sin A \\sin B' },
+  { name: 'Double Angle', latex: '\\sin 2\\theta = 2\\sin\\theta\\cos\\theta' },
+  { name: 'Law of Sines', latex: '\\frac{a}{\\sin A} = \\frac{b}{\\sin B} = \\frac{c}{\\sin C}' },
+];
+
+const CALCULUS_FORMULAS: Formula[] = [
+  { name: 'Derivative Definition', latex: "f'(x) = \\lim_{h\\to 0} \\frac{f(x+h)-f(x)}{h}" },
+  { name: 'Power Rule', latex: '\\frac{d}{dx} x^n = nx^{n-1}' },
+  { name: 'Product Rule', latex: "(uv)' = u'v + uv'" },
+  { name: 'Quotient Rule', latex: "\\left(\\frac{u}{v}\\right)' = \\frac{u'v - uv'}{v^2}" },
+  { name: 'Chain Rule', latex: "\\frac{dy}{dx} = \\frac{dy}{du}\\cdot\\frac{du}{dx}" },
+  { name: 'Integral Power Rule', latex: '\\int x^n\\,dx = \\frac{x^{n+1}}{n+1}+C' },
+  { name: 'Definite Integral', latex: '\\int_a^b f(x)\\,dx = F(b)-F(a)' },
+  { name: 'Fundamental Theorem', latex: '\\frac{d}{dx}\\int_a^x f(t)\\,dt = f(x)' },
+];
+
+const PHYSICS_FORMULAS: Formula[] = [
+  { name: "Newton's 2nd Law", latex: 'F = m \\cdot a' },
+  { name: 'Kinematic 1', latex: 'v = v_0 + a t' },
+  { name: 'Kinematic 2', latex: 's = v_0 t + \\tfrac{1}{2} a t^2' },
+  { name: 'Kinematic 3', latex: 'v^2 = v_0^2 + 2as' },
   { name: 'Kinetic Energy', latex: 'KE = \\tfrac{1}{2} m v^2' },
   { name: 'Potential Energy', latex: 'PE = m g h' },
-  { name: 'Work', latex: 'W = F \\cdot d \\cdot \\cos\\theta' },
+  { name: 'Work', latex: 'W = F \\cdot d\\cdot\\cos\\theta' },
   { name: 'Power', latex: 'P = \\frac{W}{t}' },
   { name: 'Momentum', latex: 'p = m v' },
-  { name: 'Impulse', latex: 'J = F \\cdot \\Delta t = \\Delta p' },
+  { name: 'Impulse', latex: 'J = F \\Delta t = \\Delta p' },
   { name: 'Gravitational Force', latex: 'F = G\\frac{m_1 m_2}{r^2}' },
-  { name: 'Ohm\'s Law', latex: 'V = I \\cdot R' },
-  { name: 'Wave Equation', latex: 'v = f \\cdot \\lambda' },
-  { name: 'Einstein\'s Energy', latex: 'E = m c^2' },
+  { name: "Ohm's Law", latex: 'V = I R' },
+  { name: 'Power (Electric)', latex: 'P = I V = I^2 R' },
+  { name: 'Wave Equation', latex: 'v = f \\lambda' },
+  { name: "Einstein's Energy", latex: 'E = m c^2' },
   { name: 'Pressure', latex: 'P = \\frac{F}{A}' },
 ];
 
@@ -1730,13 +1560,15 @@ const COMMON_ELEMENTS = [
   { number: 92, symbol: 'U', name: 'Uranium' },
 ];
 
-const CHEMISTRY_EQUATIONS = [
+const CHEMISTRY_EQUATIONS: Formula[] = [
   { name: 'Water Formation', latex: '2H_2 + O_2 \\rightarrow 2H_2O' },
-  { name: 'Combustion of Methane', latex: 'CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O' },
+  { name: 'Methane Combustion', latex: 'CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O' },
   { name: 'Photosynthesis', latex: '6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2' },
   { name: 'Respiration', latex: 'C_6H_{12}O_6 + 6O_2 \\rightarrow 6CO_2 + 6H_2O' },
   { name: 'Acid-Base', latex: 'HCl + NaOH \\rightarrow NaCl + H_2O' },
   { name: 'Rusting', latex: '4Fe + 3O_2 \\rightarrow 2Fe_2O_3' },
-  { name: 'Ammonia Synthesis', latex: 'N_2 + 3H_2 \\rightleftharpoons 2NH_3' },
-  { name: 'Calcium Carbonate', latex: 'CaCO_3 \\rightarrow CaO + CO_2' },
+  { name: 'Ammonia', latex: 'N_2 + 3H_2 \\rightleftharpoons 2NH_3' },
+  { name: 'Lime', latex: 'CaCO_3 \\rightarrow CaO + CO_2' },
+  { name: 'Decomposition', latex: '2H_2O_2 \\rightarrow 2H_2O + O_2' },
+  { name: 'Neutralization', latex: 'H_2SO_4 + 2NaOH \\rightarrow Na_2SO_4 + 2H_2O' },
 ];

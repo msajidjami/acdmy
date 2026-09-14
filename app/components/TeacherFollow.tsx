@@ -3,98 +3,84 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-
 type Props = {
-  slug: string;
+  teacherId: string;
   initialFollowing?: boolean;
   initialCount?: number;
   accentColor?: string;
   size?: 'sm' | 'md';
 };
 
-export default function FollowButton({
-  slug,
+export default function TeacherFollow({
+  teacherId,
   initialFollowing = false,
   initialCount = 0,
   accentColor = '#10b981',
-  size = 'md',
+  size = 'sm',
 }: Props) {
   const router = useRouter();
   const [following, setFollowing] = useState(initialFollowing);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  /* ✅ ہر mount پر fresh state لیں */
   useEffect(() => {
     let ignore = false;
-
-    const fetchStatus = async () => {
+    const load = async () => {
       try {
-        const res = await fetch(`/api/academies/${slug}/follow`, {
-          method: 'GET',
+        const res = await fetch(`/api/teachers/${teacherId}/follow`, {
           credentials: 'include',
           cache: 'no-store',
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (!ignore) {
-          setFollowing(Boolean(data.following));
-          setCount(Number(data.followerCount) || 0);
-        }
-      } catch {
-        /* silent */
-      }
+        if (ignore) return;
+        setFollowing(Boolean(data.following));
+        setCount(Number(data.followerCount) || 0);
+      } catch {}
     };
-
-    fetchStatus();
+    load();
     return () => {
       ignore = true;
     };
-  }, [slug]);
+  }, [teacherId]);
 
   const toggle = async () => {
     if (loading) return;
-    setError('');
     setLoading(true);
 
-    /* Optimistic update */
-    const prevFollowing = following;
-    const prevCount = count;
+    const prevF = following;
+    const prevC = count;
     setFollowing(!following);
     setCount(following ? Math.max(0, count - 1) : count + 1);
 
     try {
-      const res = await fetch(`/api/academies/${slug}/follow`, {
+      const res = await fetch(`/api/teachers/${teacherId}/follow`, {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
       });
 
       if (res.status === 401) {
-        /* لاگ ان نہیں — login پیج پر بھیجیں */
-        setFollowing(prevFollowing);
-        setCount(prevCount);
-        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname));
+        setFollowing(prevF);
+        setCount(prevC);
+        router.push(
+          '/login?redirect=' + encodeURIComponent(window.location.pathname)
+        );
         return;
       }
 
       const data = await res.json();
-
       if (!res.ok) {
-        setFollowing(prevFollowing);
-        setCount(prevCount);
-        setError(data.error || 'Failed');
+        setFollowing(prevF);
+        setCount(prevC);
         return;
       }
 
       setFollowing(Boolean(data.following));
       setCount(Number(data.followerCount) || 0);
     } catch {
-      setFollowing(prevFollowing);
-      setCount(prevCount);
-      setError('Network error');
+      setFollowing(prevF);
+      setCount(prevC);
     } finally {
       setLoading(false);
     }
@@ -110,14 +96,15 @@ export default function FollowButton({
       className={`${pad} font-semibold rounded-xl transition-all duration-200 disabled:opacity-60 inline-flex items-center justify-center gap-1.5 ${
         following
           ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
-          : 'text-white shadow-md hover:shadow-lg'
+          : 'text-white shadow-md'
       }`}
       style={
         following
           ? undefined
-          : { background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)` }
+          : {
+              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+            }
       }
-      title={error || undefined}
     >
       {following ? (
         <>

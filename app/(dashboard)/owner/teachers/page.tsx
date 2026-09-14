@@ -10,7 +10,6 @@ import {
   TrashIcon,
   XMarkIcon,
   EnvelopeIcon,
-  AcademicCapIcon,
   MicrophoneIcon,
   CheckCircleIcon,
   XCircleIcon,
@@ -26,6 +25,8 @@ import {
   BookOpenIcon,
   TagIcon,
   InformationCircleIcon,
+  GlobeAltIcon,
+  LanguageIcon,
 } from '@heroicons/react/24/outline';
 
 /* ============================================================
@@ -38,6 +39,8 @@ interface Teacher {
   email: string;
   gender: 'male' | 'female';
   subjects: string[];
+  languages?: string[];
+  country?: string;
   isAvailable: boolean;
   profileImage?: string;
   bio?: string;
@@ -49,12 +52,59 @@ const EMPTY_FORM = {
   email: '',
   gender: 'male' as 'male' | 'female',
   selectedSubjects: [] as string[],
+  selectedLanguages: [] as string[],
+  country: '',
   bio: '',
   audioFile: null as File | null,
   existingAudioUrl: '',
   profileImageFile: null as File | null,
   existingProfileImage: '',
 };
+
+/* ✅ دستیاب زبانیں */
+const AVAILABLE_LANGUAGES = [
+  'English',
+  'Urdu',
+  'Arabic',
+  'Hindi',
+  'Punjabi',
+  'Sindhi',
+  'Pashto',
+  'Balochi',
+  'Persian',
+  'Turkish',
+  'Bengali',
+  'French',
+  'Spanish',
+  'German',
+  'Chinese',
+  'Malay',
+  'Indonesian',
+];
+
+/* ✅ عام ممالک */
+const COMMON_COUNTRIES = [
+  'Pakistan',
+  'India',
+  'Bangladesh',
+  'Saudi Arabia',
+  'UAE',
+  'Qatar',
+  'Kuwait',
+  'Bahrain',
+  'Oman',
+  'Turkey',
+  'Malaysia',
+  'Indonesia',
+  'United Kingdom',
+  'United States',
+  'Canada',
+  'Australia',
+  'Germany',
+  'France',
+  'South Africa',
+  'Egypt',
+];
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -113,7 +163,7 @@ export default function OwnerTeachersPage() {
     fetchSubjects();
   }, []);
 
-  /* ------------------ Image Helpers ------------------ */
+  /* ------------------ File Helpers ------------------ */
 
   const readAsDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -130,13 +180,11 @@ export default function OwnerTeachersPage() {
   ): Promise<string> => {
     const fd = new FormData();
     fd.append(fieldName, file);
-
     const res = await fetch(endpoint, {
       method: 'POST',
       body: fd,
       credentials: 'include',
     });
-
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.url) {
       throw new Error(data?.error || 'Upload failed');
@@ -153,7 +201,6 @@ export default function OwnerTeachersPage() {
       toast.error('Image must be smaller than 5 MB');
       return;
     }
-
     try {
       const preview = await readAsDataUrl(file);
       setImagePreview(preview);
@@ -173,7 +220,7 @@ export default function OwnerTeachersPage() {
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
-  /* ------------------ Subject toggle ------------------ */
+  /* ------------------ Toggles ------------------ */
 
   const toggleSubject = (subject: string) => {
     setFormData((prev) => {
@@ -187,13 +234,29 @@ export default function OwnerTeachersPage() {
     });
   };
 
-  const selectAllSubjects = () => {
-    setFormData((prev) => ({ ...prev, selectedSubjects: [...academySubjects] }));
+  const toggleLanguage = (lang: string) => {
+    setFormData((prev) => {
+      const has = prev.selectedLanguages.includes(lang);
+      return {
+        ...prev,
+        selectedLanguages: has
+          ? prev.selectedLanguages.filter((l) => l !== lang)
+          : [...prev.selectedLanguages, lang],
+      };
+    });
   };
 
-  const clearSubjects = () => {
+  const selectAllSubjects = () =>
+    setFormData((prev) => ({ ...prev, selectedSubjects: [...academySubjects] }));
+  const clearSubjects = () =>
     setFormData((prev) => ({ ...prev, selectedSubjects: [] }));
-  };
+  const selectAllLanguages = () =>
+    setFormData((prev) => ({
+      ...prev,
+      selectedLanguages: [...AVAILABLE_LANGUAGES],
+    }));
+  const clearLanguages = () =>
+    setFormData((prev) => ({ ...prev, selectedLanguages: [] }));
 
   /* ------------------ Actions ------------------ */
 
@@ -238,9 +301,8 @@ export default function OwnerTeachersPage() {
     setUploading(true);
 
     try {
-      /* ---------- Audio ---------- */
+      /* ✅ Audio — آپشنل */
       let audioUrl = formData.existingAudioUrl || '';
-
       if (formData.audioFile) {
         toast.loading('Uploading audio...', { id: 'audio' });
         audioUrl = await uploadFile(
@@ -251,18 +313,13 @@ export default function OwnerTeachersPage() {
         toast.success('Audio uploaded', { id: 'audio' });
       }
 
-      if (!audioUrl) {
-        throw new Error('Voice introduction is required');
-      }
-
-      /* ---------- Subjects ---------- */
+      /* Subjects — لازمی */
       if (formData.selectedSubjects.length === 0) {
         throw new Error('Please select at least one subject');
       }
 
-      /* ---------- Image (male only) ---------- */
+      /* Image — صرف male */
       let profileImage = '';
-
       if (formData.gender === 'male') {
         if (formData.profileImageFile) {
           toast.loading('Uploading image...', { id: 'img' });
@@ -277,14 +334,15 @@ export default function OwnerTeachersPage() {
         }
       }
 
-      /* ---------- Payload ---------- */
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
         gender: formData.gender,
         subjects: formData.selectedSubjects,
+        languages: formData.selectedLanguages,
+        country: formData.country.trim(),
         bio: formData.bio.trim(),
-        audioUrl,
+        audioUrl, // ✅ خالی بھی چلے گا
         profileImage: formData.gender === 'male' ? profileImage : '',
       };
 
@@ -331,8 +389,6 @@ export default function OwnerTeachersPage() {
   const openEditModal = (teacher: Teacher) => {
     setEditingTeacher(teacher);
 
-    /* Existing subjects کو academy subjects کے ساتھ merge کر دیں
-       تاکہ اگر کوئی subject اب category میں نہیں تو بھی visible ہو */
     const merged = new Set([
       ...academySubjects,
       ...(teacher.subjects || []),
@@ -343,6 +399,8 @@ export default function OwnerTeachersPage() {
       email: teacher.email,
       gender: teacher.gender || 'male',
       selectedSubjects: teacher.subjects || [],
+      selectedLanguages: teacher.languages || [],
+      country: teacher.country || '',
       bio: teacher.bio || '',
       audioFile: null,
       existingAudioUrl: teacher.audioUrl || '',
@@ -351,7 +409,6 @@ export default function OwnerTeachersPage() {
         teacher.gender === 'male' ? teacher.profileImage || '' : '',
     });
 
-    /* اگر merged میں کوئی اضافی subject ہے تو اسے بھی دکھائیں */
     if (merged.size > academySubjects.length) {
       setAcademySubjects(Array.from(merged).sort());
     }
@@ -371,7 +428,9 @@ export default function OwnerTeachersPage() {
         q === '' ||
         t.name.toLowerCase().includes(q) ||
         t.email.toLowerCase().includes(q) ||
-        t.subjects.some((s) => s.toLowerCase().includes(q));
+        (t.subjects || []).some((s) => s.toLowerCase().includes(q)) ||
+        (t.languages || []).some((l) => l.toLowerCase().includes(q)) ||
+        (t.country || '').toLowerCase().includes(q);
 
       const matchesFilter =
         filterAvailability === 'all' ||
@@ -501,7 +560,7 @@ export default function OwnerTeachersPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or subject..."
+              placeholder="Search by name, email, subject, language, or country..."
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
             />
           </div>
@@ -597,7 +656,7 @@ export default function OwnerTeachersPage() {
                       Subjects
                     </th>
                     <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Voice Intro
+                      Languages & Country
                     </th>
                     <th className="px-5 py-3.5 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       Availability
@@ -629,9 +688,9 @@ export default function OwnerTeachersPage() {
                       </td>
 
                       <td className="px-5 py-4">
-                        {teacher.subjects.length > 0 ? (
+                        {(teacher.subjects || []).length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-xs">
-                            {teacher.subjects.slice(0, 3).map((s) => (
+                            {teacher.subjects.slice(0, 2).map((s) => (
                               <span
                                 key={s}
                                 className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100"
@@ -639,9 +698,9 @@ export default function OwnerTeachersPage() {
                                 {s}
                               </span>
                             ))}
-                            {teacher.subjects.length > 3 && (
+                            {teacher.subjects.length > 2 && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
-                                +{teacher.subjects.length - 3}
+                                +{teacher.subjects.length - 2}
                               </span>
                             )}
                           </div>
@@ -651,24 +710,37 @@ export default function OwnerTeachersPage() {
                       </td>
 
                       <td className="px-5 py-4">
-                        {teacher.audioUrl ? (
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-lg bg-purple-50 flex items-center justify-center shrink-0">
-                              <MusicalNoteIcon className="h-4 w-4 text-purple-600" />
+                        <div className="flex flex-col gap-1">
+                          {(teacher.languages || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {teacher.languages!.slice(0, 2).map((l) => (
+                                <span
+                                  key={l}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                                >
+                                  <LanguageIcon className="h-3 w-3" />
+                                  {l}
+                                </span>
+                              ))}
+                              {teacher.languages!.length > 2 && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
+                                  +{teacher.languages!.length - 2}
+                                </span>
+                              )}
                             </div>
-                            <audio controls className="h-8 w-40">
-                              <source
-                                src={teacher.audioUrl}
-                                type="audio/mpeg"
-                              />
-                            </audio>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                            <MicrophoneIcon className="h-3.5 w-3.5" />
-                            No audio
-                          </span>
-                        )}
+                          )}
+                          {teacher.country && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600">
+                              <GlobeAltIcon className="h-3 w-3" />
+                              {teacher.country}
+                            </span>
+                          )}
+                          {!teacher.country &&
+                            (!teacher.languages ||
+                              teacher.languages.length === 0) && (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-4">
@@ -769,9 +841,31 @@ export default function OwnerTeachersPage() {
                         {s}
                       </span>
                     ))}
-                    {teacher.subjects.length > 4 && (
+                  </div>
+                )}
+
+                {/* Languages + Country */}
+                {((teacher.languages && teacher.languages.length > 0) ||
+                  teacher.country) && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    {(teacher.languages || []).slice(0, 3).map((l) => (
+                      <span
+                        key={l}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100"
+                      >
+                        <LanguageIcon className="h-3 w-3" />
+                        {l}
+                      </span>
+                    ))}
+                    {teacher.languages && teacher.languages.length > 3 && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
-                        +{teacher.subjects.length - 4}
+                        +{teacher.languages.length - 3}
+                      </span>
+                    )}
+                    {teacher.country && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100">
+                        <GlobeAltIcon className="h-3 w-3" />
+                        {teacher.country}
                       </span>
                     )}
                   </div>
@@ -839,11 +933,11 @@ export default function OwnerTeachersPage() {
 
       {showModal && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
           onClick={() => !uploading && setShowModal(false)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-lg w-full max-h-[94vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-w-lg w-full max-h-[94vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -940,7 +1034,9 @@ export default function OwnerTeachersPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, gender: 'male' })}
+                      onClick={() =>
+                        setFormData({ ...formData, gender: 'male' })
+                      }
                       className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 font-semibold text-sm transition-all active:scale-[0.98] ${
                         isMale
                           ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
@@ -1026,7 +1122,6 @@ export default function OwnerTeachersPage() {
                           alt="Profile"
                           className="w-full h-48 object-cover"
                         />
-
                         <div className="absolute top-3 right-3 flex items-center gap-2">
                           <button
                             type="button"
@@ -1068,7 +1163,7 @@ export default function OwnerTeachersPage() {
                 )}
 
                 {/* ============================================
-                    SUBJECTS — Academy کی categories سے
+                    SUBJECTS
                 ============================================ */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -1109,7 +1204,6 @@ export default function OwnerTeachersPage() {
                       Loading academy subjects...
                     </div>
                   ) : !hasSubjects ? (
-                    /* Empty state — academy میں کوئی course category نہیں */
                     <div className="rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 p-4">
                       <div className="flex items-start gap-3">
                         <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
@@ -1129,7 +1223,6 @@ export default function OwnerTeachersPage() {
                     </div>
                   ) : (
                     <>
-                      {/* Selected count */}
                       {formData.selectedSubjects.length > 0 && (
                         <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100">
                           <p className="text-[11px] font-bold text-emerald-700">
@@ -1141,10 +1234,10 @@ export default function OwnerTeachersPage() {
                         </div>
                       )}
 
-                      {/* Subject chips */}
                       <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 min-h-[56px] max-h-[200px] overflow-y-auto">
                         {academySubjects.map((subject) => {
-                          const isSelected = formData.selectedSubjects.includes(subject);
+                          const isSelected =
+                            formData.selectedSubjects.includes(subject);
                           return (
                             <button
                               key={subject}
@@ -1171,6 +1264,116 @@ export default function OwnerTeachersPage() {
                   )}
                 </div>
 
+                {/* ============================================
+                    LANGUAGES — ✅ نیا
+                ============================================ */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <LanguageIcon className="h-4 w-4 text-slate-400" />
+                      Languages
+                      <span className="text-slate-400 text-xs font-normal">
+                        (optional)
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={selectAllLanguages}
+                        className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 transition"
+                      >
+                        Select All
+                      </button>
+                      {formData.selectedLanguages.length > 0 && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <button
+                            type="button"
+                            onClick={clearLanguages}
+                            className="text-[11px] font-bold text-slate-500 hover:text-slate-700 transition"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {formData.selectedLanguages.length > 0 && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-blue-50 border border-blue-100">
+                      <p className="text-[11px] font-bold text-blue-700">
+                        {formData.selectedLanguages.length} language
+                        {formData.selectedLanguages.length !== 1 ? 's' : ''}{' '}
+                        selected
+                      </p>
+                      <p className="text-[10px] text-blue-600 truncate max-w-[180px]">
+                        {formData.selectedLanguages.join(', ')}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/40 min-h-[56px] max-h-[200px] overflow-y-auto">
+                    {AVAILABLE_LANGUAGES.map((lang) => {
+                      const isSelected =
+                        formData.selectedLanguages.includes(lang);
+                      return (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => toggleLanguage(lang)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/25'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
+                          }`}
+                        >
+                          {isSelected && (
+                            <CheckCircleIcon className="h-3.5 w-3.5" />
+                          )}
+                          {!isSelected && (
+                            <LanguageIcon className="h-3 w-3 opacity-50" />
+                          )}
+                          {lang}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ============================================
+                    COUNTRY — ✅ نیا
+                ============================================ */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <GlobeAltIcon className="h-4 w-4 text-slate-400" />
+                    Country
+                    <span className="text-slate-400 text-xs font-normal">
+                      (optional)
+                    </span>
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="country-suggestions"
+                      value={formData.country}
+                      onChange={(e) =>
+                        setFormData({ ...formData, country: e.target.value })
+                      }
+                      placeholder="e.g., Pakistan"
+                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm"
+                    />
+                    <GlobeAltIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+
+                    <datalist id="country-suggestions">
+                      {COMMON_COUNTRIES.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
                 {/* Bio */}
                 <Field
                   label="Bio"
@@ -1184,18 +1387,17 @@ export default function OwnerTeachersPage() {
                     }
                     rows={3}
                     placeholder="Short introduction about the teacher..."
-                    className="input-base resize-none leading-relaxed"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition bg-slate-50/50 focus:bg-white text-sm resize-none leading-relaxed"
                   />
                 </Field>
 
-                {/* Audio — Required */}
+                {/* Audio — ✅ اب آپشنل */}
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <MicrophoneIcon className="h-4 w-4 text-slate-400" />
                     Voice Introduction
-                    <span className="text-rose-500">*</span>
                     <span className="text-slate-400 text-xs font-normal">
-                      (required)
+                      (optional)
                     </span>
                   </label>
 
@@ -1234,7 +1436,7 @@ export default function OwnerTeachersPage() {
                             Click to upload audio
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            MP3, WAV up to 15 MB
+                            MP3, WAV up to 15 MB — Optional
                           </p>
                         </>
                       )}
@@ -1244,6 +1446,10 @@ export default function OwnerTeachersPage() {
                       accept="audio/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0] || null;
+                        if (file && file.size > MAX_AUDIO_SIZE) {
+                          toast.error('Audio must be smaller than 15 MB');
+                          return;
+                        }
                         setFormData({ ...formData, audioFile: file });
                       }}
                       className="hidden"

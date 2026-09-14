@@ -19,7 +19,10 @@ export async function POST(req: NextRequest) {
 
     await dbConnect();
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    /* ✅ +password سے select کریں ورنہ schema کی select:false کی وجہ سے نہیں آئے گا */
+    const user = await User.findOne({
+      email: String(email).toLowerCase().trim(),
+    }).select('+password');
 
     if (!user) {
       return NextResponse.json(
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ Google users کے پاس password نہیں ہوتا
+    /* ✅ Google users کے پاس password نہیں ہوتا */
     if (!user.password) {
       return NextResponse.json(
         {
@@ -39,7 +42,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ اب یہاں user.password یقینی طور پر string ہے
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -49,12 +51,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ lastLogin اور loginCount اپڈیٹ کریں
     user.lastLogin = new Date();
     user.loginCount = (user.loginCount || 0) + 1;
     await user.save();
 
-    // JWT بنائیں
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 دن
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return response;

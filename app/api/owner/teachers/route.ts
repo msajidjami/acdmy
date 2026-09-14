@@ -5,24 +5,24 @@ import Teacher from '@/models/Teacher';
 import Academy from '@/models/Academy';
 import User from '@/models/User';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const JWT_SECRET = process.env.JWT_SECRET!;
 
 async function getUserFromRequest(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
   if (!token) return null;
-
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     await connectDB();
-    const user = await User.findById(decoded.userId).select('-password');
-    return user;
+    return await User.findById(decoded.userId).select('-password');
   } catch {
     return null;
   }
 }
 
 /* ---------------- GET ---------------- */
-
 export async function GET(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req);
@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
 }
 
 /* ---------------- POST ---------------- */
-
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req);
@@ -63,9 +62,19 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, email, gender, subjects, bio, audioUrl, profileImage } = body;
+    const {
+      name,
+      email,
+      gender,
+      subjects,
+      languages,
+      country,
+      bio,
+      audioUrl,
+      profileImage,
+    } = body;
 
-    /* ✅ Validation */
+    /* Validation */
     if (!name || !email) {
       return NextResponse.json(
         { error: 'Name and email are required' },
@@ -80,13 +89,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* 🎤 Audio لازمی */
-    if (!audioUrl || typeof audioUrl !== 'string' || !audioUrl.trim()) {
-      return NextResponse.json(
-        { error: 'Voice introduction is required' },
-        { status: 400 }
-      );
-    }
+    /* ✅ Audio اب آپشنل — کوئی validation نہیں */
 
     /* Duplicate email check */
     const existing = await Teacher.findOne({
@@ -99,14 +102,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    /* ✅ Subjects اور Languages normalize کریں */
+    const cleanSubjects = Array.isArray(subjects)
+      ? subjects.map((s: any) => String(s).trim()).filter(Boolean)
+      : [];
+
+    const cleanLanguages = Array.isArray(languages)
+      ? languages.map((l: any) => String(l).trim()).filter(Boolean)
+      : [];
+
     const newTeacher = new Teacher({
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
       gender,
-      subjects: Array.isArray(subjects) ? subjects : [],
+      subjects: cleanSubjects,
+      languages: cleanLanguages,
+      country: String(country || '').trim(),
       bio: String(bio || '').trim(),
-      audioUrl: String(audioUrl).trim(),
-      /* 👨 Image صرف male کے لیے */
+      audioUrl: String(audioUrl || '').trim(),
       profileImage: gender === 'male' ? String(profileImage || '') : '',
       academyId: academy._id,
       isAvailable: true,

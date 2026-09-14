@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google/genai": "^2.22.0",
+    "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.4.0",
     "@livekit/components-react": "^2.9.24",
@@ -45,6 +47,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/katex": "^0.16.8",
     "@types/node": "^20.19.43",
     "@types/nodemailer": "^7.0.4",
     "@types/react": "^18.3.31",

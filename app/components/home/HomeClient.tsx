@@ -30,24 +30,18 @@ import {
   SparklesIcon,
   ShieldCheckIcon,
   ClockIcon,
-  TrophyIcon,
   CloudIcon,
   CpuChipIcon,
   CommandLineIcon,
   GlobeAltIcon,
   PencilSquareIcon,
   ChartBarIcon,
-  PresentationChartLineIcon,
   VideoCameraIcon,
   UserPlusIcon,
   RocketLaunchIcon,
-  BeakerIcon,
-  PaintBrushIcon,
   DocumentTextIcon,
   BoltIcon,
   EyeIcon,
-  Squares2X2Icon,
-  ArrowPathIcon,
   FireIcon,
 } from '@heroicons/react/24/outline';
 
@@ -82,6 +76,25 @@ type HeroIconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 type DashboardInfo = { href: string; label: string; icon: string };
 
+type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+type UserAcademy = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+type HomeClientProps = {
+  currentUser?: CurrentUser | null;
+  userAcademy?: UserAcademy | null;
+  showCreateAcademy?: boolean;
+};
+
 /* ============================================================
    HELPERS
    ============================================================ */
@@ -111,27 +124,6 @@ const SERVICES = [
   { title: 'Spoken English', icon: '🗣️' },
 ];
 
-const TESTIMONIALS = [
-  {
-    name: 'Mehwish Saeed',
-    role: 'Islamabad',
-    text: 'The academy transformed my learning experience. Professional tutors and flexible scheduling made all the difference.',
-    avatar: '👩‍🎓',
-  },
-  {
-    name: 'Kashif Ahmed',
-    role: 'Karachi',
-    text: 'My children love the Nazra-e-Quran classes. The teachers are patient and knowledgeable. Highly recommended!',
-    avatar: '👨‍👧‍👦',
-  },
-  {
-    name: 'Ayesha Malik',
-    role: 'Lahore',
-    text: 'Excellent O/A Level tutoring. The platform is easy to use and the results speak for themselves.',
-    avatar: '👩‍🎓',
-  },
-];
-
 /* ============================================================
    HOOKS
    ============================================================ */
@@ -144,9 +136,7 @@ function useAcademies() {
   useEffect(() => {
     const fetchAcademies = async () => {
       try {
-        const res = await fetch('/api/academies', {
-          cache: 'no-store',
-        });
+        const res = await fetch('/api/academies', { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         const normalized: Academy[] = Array.isArray(data)
@@ -205,15 +195,15 @@ const dotsPatternClass =
   "bg-[url('data:image/svg+xml,%3Csvg width=\"80\" height=\"80\" viewBox=\"0 0 80 80\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%2310b981\" fill-opacity=\"0.06\"%3E%3Ccircle cx=\"40\" cy=\"40\" r=\"2\"/%3E%3Ccircle cx=\"20\" cy=\"20\" r=\"1.5\"/%3E%3Ccircle cx=\"60\" cy=\"20\" r=\"1.5\"/%3E%3Ccircle cx=\"20\" cy=\"60\" r=\"1.5\"/%3E%3Ccircle cx=\"60\" cy=\"60\" r=\"1.5\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]";
 
 /* ============================================================
-   TRUST BADGES
+   TRUST BADGES — صرف features (کوئی fake numbers نہیں)
    ============================================================ */
 
 function TrustBadges() {
   const badges: { icon: HeroIconType; label: string }[] = [
     { icon: ShieldCheckIcon, label: 'Verified Tutors' },
     { icon: ClockIcon, label: 'Flexible Scheduling' },
-    { icon: TrophyIcon, label: '99.9% Satisfaction' },
-    { icon: UserGroupIcon, label: '2,820+ Students' },
+    { icon: AcademicCapIcon, label: 'Expert Teachers' },
+    { icon: UserGroupIcon, label: 'Growing Community' },
   ];
 
   return (
@@ -238,7 +228,7 @@ function TrustBadges() {
 }
 
 /* ============================================================
-   STATS SECTION
+   STATS SECTION — صرف حقیقی API data
    ============================================================ */
 
 function StatsSection({ stats }: { stats: Stats | null }) {
@@ -247,22 +237,22 @@ function StatsSection({ stats }: { stats: Stats | null }) {
   const statItems: { label: string; value: string; icon: HeroIconType }[] = [
     {
       label: 'Active Academies',
-      value: Number(stats.activeAcademies || 0).toLocaleString() + '+',
+      value: Number(stats.activeAcademies || 0).toLocaleString(),
       icon: BuildingOfficeIcon,
     },
     {
       label: 'Expert Teachers',
-      value: Number(stats.totalTeachers || 0).toLocaleString() + '+',
+      value: Number(stats.totalTeachers || 0).toLocaleString(),
       icon: AcademicCapIcon,
     },
     {
       label: 'Happy Students',
-      value: Number(stats.totalStudents || 0).toLocaleString() + '+',
+      value: Number(stats.totalStudents || 0).toLocaleString(),
       icon: UserGroupIcon,
     },
     {
       label: 'Global Reach',
-      value: Number(stats.globalReach || 0).toLocaleString() + '+',
+      value: Number(stats.globalReach || 0).toLocaleString(),
       icon: GlobeAltIcon,
     },
   ];
@@ -298,54 +288,6 @@ function StatsSection({ stats }: { stats: Stats | null }) {
 }
 
 /* ============================================================
-   ANIMATED COUNTER
-   ============================================================ */
-
-function AnimatedCounter({
-  target,
-  suffix = '',
-  duration = 1400,
-}: {
-  target: number;
-  suffix?: string;
-  duration?: number;
-}) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let started = false;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started) {
-          started = true;
-          const start = performance.now();
-          const tick = (now: number) => {
-            const p = Math.min((now - start) / duration, 1);
-            const eased = 1 - Math.pow(1 - p, 3);
-            setCount(Math.floor(eased * target));
-            if (p < 1) requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        }
-      },
-      { threshold: 0.3 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [target, duration]);
-
-  return (
-    <span ref={ref}>
-      {count.toLocaleString()}
-      {suffix}
-    </span>
-  );
-}
-
-/* ============================================================
    INTERACTIVE HERO
    ============================================================ */
 
@@ -354,11 +296,15 @@ function InteractiveHero({
   userRoles,
   rolesLoading,
   getDashboardInfo,
+  showCreateAcademy,
+  userAcademy,
 }: {
   user: unknown;
   userRoles: string[];
   rolesLoading: boolean;
   getDashboardInfo: (role: string) => DashboardInfo;
+  showCreateAcademy: boolean;
+  userAcademy: UserAcademy | null;
 }) {
   const [activeTab, setActiveTab] = useState<'academies' | 'students'>(
     'academies'
@@ -385,7 +331,7 @@ function InteractiveHero({
       aria-labelledby="hero-heading"
       className="relative overflow-hidden px-6 pt-12 pb-20 md:pt-16 md:pb-28 bg-gradient-to-br from-emerald-50 via-white to-teal-50"
     >
-      {/* ===== Background decorations ===== */}
+      {/* Background decorations */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-200/20 rounded-full blur-3xl" />
@@ -398,7 +344,6 @@ function InteractiveHero({
           <CommandLineIcon className="h-20 w-20 -rotate-12" />
         </div>
 
-        {/* Mouse-follow glow */}
         <motion.div
           className="absolute w-[700px] h-[700px] rounded-full hidden lg:block"
           style={{
@@ -415,7 +360,7 @@ function InteractiveHero({
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        {/* ===== Tab Switcher ===== */}
+        {/* Tab Switcher */}
         <div className="flex justify-center mb-12">
           <div className="relative bg-white/85 backdrop-blur-md border border-gray-200 rounded-2xl p-1.5 shadow-lg inline-flex">
             {(
@@ -466,9 +411,7 @@ function InteractiveHero({
         </div>
 
         <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 items-center">
-          {/* ============================================================
-              LEFT: Dynamic content
-          ============================================================ */}
+          {/* LEFT: Dynamic content */}
           <div className="relative">
             <AnimatePresence mode="wait">
               {isAcademies ? (
@@ -484,7 +427,6 @@ function InteractiveHero({
                     For Academy Owners &amp; Teachers
                   </span>
 
-                  {/* ✅ FIXED: Single h1 with conditional content */}
                   <h1
                     id="hero-heading"
                     className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-gray-950 leading-[1.05] mt-6"
@@ -501,17 +443,17 @@ function InteractiveHero({
                     supervise every session — all from one powerful dashboard.
                   </p>
 
-                  {/* Quick interactive stats */}
+                  {/* Feature highlights — no fake numbers */}
                   <div className="mt-7 flex flex-wrap gap-6">
                     {[
                       {
-                        label: 'Setup Time',
-                        value: '2 min',
+                        label: 'Setup',
+                        value: 'Instant',
                         color: 'text-emerald-700',
                       },
                       {
                         label: 'Live Whiteboard',
-                        value: 'Ready',
+                        value: 'Included',
                         color: 'text-emerald-700',
                       },
                       {
@@ -539,19 +481,37 @@ function InteractiveHero({
 
                   {/* CTAs */}
                   <div className="mt-9 flex flex-wrap gap-3">
-                    <motion.div
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                    >
-                      <Link
-                        href="/owner/academy"
-                        className="group inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition"
+                    {showCreateAcademy && (
+                      <motion.div
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                       >
-                        <RocketLaunchIcon className="h-5 w-5" />
-                        Create Your Academy
-                        <ArrowRightIcon className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </motion.div>
+                        <Link
+                          href="/owner/academy"
+                          className="group inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition"
+                        >
+                          <RocketLaunchIcon className="h-5 w-5" />
+                          Create Your Academy
+                          <ArrowRightIcon className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                      </motion.div>
+                    )}
+
+                    {userAcademy && (
+                      <motion.div
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        <Link
+                          href="/owner/dashboard"
+                          className="group inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition"
+                        >
+                          <BuildingOfficeIcon className="h-5 w-5" />
+                          My Academy
+                          <ArrowRightIcon className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                      </motion.div>
+                    )}
 
                     {isLoggedIn &&
                       !rolesLoading &&
@@ -625,7 +585,6 @@ function InteractiveHero({
                     For Students &amp; Learners
                   </span>
 
-                  {/* ✅ FIXED: Same h1 id, different content */}
                   <h1
                     id="hero-heading"
                     className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-gray-950 leading-[1.05] mt-6"
@@ -683,7 +642,7 @@ function InteractiveHero({
                       whileTap={{ scale: 0.97 }}
                     >
                       <Link
-                        href="/academies"
+                        href="/explore"
                         className="group inline-flex items-center gap-2 px-7 py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-lg shadow-violet-600/20 transition"
                       >
                         <AcademicCapIcon className="h-5 w-5" />
@@ -759,9 +718,7 @@ function InteractiveHero({
             </div>
           </div>
 
-          {/* ============================================================
-              RIGHT: Dynamic preview
-          ============================================================ */}
+          {/* RIGHT: Dynamic preview — no fake numbers */}
           <div className="relative min-h-[520px]">
             <AnimatePresence mode="wait">
               {isAcademies ? (
@@ -795,29 +752,24 @@ function InteractiveHero({
                       </div>
 
                       <div className="p-5 space-y-4">
+                        {/* Feature tiles instead of numbers */}
                         <div className="grid grid-cols-3 gap-3">
-                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                            <p className="text-[10px] text-gray-400">
+                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3 text-center">
+                            <UserGroupIcon className="h-5 w-5 text-emerald-400 mx-auto" />
+                            <p className="text-[10px] text-gray-400 mt-1.5">
                               Teachers
                             </p>
-                            <p className="text-xl font-bold text-white mt-1">
-                              <AnimatedCounter target={12} />
-                            </p>
                           </div>
-                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                            <p className="text-[10px] text-gray-400">
+                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3 text-center">
+                            <AcademicCapIcon className="h-5 w-5 text-emerald-400 mx-auto" />
+                            <p className="text-[10px] text-gray-400 mt-1.5">
                               Students
                             </p>
-                            <p className="text-xl font-bold text-white mt-1">
-                              <AnimatedCounter target={148} />
-                            </p>
                           </div>
-                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3">
-                            <p className="text-[10px] text-gray-400">
+                          <div className="rounded-2xl bg-white/5 border border-white/10 p-3 text-center">
+                            <DocumentTextIcon className="h-5 w-5 text-emerald-400 mx-auto" />
+                            <p className="text-[10px] text-gray-400 mt-1.5">
                               Courses
-                            </p>
-                            <p className="text-xl font-bold text-white mt-1">
-                              <AnimatedCounter target={24} />
                             </p>
                           </div>
                         </div>
@@ -831,7 +783,7 @@ function InteractiveHero({
                               </p>
                             </div>
                             <span className="text-[10px] text-gray-400">
-                              28 students joined
+                              Active session
                             </span>
                           </div>
                           <p className="text-white font-semibold text-sm">
@@ -886,11 +838,7 @@ function InteractiveHero({
 
                   <motion.div
                     initial={{ opacity: 0, x: -30, y: 0 }}
-                    animate={{
-                      opacity: 1,
-                      x: 0,
-                      y: [0, -8, 0],
-                    }}
+                    animate={{ opacity: 1, x: 0, y: [0, -8, 0] }}
                     transition={{
                       opacity: { delay: 0.6, duration: 0.4 },
                       x: { delay: 0.6, duration: 0.4 },
@@ -908,10 +856,10 @@ function InteractiveHero({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-gray-900">
-                        New Student Enrolled
+                        Add Students Easily
                       </p>
                       <p className="text-[10px] text-gray-500">
-                        Ayesha joined Grade 10
+                        Enroll with one click
                       </p>
                     </div>
                   </motion.div>
@@ -935,10 +883,10 @@ function InteractiveHero({
                       <ChartBarIcon className="h-5 w-5 text-emerald-600" />
                       <div>
                         <p className="text-xs font-bold text-gray-900">
-                          Class Progress
+                          Track Progress
                         </p>
                         <p className="text-[10px] text-emerald-600 font-semibold">
-                          +23% this week
+                          Visual analytics
                         </p>
                       </div>
                     </div>
@@ -964,17 +912,17 @@ function InteractiveHero({
                           </div>
                           <div>
                             <p className="text-sm font-bold text-gray-900">
-                              Assalam-o-Alaikum, Ahmed
+                              Student Dashboard
                             </p>
                             <p className="text-[10px] text-gray-500">
-                              Grade 10 • Mathematics
+                              Your personal learning space
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 border border-orange-200">
                           <FireIcon className="h-4 w-4 text-orange-500" />
                           <span className="text-xs font-bold text-orange-600">
-                            12
+                            Streak
                           </span>
                         </div>
                       </div>
@@ -993,14 +941,14 @@ function InteractiveHero({
                                 Next Class
                               </span>
                               <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
-                                in 10 min
+                                Upcoming
                               </span>
                             </div>
                             <p className="font-bold text-base">
                               Quadratic Equations
                             </p>
                             <p className="text-xs text-violet-200 mt-0.5">
-                              👨‍🏫 Sir Ahmed • Live Whiteboard
+                              👨‍🏫 Live Whiteboard Session
                             </p>
                             <motion.button
                               whileHover={{ scale: 1.03 }}
@@ -1016,10 +964,10 @@ function InteractiveHero({
                         <div className="rounded-2xl bg-white border border-violet-100 p-4">
                           <div className="flex items-center justify-between mb-3">
                             <p className="text-xs font-bold text-gray-900">
-                              This Week&apos;s Progress
+                              Weekly Progress
                             </p>
                             <span className="text-[10px] text-emerald-600 font-bold">
-                              +18% ↑
+                              Tracked
                             </span>
                           </div>
 
@@ -1047,8 +995,7 @@ function InteractiveHero({
                                     strokeDashoffset: 2 * Math.PI * 32,
                                   }}
                                   animate={{
-                                    strokeDashoffset:
-                                      2 * Math.PI * 32 * (1 - 0.84),
+                                    strokeDashoffset: 2 * Math.PI * 32 * 0.16,
                                   }}
                                   transition={{ duration: 1.4, delay: 0.4 }}
                                 />
@@ -1069,45 +1016,26 @@ function InteractiveHero({
                                 </defs>
                               </svg>
                               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-lg font-bold text-gray-900">
-                                  84%
-                                </span>
-                                <span className="text-[8px] text-gray-500 font-medium">
-                                  Overall
-                                </span>
+                                <ChartBarIcon className="h-5 w-5 text-violet-600" />
                               </div>
                             </div>
 
                             <div className="flex-1 space-y-2">
                               {[
-                                { name: 'Math', value: 92, color: '#8b5cf6' },
-                                {
-                                  name: 'English',
-                                  value: 78,
-                                  color: '#3b82f6',
-                                },
-                                {
-                                  name: 'Science',
-                                  value: 85,
-                                  color: '#10b981',
-                                },
+                                { name: 'Math', color: '#8b5cf6' },
+                                { name: 'English', color: '#3b82f6' },
+                                { name: 'Science', color: '#10b981' },
                               ].map((s, i) => (
                                 <div key={s.name}>
                                   <div className="flex justify-between text-[10px] mb-1">
                                     <span className="font-semibold text-gray-600">
                                       {s.name}
                                     </span>
-                                    <span
-                                      className="font-bold"
-                                      style={{ color: s.color }}
-                                    >
-                                      {s.value}%
-                                    </span>
                                   </div>
                                   <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
                                     <motion.div
                                       initial={{ width: 0 }}
-                                      animate={{ width: `${s.value}%` }}
+                                      animate={{ width: '100%' }}
                                       transition={{
                                         delay: 0.6 + i * 0.15,
                                         duration: 0.8,
@@ -1124,14 +1052,14 @@ function InteractiveHero({
 
                         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-                            <TrophyIcon className="h-5 w-5 text-amber-600" />
+                            <AcademicCapIcon className="h-5 w-5 text-amber-600" />
                           </div>
                           <div className="flex-1">
                             <p className="text-xs font-bold text-gray-900">
-                              Math Master 🏆
+                              Achievements
                             </p>
                             <p className="text-[10px] text-gray-500">
-                              5 quizzes in a row!
+                              Earn badges as you learn
                             </p>
                           </div>
                           <SparklesIcon className="h-4 w-4 text-amber-500" />
@@ -1160,10 +1088,10 @@ function InteractiveHero({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-gray-900">
-                        Class Starting Soon
+                        Class Reminders
                       </p>
                       <p className="text-[10px] text-gray-500">
-                        Math • in 10 minutes
+                        Never miss a session
                       </p>
                     </div>
                   </motion.div>
@@ -1187,10 +1115,10 @@ function InteractiveHero({
                       <FireIcon className="h-5 w-5 text-orange-500" />
                       <div>
                         <p className="text-xs font-bold text-gray-900">
-                          12-Day Streak
+                          Daily Streak
                         </p>
                         <p className="text-[10px] text-orange-600 font-semibold">
-                          Keep it up! 🔥
+                          Build your habit 🔥
                         </p>
                       </div>
                     </div>
@@ -1335,13 +1263,13 @@ function CoreFeatures() {
    ============================================================ */
 
 function WhiteboardShowcase() {
-  const tools: { icon: HeroIconType; label: string; active?: boolean }[] = [
-    { icon: PencilSquareIcon, label: 'Pen', active: true },
-    { icon: PaintBrushIcon, label: 'Brush' },
-    { icon: Squares2X2Icon, label: 'Shapes' },
-    { icon: DocumentTextIcon, label: 'Text' },
-    { icon: BeakerIcon, label: 'Formula' },
-    { icon: ArrowPathIcon, label: 'Undo' },
+  const tools = [
+    { label: 'Pen', active: true },
+    { label: 'Brush' },
+    { label: 'Shapes' },
+    { label: 'Text' },
+    { label: 'Formula' },
+    { label: 'Undo' },
   ];
 
   return (
@@ -1429,7 +1357,7 @@ function WhiteboardShowcase() {
                   <span className="w-3 h-3 rounded-full bg-yellow-400" />
                   <span className="w-3 h-3 rounded-full bg-green-400" />
                   <span className="ml-3 text-sm font-semibold text-gray-700">
-                    Math Live — Grade 10
+                    Math Live — Interactive Board
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1437,29 +1365,22 @@ function WhiteboardShowcase() {
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                     LIVE
                   </span>
-                  <span className="text-xs text-gray-500 font-medium">
-                    24 👥
-                  </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-1.5 px-4 py-2.5 bg-white border-b border-gray-100 overflow-x-auto">
-                {tools.map((t) => {
-                  const Icon = t.icon;
-                  return (
-                    <div
-                      key={t.label}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                        t.active
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'text-gray-500 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {t.label}
-                    </div>
-                  );
-                })}
+                {tools.map((t) => (
+                  <div
+                    key={t.label}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                      t.active
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    {t.label}
+                  </div>
+                ))}
               </div>
 
               <div
@@ -1518,10 +1439,6 @@ function WhiteboardShowcase() {
                   <circle cx="380" cy="40" r="5" fill="#14b8a6" />
                 </svg>
 
-                <div className="absolute bottom-4 right-6 text-xs text-gray-400 italic font-serif">
-                  slope ↑ = positive
-                </div>
-
                 <motion.div
                   animate={{ x: [0, 60, 20, 0], y: [0, -30, 20, 0] }}
                   transition={{
@@ -1573,217 +1490,6 @@ function WhiteboardShowcase() {
 }
 
 /* ============================================================
-   PROGRESS ANALYTICS
-   ============================================================ */
-
-function ProgressAnalytics() {
-  const weekly = [
-    { day: 'Mon', value: 45 },
-    { day: 'Tue', value: 62 },
-    { day: 'Wed', value: 78 },
-    { day: 'Thu', value: 55 },
-    { day: 'Fri', value: 88 },
-    { day: 'Sat', value: 95 },
-    { day: 'Sun', value: 72 },
-  ];
-
-  const subjects = [
-    { name: 'Mathematics', progress: 92, color: '#10b981' },
-    { name: 'English', progress: 78, color: '#3b82f6' },
-    { name: 'Science', progress: 85, color: '#8b5cf6' },
-    { name: 'Quran', progress: 96, color: '#f59e0b' },
-  ];
-
-  return (
-    <section
-      aria-labelledby="analytics-heading"
-      className="py-20 bg-gray-50/80 border-y border-emerald-100/40"
-    >
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-14">
-          <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold">
-            <PresentationChartLineIcon className="h-4 w-4" />
-            Progress Analytics
-          </span>
-          <h2
-            id="analytics-heading"
-            className="text-3xl md:text-5xl font-bold text-gray-900 mt-5"
-          >
-            See progress, not just promises
-          </h2>
-          <p className="text-gray-600 mt-4 text-lg max-w-2xl mx-auto">
-            Every class, quiz, and assignment is tracked — and turned into
-            clear, beautiful graphs that students, teachers, and owners can all
-            understand.
-          </p>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="font-bold text-gray-900">Weekly Activity</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Study minutes per day
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                +23% ↑
-              </span>
-            </div>
-
-            <div className="flex items-end justify-between gap-3 h-48">
-              {weekly.map((d, i) => (
-                <div
-                  key={d.day}
-                  className="flex-1 flex flex-col items-center gap-2"
-                >
-                  <motion.div
-                    initial={{ height: 0 }}
-                    whileInView={{ height: `${d.value}%` }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08, duration: 0.6 }}
-                    className="w-full rounded-t-xl bg-gradient-to-t from-emerald-600 to-teal-400 relative group"
-                  >
-                    <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-xs font-bold text-gray-700 opacity-0 group-hover:opacity-100 transition">
-                      {d.value}%
-                    </span>
-                  </motion.div>
-                  <span className="text-xs font-medium text-gray-500">
-                    {d.day}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="bg-white rounded-3xl p-7 border border-gray-100 shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="font-bold text-gray-900">Subject Mastery</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Overall completion rate
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
-                4 Subjects
-              </span>
-            </div>
-
-            <div className="space-y-5">
-              {subjects.map((s, i) => (
-                <div key={s.name}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-gray-700">
-                      {s.name}
-                    </span>
-                    <span
-                      className="text-sm font-bold"
-                      style={{ color: s.color }}
-                    >
-                      {s.progress}%
-                    </span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      whileInView={{ width: `${s.progress}%` }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.1 + 0.2, duration: 0.8 }}
-                      className="h-full rounded-full"
-                      style={{ background: s.color }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-7 pt-6 border-t border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Monthly Growth
-                </p>
-                <span className="text-xs text-emerald-600 font-bold">
-                  +18.4%
-                </span>
-              </div>
-              <svg viewBox="0 0 300 60" className="w-full h-16">
-                <defs>
-                  <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <motion.path
-                  d="M 0 50 L 40 42 L 80 46 L 120 30 L 160 34 L 200 20 L 240 24 L 280 10 L 300 12"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  initial={{ pathLength: 0 }}
-                  whileInView={{ pathLength: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 1.5 }}
-                />
-                <path
-                  d="M 0 50 L 40 42 L 80 46 L 120 30 L 160 34 L 200 20 L 240 24 L 280 10 L 300 12 L 300 60 L 0 60 Z"
-                  fill="url(#lineGrad)"
-                />
-              </svg>
-            </div>
-          </motion.div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            {
-              label: 'Classes Completed',
-              value: '1,248',
-              icon: VideoCameraIcon,
-            },
-            {
-              label: 'Assignments Graded',
-              value: '8,920',
-              icon: DocumentTextIcon,
-            },
-            { label: 'Avg. Attendance', value: '94%', icon: CheckCircleIcon },
-            { label: 'Active Streaks', value: '312', icon: BoltIcon },
-          ].map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, y: 15 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08 }}
-                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm"
-              >
-                <Icon className="h-6 w-6 text-emerald-600 mb-2" />
-                <p className="text-xl font-bold text-gray-900">{item.value}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
    ROLES WORKFLOW
    ============================================================ */
 
@@ -1797,7 +1503,7 @@ function RolesWorkflow() {
         'Create & brand academy',
         'Add teachers and students',
         'Supervise live classes',
-        'View full analytics',
+        'View analytics',
       ],
       href: '/owner/dashboard',
     },
@@ -1938,7 +1644,7 @@ function ServicesMini() {
 }
 
 /* ============================================================
-   ACADEMY CARD (with next/image)
+   ACADEMY CARD
    ============================================================ */
 
 function AcademyCard({
@@ -2268,148 +1974,6 @@ function AcademiesGrid({ academies }: { academies: Academy[] }) {
 }
 
 /* ============================================================
-   HOW IT WORKS
-   ============================================================ */
-
-function HowItWorks() {
-  const steps = [
-    {
-      number: '1',
-      title: 'Submit Inquiry',
-      desc: 'Tell us your learning needs and preferences.',
-    },
-    {
-      number: '2',
-      title: 'Profile Screening',
-      desc: 'We match you with the best tutors.',
-    },
-    {
-      number: '3',
-      title: 'Choose Your Tutor',
-      desc: 'Review profiles and pick your favorite.',
-    },
-    {
-      number: '4',
-      title: 'Free Demo',
-      desc: 'Experience a session at no cost.',
-    },
-    {
-      number: '5',
-      title: 'Start Learning',
-      desc: 'Begin your educational journey.',
-    },
-  ];
-
-  return (
-    <section
-      aria-labelledby="how-heading"
-      className="bg-gray-50/80 py-20 border-y border-gray-100"
-    >
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-14">
-          <span className="text-sm font-semibold text-emerald-600 uppercase tracking-wider">
-            Simple workflow
-          </span>
-          <h2
-            id="how-heading"
-            className="text-3xl md:text-4xl font-bold text-gray-900 mt-2"
-          >
-            Simple Steps to Get Started
-          </h2>
-          <p className="text-gray-600 mt-3 text-lg max-w-2xl mx-auto">
-            Join in 5 easy steps — from inquiry to your first lesson.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-          {steps.map((step, idx) => (
-            <motion.div
-              key={step.number}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ delay: idx * 0.08 }}
-              className="text-center relative"
-            >
-              <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-4 shadow-lg shadow-emerald-600/20">
-                {step.number}
-              </div>
-              <h3 className="font-bold text-gray-900 mb-2">{step.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">
-                {step.desc}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
-   TESTIMONIALS
-   ============================================================ */
-
-function TestimonialsSection() {
-  return (
-    <section
-      aria-labelledby="testimonials-heading"
-      className="bg-gray-50/80 py-20 border-t border-emerald-100/30"
-    >
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-14">
-          <span className="text-sm font-semibold text-emerald-600 uppercase tracking-wider">
-            Testimonials
-          </span>
-          <h2
-            id="testimonials-heading"
-            className="text-3xl md:text-4xl font-bold text-gray-900 mt-2"
-          >
-            What Our Students Say
-          </h2>
-          <p className="text-gray-600 mt-3 text-lg">
-            Real stories from real people
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {TESTIMONIALS.map((t, idx) => (
-            <motion.div
-              key={t.name}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: idx * 0.1 }}
-              className="bg-white rounded-3xl shadow-sm hover:shadow-xl border border-emerald-100/50 p-6 transition-all duration-300"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">{t.avatar}</span>
-                <div>
-                  <p className="font-semibold text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-500">{t.role}</p>
-                </div>
-              </div>
-              <p className="text-gray-700 text-sm leading-relaxed">
-                &quot;{t.text}&quot;
-              </p>
-              <div className="mt-3 flex text-yellow-500">
-                {[...Array(5)].map((_, i) => (
-                  <StarIcon
-                    key={i}
-                    className="h-4 w-4 fill-yellow-500"
-                    aria-hidden="true"
-                  />
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
    PLATFORM SECTION
    ============================================================ */
 
@@ -2509,24 +2073,20 @@ function PlatformSection() {
 
                 <div className="p-5 grid grid-cols-2 gap-4">
                   <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                    <p className="text-xs text-gray-400">Teachers</p>
-                    <p className="text-2xl font-bold text-white mt-1">12</p>
-                    <p className="text-xs text-emerald-400 mt-2">
-                      Active team
-                    </p>
+                    <UserGroupIcon className="h-6 w-6 text-emerald-400 mb-2" />
+                    <p className="text-xs text-gray-400">Teacher Management</p>
                   </div>
 
                   <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                    <p className="text-xs text-gray-400">Students</p>
-                    <p className="text-2xl font-bold text-white mt-1">148</p>
-                    <p className="text-xs text-emerald-400 mt-2">Learning</p>
+                    <AcademicCapIcon className="h-6 w-6 text-emerald-400 mb-2" />
+                    <p className="text-xs text-gray-400">Student Enrollment</p>
                   </div>
 
                   <div className="col-span-2 rounded-2xl bg-white/5 border border-white/10 p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-gray-400">
-                          Today&apos;s class
+                          Today&apos;s Schedule
                         </p>
                         <p className="text-white font-semibold mt-1">
                           English — Group A
@@ -2621,13 +2181,14 @@ function KnowledgeNetwork() {
    CTA SECTION
    ============================================================ */
 
-function CTASection({ userRoles }: { userRoles: string[] }) {
-  if (
-    !userRoles ||
-    (!userRoles.includes('owner') && !userRoles.includes('admin'))
-  ) {
-    return null;
-  }
+function CTASection({
+  showCreateAcademy,
+}: {
+  userRoles: string[];
+  showCreateAcademy: boolean;
+  userAcademy: UserAcademy | null;
+}) {
+  if (!showCreateAcademy) return null;
 
   return (
     <section aria-labelledby="cta-heading" className="py-20 bg-gray-950">
@@ -2645,7 +2206,7 @@ function CTASection({ userRoles }: { userRoles: string[] }) {
         </h2>
 
         <p className="text-gray-400 text-lg max-w-2xl mx-auto mt-5">
-          Join thousands of educators and students on the best platform.
+          Join educators and students on the best platform.
         </p>
 
         <div className="mt-9 flex flex-wrap justify-center gap-3">
@@ -2658,7 +2219,7 @@ function CTASection({ userRoles }: { userRoles: string[] }) {
           </Link>
 
           <Link
-            href="/academies"
+            href="/explore"
             className="inline-flex items-center gap-2 px-7 py-3.5 bg-white/10 hover:bg-white/15 text-white border border-white/10 font-semibold rounded-xl transition"
           >
             Explore Academies
@@ -2673,8 +2234,12 @@ function CTASection({ userRoles }: { userRoles: string[] }) {
    MAIN COMPONENT
    ============================================================ */
 
-export default function HomeClient() {
-  const { user } = useAuth();
+export default function HomeClient({
+  currentUser = null,
+  userAcademy = null,
+  showCreateAcademy = false,
+}: HomeClientProps) {
+  const { user: authUser } = useAuth();
   const {
     academies,
     loading: academiesLoading,
@@ -2685,6 +2250,8 @@ export default function HomeClient() {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
 
+  const user = currentUser || authUser;
+
   useEffect(() => {
     async function fetchRoles() {
       if (!user) {
@@ -2693,9 +2260,7 @@ export default function HomeClient() {
       }
 
       try {
-        const res = await fetch('/api/user/roles', {
-          cache: 'no-store',
-        });
+        const res = await fetch('/api/user/roles', { cache: 'no-store' });
 
         if (res.ok) {
           const data = await res.json();
@@ -2772,12 +2337,13 @@ export default function HomeClient() {
 
   return (
     <main className="bg-white overflow-hidden">
-      {/* ====== INTERACTIVE HERO ====== */}
       <InteractiveHero
         user={user}
         userRoles={userRoles}
         rolesLoading={rolesLoading}
         getDashboardInfo={getDashboardInfo}
+        showCreateAcademy={showCreateAcademy}
+        userAcademy={userAcademy}
       />
 
       <StatsSection stats={stats} />
@@ -2787,8 +2353,6 @@ export default function HomeClient() {
       <ServicesMini />
 
       <WhiteboardShowcase />
-
-      <ProgressAnalytics />
 
       <RolesWorkflow />
 
@@ -2814,7 +2378,7 @@ export default function HomeClient() {
           </div>
 
           <Link
-            href="/academies"
+            href="/explore"
             className="inline-flex items-center gap-2 text-emerald-700 font-bold hover:gap-3 transition-all"
           >
             View all academies
@@ -2826,10 +2390,13 @@ export default function HomeClient() {
       </section>
 
       <PlatformSection />
-      <HowItWorks />
-      <TestimonialsSection />
       <KnowledgeNetwork />
-      <CTASection userRoles={userRoles} />
+
+      <CTASection
+        userRoles={userRoles}
+        showCreateAcademy={showCreateAcademy}
+        userAcademy={userAcademy}
+      />
     </main>
   );
 }
