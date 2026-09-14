@@ -1,69 +1,94 @@
-// app/models/Owner.ts
+import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
-import mongoose, { Schema, Document, Model } from 'mongoose';
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 export interface IOwner extends Document {
+  _id: Types.ObjectId;
   name: string;
   email: string;
   contactNumber: string;
   referralCode: string;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const OwnerSchema: Schema<IOwner> = new Schema(
+/* ============================================================
+   SCHEMA
+   ============================================================ */
+
+const OwnerSchema = new Schema<IOwner>(
   {
     name: {
       type: String,
-      required: [true, 'نام درکار ہے'],
+      required: true,
       trim: true,
+      maxlength: 100,
     },
+
     email: {
       type: String,
-      required: [true, 'ای میل درکار ہے'],
+      required: true,
       unique: true,
-      lowercase: true,
       trim: true,
+      lowercase: true,
+      maxlength: 200,
     },
+
     contactNumber: {
       type: String,
-      required: [true, 'رابطہ نمبر درکار ہے'],
+      required: true,
       trim: true,
+      maxlength: 30,
     },
+
+    /* ✅ Referral code — auto generate */
     referralCode: {
       type: String,
       unique: true,
-      // REQUIRED: TRUE مکمل ہٹا دیا گیا ہے
-      // یہاں کوئی required نہیں ہے
+      sparse: true,
+      index: true,
+      default: function () {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let code = '';
+        for (let i = 0; i < 8; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      },
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
   },
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
-// منفرد referralCode جنریٹ کرنے کا middleware
-let OwnerModel: Model<IOwner>;
+/* ============================================================
+   INDEXES
+   ============================================================ */
 
-OwnerSchema.pre('save', async function () {
-  if (!this.referralCode) {
-    if (!OwnerModel) {
-      OwnerModel = mongoose.model<IOwner>('Owner');
-    }
+OwnerSchema.index({ email: 1 }, { unique: true });
+OwnerSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
 
-    let code = '';
-    let isUnique = false;
+/* ============================================================
+   CACHE-SAFE EXPORT
+   ============================================================ */
 
-    while (!isUnique) {
-      code = 'OWNER-' + Math.random().toString(36).substring(2, 9).toUpperCase();
-      const existing = await OwnerModel.findOne({ referralCode: code }).lean();
-      if (!existing) {
-        isUnique = true;
-      }
-    }
+let Owner: Model<IOwner>;
 
-    this.referralCode = code;
-  }
-});
+if (mongoose.models.Owner) {
+  delete mongoose.models.Owner;
+}
 
-export default mongoose.models.Owner || mongoose.model<IOwner>('Owner', OwnerSchema);
+Owner = mongoose.model<IOwner>('Owner', OwnerSchema);
+
+export default Owner;

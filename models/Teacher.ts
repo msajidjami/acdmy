@@ -12,27 +12,71 @@ export interface ITeacherRating {
   createdAt: Date;
 }
 
+export interface ITeacherCertificate {
+  _id?: Types.ObjectId;
+  title: string;
+  url: string;
+  issuedBy?: string;
+  issuedAt?: Date;
+}
+
 export interface ITeacher extends Document {
   _id: Types.ObjectId;
+
+  /* Basic */
   name: string;
+  fullName?: string;          // alias
   email: string;
+  contactNumber: string;
+  phone?: string;             // alias
+
   gender: 'male' | 'female';
+
+  /* Location */
+  country: string;
+  city: string;
+  timezone: string;
+
+  /* Professional */
+  qualification: string;
+  experience: number;
   subjects: string[];
   languages: string[];
-  country: string;
-  academyId: Types.ObjectId;
-  isAvailable: boolean;
-  profileImage: string;
   bio: string;
-  audioUrl: string;
 
+  /* Media */
+  profileImage: string;
+  avatar: string;
+  audioUrl: string;
+  introAudio: string;
+  introVideo: string;
+  certificates: ITeacherCertificate[];
+
+  /* Academy */
+  academyId?: Types.ObjectId | null;
+  isAvailable: boolean;
+  isVerified: boolean;
+  active: boolean;
+
+  /* Zoom */
+  zoomEmail: string;
+
+  /* Followers */
   followers: Types.ObjectId[];
   followerCount: number;
+
+  /* Ratings */
   ratings: ITeacherRating[];
   avgRating: number;
   ratingCount: number;
 
+  /* Stats */
+  rating?: number;
+  totalStudents?: number;
+
+  /* Referral */
   referralCode?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,12 +96,27 @@ const TeacherRatingSchema = new Schema<ITeacherRating>(
 );
 
 /* ============================================================
+   CERTIFICATE SUB-SCHEMA
+   ============================================================ */
+
+const CertificateSchema = new Schema<ITeacherCertificate>(
+  {
+    title: { type: String, default: '', trim: true },
+    url: { type: String, default: '', trim: true },
+    issuedBy: { type: String, default: '', trim: true },
+    issuedAt: { type: Date, default: null },
+  },
+  { _id: true }
+);
+
+/* ============================================================
    MAIN SCHEMA
    ============================================================ */
 
 const TeacherSchema = new Schema<ITeacher>(
   {
     name: { type: String, required: true, trim: true },
+    fullName: { type: String, trim: true },
 
     email: {
       type: String,
@@ -67,6 +126,9 @@ const TeacherSchema = new Schema<ITeacher>(
       lowercase: true,
     },
 
+    contactNumber: { type: String, default: '', trim: true, maxlength: 30 },
+    phone: { type: String, default: '', trim: true, maxlength: 30 },
+
     gender: {
       type: String,
       enum: ['male', 'female'],
@@ -74,47 +136,56 @@ const TeacherSchema = new Schema<ITeacher>(
       default: 'male',
     },
 
-    subjects: [{ type: String, trim: true }],
+    /* Location */
+    country: { type: String, default: '', trim: true, maxlength: 100 },
+    city: { type: String, default: '', trim: true, maxlength: 100 },
+    timezone: { type: String, default: '', trim: true, maxlength: 60 },
 
-    /* ✅ نئی زبانیں */
-    languages: {
-      type: [{ type: String, trim: true }],
-      default: [],
-    },
+    /* Professional */
+    qualification: { type: String, default: '', trim: true, maxlength: 300 },
+    experience: { type: Number, default: 0, min: 0 },
 
-    /* ✅ ملک */
-    country: {
-      type: String,
-      default: '',
-      trim: true,
-      maxlength: 100,
-    },
+    subjects: { type: [{ type: String, trim: true }], default: [] },
+    languages: { type: [{ type: String, trim: true }], default: [] },
+    bio: { type: String, default: '', trim: true, maxlength: 1000 },
 
+    /* Media */
+    profileImage: { type: String, default: '' },
+    avatar: { type: String, default: '' },
+    audioUrl: { type: String, default: '', required: false },
+    introAudio: { type: String, default: '' },
+    introVideo: { type: String, default: '' },
+    certificates: { type: [CertificateSchema], default: [] },
+
+    /* Academy */
     academyId: {
       type: Schema.Types.ObjectId,
       ref: 'Academy',
-      required: true,
+      default: null,
       index: true,
     },
 
     isAvailable: { type: Boolean, default: true, index: true },
+    isVerified: { type: Boolean, default: false },
+    active: { type: Boolean, default: true, index: true },
 
-    profileImage: { type: String, default: '' },
+    /* Zoom */
+    zoomEmail: { type: String, default: '', trim: true, lowercase: true },
 
-    bio: { type: String, default: '', trim: true, maxlength: 1000 },
-
-    /* ✅ Audio اب آپشنل */
-    audioUrl: { type: String, default: '', required: false },
-
-    /* FOLLOWERS */
+    /* Followers */
     followers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     followerCount: { type: Number, default: 0, min: 0, index: true },
 
-    /* RATINGS */
+    /* Ratings */
     ratings: { type: [TeacherRatingSchema], default: [] },
     avgRating: { type: Number, default: 0, min: 0, max: 5, index: true },
     ratingCount: { type: Number, default: 0, min: 0, index: true },
 
+    /* Stats */
+    rating: { type: Number, default: 0 },
+    totalStudents: { type: Number, default: 0, min: 0 },
+
+    /* Referral */
     referralCode: {
       type: String,
       unique: true,
@@ -137,6 +208,7 @@ const TeacherSchema = new Schema<ITeacher>(
    ============================================================ */
 
 TeacherSchema.index({ academyId: 1, isAvailable: 1 });
+TeacherSchema.index({ active: 1, isAvailable: 1 });
 TeacherSchema.index({ followerCount: -1 });
 TeacherSchema.index({ avgRating: -1 });
 TeacherSchema.index({ country: 1 });
