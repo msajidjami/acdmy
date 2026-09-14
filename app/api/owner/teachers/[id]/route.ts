@@ -5,6 +5,9 @@ import Teacher from '@/models/Teacher';
 import Academy from '@/models/Academy';
 import User from '@/models/User';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 type RouteContext = {
@@ -14,24 +17,17 @@ type RouteContext = {
 async function getUserFromRequest(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
   if (!token) return null;
-  if (!JWT_SECRET) {
-    console.error('JWT_SECRET is not configured');
-    return null;
-  }
-
+  if (!JWT_SECRET) return null;
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     await connectDB();
-    const user = await User.findById(decoded.userId).select('-password');
-    return user;
-  } catch (error) {
-    console.error('JWT verification error:', error);
+    return await User.findById(decoded.userId).select('-password');
+  } catch {
     return null;
   }
 }
 
 /* ---------------- PUT ---------------- */
-
 export async function PUT(req: NextRequest, { params }: RouteContext) {
   try {
     const user = await getUserFromRequest(req);
@@ -58,8 +54,18 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
     }
 
     const body = await req.json();
-    const { name, email, gender, subjects, bio, isAvailable, audioUrl, profileImage } =
-      body;
+    const {
+      name,
+      email,
+      gender,
+      subjects,
+      languages,
+      country,
+      bio,
+      isAvailable,
+      audioUrl,
+      profileImage,
+    } = body;
 
     if (name !== undefined) teacher.name = String(name).trim();
     if (email !== undefined) teacher.email = String(email).trim().toLowerCase();
@@ -74,29 +80,39 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       teacher.gender = gender;
     }
 
-    if (subjects !== undefined) teacher.subjects = subjects;
-    if (bio !== undefined) teacher.bio = String(bio).trim();
-
-    if (typeof isAvailable === 'boolean') teacher.isAvailable = isAvailable;
-
-    /* 🎤 Audio — لازمی */
-    if (audioUrl !== undefined) {
-      if (!audioUrl || !String(audioUrl).trim()) {
-        return NextResponse.json(
-          { error: 'Voice introduction is required' },
-          { status: 400 }
-        );
-      }
-      teacher.audioUrl = String(audioUrl).trim();
+    /* ✅ Subjects */
+    if (subjects !== undefined) {
+      teacher.subjects = Array.isArray(subjects)
+        ? subjects.map((s: any) => String(s).trim()).filter(Boolean)
+        : [];
     }
 
-    /* 👨 Image — صرف male کے لیے */
+    /* ✅ Languages */
+    if (languages !== undefined) {
+      teacher.languages = Array.isArray(languages)
+        ? languages.map((l: any) => String(l).trim()).filter(Boolean)
+        : [];
+    }
+
+    /* ✅ Country */
+    if (country !== undefined) {
+      teacher.country = String(country || '').trim();
+    }
+
+    if (bio !== undefined) teacher.bio = String(bio).trim();
+    if (typeof isAvailable === 'boolean') teacher.isAvailable = isAvailable;
+
+    /* ✅ Audio — اب آپشنل، خالی string بھی قبول */
+    if (audioUrl !== undefined) {
+      teacher.audioUrl = String(audioUrl || '').trim();
+    }
+
+    /* Image صرف male کے لیے */
     if (profileImage !== undefined) {
       teacher.profileImage =
         teacher.gender === 'male' ? String(profileImage || '') : '';
     }
 
-    /* اگر gender female ہو گیا تو image صاف کر دیں */
     if (teacher.gender === 'female') {
       teacher.profileImage = '';
     }
@@ -110,7 +126,6 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 }
 
 /* ---------------- DELETE ---------------- */
-
 export async function DELETE(req: NextRequest, { params }: RouteContext) {
   try {
     const user = await getUserFromRequest(req);

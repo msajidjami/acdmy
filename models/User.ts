@@ -7,12 +7,12 @@ export interface IUser extends Document {
   role: 'admin' | 'owner' | 'teacher' | 'user' | 'student';
   isVerified: boolean;
   provider: 'credentials' | 'google';
-  googleId?: string | null;
-  avatar?: string | null;
-  resetToken?: string | null;
-  resetTokenExpiry?: Date | null;
-  lastLogin?: Date | null;      // ✅ نیا
-  loginCount: number;           // ✅ نیا
+  googleId?: string;
+  avatar?: string;
+  resetToken?: string;
+  resetTokenExpiry?: Date;
+  lastLogin?: Date;
+  loginCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +31,7 @@ const UserSchema = new Schema<IUser>(
       unique: true,
       lowercase: true,
       trim: true,
+      /* ✅ index: true ہٹا دیا — unique خود index بناتا ہے */
     },
 
     password: {
@@ -38,6 +39,7 @@ const UserSchema = new Schema<IUser>(
       required: function (this: IUser) {
         return this.provider === 'credentials';
       },
+      select: false,
     },
 
     role: {
@@ -45,6 +47,7 @@ const UserSchema = new Schema<IUser>(
       enum: ['admin', 'owner', 'teacher', 'user', 'student'],
       required: true,
       default: 'student',
+      index: true,
     },
 
     isVerified: {
@@ -56,21 +59,26 @@ const UserSchema = new Schema<IUser>(
       type: String,
       enum: ['credentials', 'google'],
       default: 'credentials',
+      index: true,
     },
 
+    /* ✅ sparse unique — صرف موجود ہونے پر index */
     googleId: {
       type: String,
-      default: null,
+      default: undefined,
+      unique: true,
+      sparse: true,
     },
 
     avatar: {
       type: String,
-      default: null,
+      default: '',
     },
 
+    /* ✅ field-level پر sparse ہٹا دیا */
     resetToken: {
       type: String,
-      default: null,
+      default: undefined,
     },
 
     resetTokenExpiry: {
@@ -78,13 +86,11 @@ const UserSchema = new Schema<IUser>(
       default: null,
     },
 
-    // ✅ نیا — آخری لاگ ان کا وقت
     lastLogin: {
       type: Date,
       default: null,
     },
 
-    // ✅ نیا — کتنی بار لاگ ان ہوا
     loginCount: {
       type: Number,
       default: 0,
@@ -92,11 +98,23 @@ const UserSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
-UserSchema.index({ resetToken: 1 });
-UserSchema.index({ googleId: 1 }, { sparse: true });
+/* ============================================================
+   INDEXES — صرف یہاں ایک بار ڈیفائن کریں
+   ============================================================ */
 
-export default (mongoose.models.User as Model<IUser>) ||
-  mongoose.model<IUser>('User', UserSchema);
+UserSchema.index({ resetToken: 1 }, { sparse: true });
+
+/* ✅ Cache-safe export */
+let User: Model<IUser>;
+
+if (mongoose.models.User) {
+  delete mongoose.models.User;
+}
+
+User = mongoose.model<IUser>('User', UserSchema);
+
+export default User;

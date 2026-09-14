@@ -1,146 +1,115 @@
-// app/api/livekit/teacher-token/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-
+import { AccessToken } from 'livekit-server-sdk';
 import connectDB from '@/app/lib/dbConnect';
 import User from '@/models/User';
-import Teacher from '@/models/Teacher';
-import Assignment from '@/models/Assignment';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET!;
 
-function getEnv(name: string): string {
-  return String(process.env[name] || '').trim();
-}
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
-function normalizeEmail(value: unknown): string {
-  return String(value || '').trim().toLowerCase();
-}
-
-export async function POST(request: NextRequest) {
+async function getUserFromRequest(req: NextRequest) {
+  const token = req.cookies.get('token')?.value;
+  if (!token) return null;
   try {
-    // 1. Auth
-    const cookieStore = request.cookies;
-    const token = cookieStore.get('token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET || '');
-    } catch {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    if (!decoded?.userId || !decoded?.email) {
-      return NextResponse.json({ error: 'Invalid token payload' }, { status: 401 });
-    }
-
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     await connectDB();
+    return await User.findById(decoded.userId).select('-password').lean();
+  } catch {
+    return null;
+  }
+}
 
-    const user = await User.findById(decoded.userId).select('email').lean();
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    const email = normalizeEmail((user as any).email);
-    if (email !== normalizeEmail(decoded.email)) {
-      return NextResponse.json({ error: 'Email mismatch' }, { status: 401 });
-    }
-
-    // 2. Find teacher
-    const teacher = await Teacher.findOne({ email })
-      .select('_id academyId')
-      .lean();
-    if (!teacher?.academyId) {
-      return NextResponse.json(
-        { error: 'Teacher or academy not found' },
-        { status: 404 }
+export async function POST(req: NextRequest) {
+  try {
+    /* ✅ Environment variables چیک */
+    if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+      console.error(
+        '❌ LIVEKIT_API_KEY or LIVEKIT_API_SECRET is missing in environment variables'
       );
-    }
-
-    // 3. Get assignment + token
-    const body = await request.json();
-    const { assignmentId, roomName } = body;
-
-    if (!assignmentId || !mongoose.Types.ObjectId.isValid(assignmentId)) {
       return NextResponse.json(
-        { error: 'Invalid assignment ID' },
-        { status: 400 }
-      );
-    }
-
-    // ✅ livekitHostToken is `select: false`, so we need .select('+livekitHostToken')
-    const assignment = await Assignment.findOne({
-      _id: assignmentId,
-      academyId: teacher.academyId,
-      teacherId: teacher._id,
-      status: { $ne: 'cancelled' },
-    })
-      .select('+livekitHostToken livekitRoomName livekitHostIdentity')
-      .lean();
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: 'Assignment not found' },
-        { status: 404 }
-      );
-    }
-
-    const storedRoomName = String((assignment as any).livekitRoomName || '');
-    if (!storedRoomName) {
-      return NextResponse.json(
-        { error: 'LiveKit room not configured for this assignment' },
-        { status: 400 }
-      );
-    }
-
-    // Validate provided roomName matches stored (defense in depth)
-    if (roomName && roomName !== storedRoomName) {
-      return NextResponse.json(
-        { error: 'Room name mismatch' },
-        { status: 400 }
-      );
-    }
-
-    const hostToken = String((assignment as any).livekitHostToken || '');
-    if (!hostToken) {
-      return NextResponse.json(
-        { error: 'Host token not available. Please regenerate the LiveKit room.' },
-        { status: 400 }
-      );
-    }
-
-    // 4. LiveKit URL (wss:// for browser)
-    const livekitUrl = getEnv('NEXT_PUBLIC_LIVEKIT_URL') || getEnv('LIVEKIT_URL');
-    if (!livekitUrl) {
-      return NextResponse.json(
-        { error: 'LiveKit URL not configured' },
+        { error: 'LiveKit is not configured. Please contact support.' },
         { status: 500 }
       );
     }
 
-    // Browser کو wss:// چاہیے
-    const browserUrl = livekitUrl
-      .replace(/^https:\/\//, 'wss://')
-      .replace(/^http:\/\//, 'ws://');
+    /* ✅ Auth */
+    const user = await getUserFromRequest(req);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      token: hostToken,
-      url: browserUrl,
-      roomName: storedRoomName,
-      identity: String((assignment as any).livekitHostIdentity || ''),
+    /* ✅ Body */
+    const body = await req.json().catch(() => ({} as any));
+    const roomName = String(body.roomName || body.room || '').trim();
+    const role = String(body.role || 'viewer').trim();
+
+    if (!roomName) {
+      return NextResponse.json(
+        { error: 'roomName is required' },
+        { status: 400 }
+      );
+    }
+
+    /* ✅ Identity — ہمیشہ unique ہونی چاہیے */
+    const identity = `${String((user as any)._id)}-${Date.now()}`;
+    const displayName = String((user as any).name || 'User');
+
+    /* ✅ AccessToken بنائیں */
+    const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+      identity,
+      name: displayName,
+      ttl: '2h',
     });
-  } catch (error: any) {
-    console.error('Teacher LiveKit token error:', error);
+
+    /* ✅ Grants */
+    at.addGrant({
+      room: roomName,
+      roomJoin: true,
+      canPublish: role === 'teacher' || role === 'owner',
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    /* ✅ JWT generate */
+    const token = await at.toJwt();
+
+    /* ✅ Debug logging (development only) */
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🎫 LiveKit token generated:', {
+        identity,
+        roomName,
+        role,
+        canPublish: role === 'teacher' || role === 'owner',
+        tokenPreview: token.slice(0, 20) + '...',
+        apiKeyPreview: LIVEKIT_API_KEY.slice(0, 10) + '...',
+      });
+    }
+
     return NextResponse.json(
-      { error: error?.message || 'Server error' },
+      {
+        token,
+        identity,
+        roomName,
+        url: process.env.NEXT_PUBLIC_LIVEKIT_URL || null,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        },
+      }
+    );
+  } catch (error: any) {
+    console.error('❌ LiveKit token error:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Failed to generate token' },
       { status: 500 }
     );
   }

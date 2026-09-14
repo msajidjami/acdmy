@@ -1,7 +1,14 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+import connectDB from '@/app/lib/dbConnect';
+import User from '@/models/User';
+import Academy from '@/models/Academy';
 import HomeClient from '@/app/components/home/HomeClient';
+import StemBoardLauncher from '@/app/components/home/StemBoardLauncher';
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.quranandislamic.com';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_APP_URL || 'https://www.quranandislamic.com';
 const SITE_NAME = 'OnlineAcadmiesHub';
 
 /* ============================================================
@@ -15,7 +22,6 @@ export const metadata: Metadata = {
   },
   description:
     'Discover verified online academies worldwide. Create your own academy, manage teachers and students, and conduct live classes with interactive whiteboards.',
-
   keywords: [
     'online academy',
     'islamic academy',
@@ -28,14 +34,10 @@ export const metadata: Metadata = {
     'teacher dashboard',
     'student learning platform',
   ],
-
   authors: [{ name: SITE_NAME }],
   creator: SITE_NAME,
   publisher: SITE_NAME,
-
   metadataBase: new URL(SITE_URL),
-
-  /* ---------- Open Graph ---------- */
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -53,8 +55,6 @@ export const metadata: Metadata = {
       },
     ],
   },
-
-  /* ---------- Twitter ---------- */
   twitter: {
     card: 'summary_large_image',
     title: `${SITE_NAME} — Discover Online Academies`,
@@ -62,8 +62,6 @@ export const metadata: Metadata = {
       'Create your academy, manage teachers & students, run live classes.',
     images: [`${SITE_URL}/og-image.png`],
   },
-
-  /* ---------- Other ---------- */
   robots: {
     index: true,
     follow: true,
@@ -75,16 +73,14 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
-
   alternates: {
     canonical: SITE_URL,
   },
-
   category: 'education',
 };
 
 /* ============================================================
-   STRUCTURED DATA (JSON-LD)
+   STRUCTURED DATA
    ============================================================ */
 
 function StructuredData() {
@@ -122,10 +118,7 @@ function StructuredData() {
     url: SITE_URL,
     description:
       'Online platform connecting students with verified academies and expert teachers for live learning.',
-    areaServed: {
-      '@type': 'Place',
-      name: 'Worldwide',
-    },
+    areaServed: { '@type': 'Place', name: 'Worldwide' },
   };
 
   const servicesSchema = {
@@ -146,43 +139,118 @@ function StructuredData() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(organizationSchema),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(websiteSchema),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(educationalSchema),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(educationalSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(servicesSchema),
-        }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(servicesSchema) }}
       />
     </>
   );
 }
 
 /* ============================================================
+   HELPERS
+   ============================================================ */
+
+type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+type UserAcademy = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+async function getCurrentUser(): Promise<CurrentUser | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+    if (!token) return null;
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return null;
+
+    const decoded = jwt.verify(token, secret) as { userId: string };
+    if (!decoded?.userId) return null;
+
+    await connectDB();
+    const user = await User.findById(decoded.userId)
+      .select('-password')
+      .lean();
+
+    if (!user) return null;
+
+    return {
+      id: String((user as any)._id),
+      name: String((user as any).name || ''),
+      email: String((user as any).email || ''),
+      role: String((user as any).role || ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getUserAcademy(userId: string): Promise<UserAcademy | null> {
+  try {
+    await connectDB();
+    const academy = await Academy.findOne({ ownerId: userId })
+      .select('_id name slug')
+      .lean();
+    if (!academy) return null;
+
+    return {
+      id: String((academy as any)._id),
+      name: String((academy as any).name || ''),
+      slug: String((academy as any).slug || ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ============================================================
    PAGE
    ============================================================ */
 
-export const revalidate = 3600; // ISR — 1 hour
+export const revalidate = 0;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const user = await getCurrentUser();
+  const userAcademy = user ? await getUserAcademy(user.id) : null;
+
+  /* ✅ Create Academy صرف اُن owners کو دکھے:
+     - جو login ہوں
+     - role = 'owner'
+     - اور ابھی academy نہ بنائی ہو
+  */
+  const showCreateAcademy = Boolean(
+    user && user.role === 'owner' && !userAcademy
+  );
+
   return (
     <>
       <StructuredData />
-      <HomeClient />
+      <HomeClient
+        currentUser={user}
+        userAcademy={userAcademy}
+        showCreateAcademy={showCreateAcademy}
+      />
+      {/* ✅ STEM Board — ہر کوئی استعمال کر سکتا ہے */}
+      <StemBoardLauncher />
     </>
   );
 }
