@@ -6,11 +6,11 @@ import User from '@/models/User';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }   // ✅ Promise
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     const { password } = await req.json();
-    const { token } = await params;                    // ✅ await کریں
+    const { token } = await params;
 
     if (!token || !password) {
       return NextResponse.json(
@@ -19,7 +19,7 @@ export async function POST(
       );
     }
 
-    if (password.length < 6) {
+    if (String(password).length < 6) {
       return NextResponse.json(
         { message: 'Password must be at least 6 characters' },
         { status: 400 }
@@ -45,11 +45,15 @@ export async function POST(
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(String(password), 10);
 
     user.password = hashedPassword;
-    user.resetToken = null;
-    user.resetTokenExpiry = null;
+
+    /* ✅ null کی بجائے undefined استعمال کریں
+       کیونکہ schema میں یہ fields optional ہیں (string | undefined) */
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+
     await user.save();
 
     return NextResponse.json(

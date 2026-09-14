@@ -1,62 +1,65 @@
-// app/api/admin/owner/route.ts
+// app/api/admin/teacher/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import dbConnect from '@/app/lib/dbConnect';
-import Owner from '@/models/Teacher';
 import jwt from 'jsonwebtoken';
+import dbConnect from '@/app/lib/dbConnect';
+import Teacher from '@/models/Teacher';
 
-// ✅ بالکل وہی verifyAdminAccess فنکشن جو /api/admission میں ہے
+/* ============================================================
+   ADMIN VERIFICATION
+   ============================================================ */
+
 async function verifyAdminAccess(request: NextRequest) {
   try {
-    // Method 1: Bearer token سے ADMIN_SECRET_KEY چیک کریں
     const authHeader = request.headers.get('authorization');
     const adminSecret = process.env.ADMIN_SECRET_KEY;
-    
+
     if (authHeader && adminSecret && authHeader === `Bearer ${adminSecret}`) {
       return { isAdmin: true, userRole: 'admin', userId: 'system' };
     }
 
-    // Method 2: JWT token سے چیک کریں (cookies میں token)
-    const token = request.cookies.get('token')?.value || 
-                  request.cookies.get('auth_token')?.value;
+    const token =
+      request.cookies.get('token')?.value ||
+      request.cookies.get('auth_token')?.value;
 
     if (token) {
       const JWT_SECRET = process.env.JWT_SECRET;
-      if (!JWT_SECRET) {
-        console.error('JWT_SECRET missing');
-        return { isAdmin: false };
-      }
+      if (!JWT_SECRET) return { isAdmin: false };
 
       try {
         const decoded = jwt.verify(token, JWT_SECRET) as any;
+
         const adminRoles = [
-          'admin', 'owner', 'super-admin',
-          'education-admin', 'darul-ifta-admin',
-          'section1-admin', 'section2-admin'
+          'admin',
+          'super-admin',
+          'education-admin',
+          'darul-ifta-admin',
+          'section1-admin',
+          'section2-admin',
         ];
 
         if (decoded.role && adminRoles.includes(decoded.role)) {
           return {
             isAdmin: true,
             userRole: decoded.role,
-            userId: decoded.userId || decoded.id || 'unknown'
+            userId: decoded.userId || decoded.id || 'unknown',
           };
         }
       } catch (jwtError) {
-        console.error('JWT verification failed:', jwtError);
-        // ڈیولپمنٹ میں decode کی اجازت نہیں دی، سیکیورٹی کے لیے
         return { isAdmin: false };
       }
     }
 
     return { isAdmin: false };
-  } catch (error) {
-    console.error('Admin verification error:', error);
+  } catch {
     return { isAdmin: false };
   }
 }
 
-// ✅ POST: نیا اونر شامل کریں
+/* ============================================================
+   POST — نیا Teacher بنائیں
+   ============================================================ */
+
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
@@ -64,13 +67,19 @@ export async function POST(request: NextRequest) {
     const auth = await verifyAdminAccess(request);
     if (!auth.isAdmin) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized', message: 'Admin privileges required' },
+        {
+          success: false,
+          error: 'Unauthorized',
+          message: 'Admin privileges required',
+        },
         { status: 401 }
       );
     }
 
     const body = await request.json();
-    const { name, email, contactNumber } = body;
+    const name = String(body.name || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const contactNumber = String(body.contactNumber || '').trim();
 
     if (!name || !email || !contactNumber) {
       return NextResponse.json(
@@ -79,41 +88,82 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // اونر بنائیں (ماڈل میں pre-save سے referralCode آٹو جنریٹ ہو جائے گا)
-    const owner = await Owner.create({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      contactNumber: contactNumber.trim(),
+    /* ✅ Teacher بنائیں — referralCode خودکار بن جائے گا */
+    const teacher = await Teacher.create({
+      name,
+      email,
+      contactNumber,
+      gender: 'male',
+      subjects: [],
+      languages: [],
+      isAvailable: true,
+      academyId: null,
     });
 
-    const siteUrl = process.env.SITE_URL || 'https://yourdomain.com';
-    const referralLink = `${siteUrl}/admission?ref=${owner.referralCode}`;
+    const siteUrl =
+      process.env.SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://yourdomain.com';
 
-    return NextResponse.json({
-      success: true,
-      message: 'اونر کامیابی سے شامل ہو گیا',
-      data: owner,
-      referralLink
-    }, { status: 201 });
+    const referralLink = `${siteUrl}/admission?ref=${teacher.referralCode}`;
 
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Teacher added successfully',
+        data: {
+          _id: String(teacher._id),
+          name: teacher.name,
+          email: teacher.email,
+          contactNumber: teacher.contactNumber,
+          referralCode: teacher.referralCode,
+          createdAt: teacher.createdAt,
+        },
+        referralLink,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
-    console.error('Error creating owner:', error);
+    console.error('Error creating teacher:', error);
 
-    if (error.code === 11000) { // Duplicate key error (email یا referralCode)
+    if (error?.code === 11000) {
       return NextResponse.json(
-        { success: false, error: 'Duplicate entry', message: 'ای میل پہلے سے موجود ہے' },
+        {
+          success: false,
+          error: 'Duplicate entry',
+          message: 'Email or referral code already exists',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error?.name === 'ValidationError') {
+      const firstError = Object.values(error.errors || {})[0] as any;
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          message: firstError?.message || 'Invalid data',
+        },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { success: false, error: 'Server error', message: 'اونر شامل نہیں ہو سکا' },
+      {
+        success: false,
+        error: 'Server error',
+        message: 'Teacher could not be added',
+      },
       { status: 500 }
     );
   }
 }
 
-// ✅ GET: تمام اونرز حاصل کریں
+/* ============================================================
+   GET — تمام Teachers حاصل کریں
+   ============================================================ */
+
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
@@ -121,32 +171,42 @@ export async function GET(request: NextRequest) {
     const auth = await verifyAdminAccess(request);
     if (!auth.isAdmin) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized', message: 'Admin privileges required' },
+        {
+          success: false,
+          error: 'Unauthorized',
+          message: 'Admin privileges required',
+        },
         { status: 401 }
       );
     }
 
-    const owners = await Owner.find({})
+    const teachers = await Teacher.find({ isAvailable: true })
       .select('name email contactNumber referralCode createdAt')
       .sort({ createdAt: -1 })
       .lean();
 
-    const siteUrl = process.env.SITE_URL || 'https://yourdomain.com';
+    const siteUrl =
+      process.env.SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://yourdomain.com';
 
-    // ہر اونر کے لیے ریفرل لنک شامل کریں
-    const ownersWithLinks = owners.map(owner => ({
-      ...owner,
-      referralLink: `${siteUrl}/admission?ref=${owner.referralCode}`
+    const teachersWithLinks = teachers.map((t: any) => ({
+      _id: String(t._id),
+      name: String(t.name || ''),
+      email: String(t.email || ''),
+      contactNumber: String(t.contactNumber || ''),
+      referralCode: String(t.referralCode || ''),
+      createdAt: t.createdAt,
+      referralLink: `${siteUrl}/admission?ref=${t.referralCode}`,
     }));
 
     return NextResponse.json({
       success: true,
-      data: ownersWithLinks,
-      count: owners.length
+      data: teachersWithLinks,
+      count: teachersWithLinks.length,
     });
-
   } catch (error: any) {
-    console.error('Error fetching owners:', error);
+    console.error('Error fetching teachers:', error);
     return NextResponse.json(
       { success: false, error: 'Server error' },
       { status: 500 }
