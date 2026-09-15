@@ -64,6 +64,9 @@ interface JwtPayload {
 interface SearchParams {
   success?: string;
   deleted?: string;
+  trial?: string;
+  startTrial?: string;
+  plan?: string;
 }
 
 interface SerializedAcademy {
@@ -86,8 +89,12 @@ interface SubscriptionInfo {
   planName: string;
   status: 'active' | 'expired' | 'cancelled' | 'pending' | 'trial';
   billingCycle: 'monthly' | 'yearly';
+  startDate: string;        // 🆕
   endDate: string;
-  daysRemaining: number;
+  daysTotal: number;        // 🆕 کل دن
+  daysPassed: number;       // 🆕 گزر چکے دن
+  daysRemaining: number;    // ✅ باقی دن
+  progressPercent: number;  // 🆕 0-100
   isExpired: boolean;
   isTrial: boolean;
   isFree: boolean;
@@ -102,6 +109,60 @@ interface OwnerData {
   courseCount: number;
   pendingCount: number;
   subscription: SubscriptionInfo | null;
+}
+
+/* ============================================================
+   🆕 FREE TRIAL ACTIVATION
+   ============================================================ */
+
+type TrialResult = 'created' | 'exists' | 'no-academy';
+
+async function activateFreeTrial(userId: string): Promise<TrialResult> {
+  await connectDB();
+
+  const academy = await Academy.findOne({ ownerId: userId }).lean();
+  if (!academy) return 'no-academy';
+
+  const existingActive = await Subscription.findOne({
+    academyId: academy._id,
+    status: { $in: ['active', 'trial'] },
+  }).lean();
+
+  if (existingActive) return 'exists';
+
+  const trialPlan = getPlan('trial');
+  const studentLimit = trialPlan?.studentLimit ?? 20;
+  const planName = trialPlan?.name ?? 'Free Trial';
+
+  const startDate = new Date();
+  const endDate = new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+  await Subscription.create({
+    academyId: academy._id,
+    ownerId: userId,
+    planId: 'trial',
+    planName,
+    status: 'trial',
+    billingCycle: 'monthly',
+    startDate,
+    endDate,
+    amountUSD: 0,
+    amountPKR: 0,
+  });
+
+  await Academy.updateOne(
+    { _id: academy._id },
+    {
+      $set: {
+        planId: 'trial',
+        studentLimit,
+        isActive: true,
+        isPublic: true,
+      },
+    }
+  );
+
+  return 'created';
 }
 
 /* ============================================================
@@ -129,37 +190,37 @@ async function getOwnerData(userId: string): Promise<OwnerData> {
     };
   }
 
-  const [inquiriesRaw, teacherCount, studentCount, courseCount, subscriptionRaw, pendingProof] =
-    await Promise.all([
-      Inquiry.find({ academyId: academy._id })
-        .sort({ createdAt: -1 })
-        .lean(),
-      Teacher.countDocuments({ academyId: academy._id }),
-      Student.countDocuments({ academyId: academy._id }),
-      Course.countDocuments({ academyId: academy._id, isActive: true }),
-      // ✅ Latest subscription
-      Subscription.findOne({ academyId: academy._id })
-        .sort({ createdAt: -1 })
-        .lean(),
-      // ✅ Pending payment proof
-      (async () => {
-        try {
-          const PaymentProof = (await import('@/models/PaymentProof')).default;
-          return await PaymentProof.findOne({
-            academyId: academy._id,
-            status: 'pending',
-          }).lean();
-        } catch {
-          return null;
-        }
-      })(),
-    ]);
+  const [
+    inquiriesRaw,
+    teacherCount,
+    studentCount,
+    courseCount,
+    subscriptionRaw,
+    pendingProof,
+  ] = await Promise.all([
+    Inquiry.find({ academyId: academy._id }).sort({ createdAt: -1 }).lean(),
+    Teacher.countDocuments({ academyId: academy._id }),
+    Student.countDocuments({ academyId: academy._id }),
+    Course.countDocuments({ academyId: academy._id, isActive: true }),
+    Subscription.findOne({ academyId: academy._id })
+      .sort({ createdAt: -1 })
+      .lean(),
+    (async () => {
+      try {
+        const PaymentProof = (await import('@/models/PaymentProof')).default;
+        return await PaymentProof.findOne({
+          academyId: academy._id,
+          status: 'pending',
+        }).lean();
+      } catch {
+        return null;
+      }
+    })(),
+  ]);
 
-  // ✅ Serialize inquiries
   const inquiries: SerializedInquiry[] = inquiriesRaw.map(serializeInquiry);
   const pendingCount = inquiries.filter((i) => i.status === 'new').length;
 
-  // ✅ Serialize academy
   const serializedAcademy: SerializedAcademy = {
     _id: String(academy._id),
     name: String(academy.name || ''),
@@ -175,39 +236,75 @@ async function getOwnerData(userId: string): Promise<OwnerData> {
     planId: String((academy as any).planId || 'free'),
   };
 
-  // ✅ Build subscription info
+  /* ============================================================
+     ✅ BUILD SUBSCRIPTION INFO — گزر چکے دن + باقی دن + progress
+     ============================================================ */
   let subscription: SubscriptionInfo | null = null;
 
   if (subscriptionRaw) {
-    const endDate = new Date((subscriptionRaw as any).endDate);
+    const sub: any = subscriptionRaw;
+
+    const startDate = new Date(sub.startDate || sub.createdAt || new Date());
+    const endDate = new Date(sub.endDate);
     const now = new Date();
+
+    const totalMs = Math.max(1, endDate.getTime() - startDate.getTime());
+    const daysTotal = Math.max(
+      1,
+      Math.ceil(totalMs / (1000 * 60 * 60 * 24))
+    );
+
+    const passedMs = Math.max(0, now.getTime() - startDate.getTime());
+    const daysPassed = Math.min(
+      daysTotal,
+      Math.floor(passedMs / (1000 * 60 * 60 * 24))
+    );
+
     const diffMs = endDate.getTime() - now.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    );
+
     const isExpired = endDate < now;
-    const planId = (subscriptionRaw as any).planId as PlanId;
+
+    const progressPercent = Math.min(
+      100,
+      Math.max(0, (daysPassed / daysTotal) * 100)
+    );
+
+    const planId = sub.planId as PlanId;
     const plan = getPlan(planId);
 
     subscription = {
       planId,
-      planName: plan?.name || (subscriptionRaw as any).planName || 'Free',
-      status: (subscriptionRaw as any).status,
-      billingCycle: (subscriptionRaw as any).billingCycle,
+      planName: plan?.name || sub.planName || 'Free',
+      status: sub.status,
+      billingCycle: sub.billingCycle,
+      startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
+      daysTotal,
+      daysPassed,
       daysRemaining,
+      progressPercent,
       isExpired,
       isTrial: planId === 'trial',
-      isFree: planId === 'free' as any,
+      isFree: planId === ('free' as any),
       hasPendingPayment: Boolean(pendingProof),
     };
   } else {
-    // ✅ No subscription — Free plan
+    const now = new Date();
     subscription = {
       planId: 'trial' as PlanId,
       planName: 'Free',
       status: 'pending',
       billingCycle: 'monthly',
-      endDate: new Date().toISOString(),
+      startDate: now.toISOString(),
+      endDate: now.toISOString(),
+      daysTotal: 0,
+      daysPassed: 0,
       daysRemaining: 0,
+      progressPercent: 0,
       isExpired: false,
       isTrial: false,
       isFree: true,
@@ -231,7 +328,10 @@ async function getOwnerData(userId: string): Promise<OwnerData> {
    ============================================================ */
 
 function getPlanBadgeStyle(planId: PlanId) {
-  const styles: Record<string, { bg: string; text: string; gradient: string }> = {
+  const styles: Record<
+    string,
+    { bg: string; text: string; gradient: string }
+  > = {
     trial: {
       bg: 'bg-slate-100',
       text: 'text-slate-700',
@@ -283,6 +383,7 @@ export default async function OwnerDashboardPage({
   const params = await searchParams;
   const showSuccess = params.success === 'true';
   const showDeleted = params.deleted === 'true';
+  const showTrialStarted = params.trial === 'started';
 
   /* ---------- AUTH ---------- */
   const cookieStore = await cookies();
@@ -307,6 +408,23 @@ export default async function OwnerDashboardPage({
   if (!userId) redirect('/login');
   if (userRole !== 'owner' && userRole !== 'admin') redirect('/');
 
+  /* ============================================================
+     🆕 FREE TRIAL ACTIVATION
+     ============================================================ */
+  if (params.startTrial === 'true') {
+    const result = await activateFreeTrial(userId);
+
+    if (result === 'no-academy') {
+      redirect('/owner/academy?needAcademy=true');
+    }
+
+    if (result === 'exists') {
+      redirect('/owner/dashboard');
+    }
+
+    redirect('/owner/dashboard?trial=started');
+  }
+
   /* ---------- LOAD DATA ---------- */
   const {
     academy,
@@ -329,6 +447,18 @@ export default async function OwnerDashboardPage({
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* ===== ALERTS ===== */}
+      {showTrialStarted && (
+        <Suspense fallback={null}>
+          <AlertBanner
+            type="success"
+            title="🎉 Free Trial Started!"
+            message="Your 14-day free trial is now active. You can start adding students right away!"
+            paramKey="trial"
+            autoDismissMs={8000}
+          />
+        </Suspense>
+      )}
+
       {showSuccess && (
         <Suspense fallback={null}>
           <AlertBanner
@@ -563,7 +693,7 @@ export default async function OwnerDashboardPage({
             </div>
 
             <div className="space-y-4 min-w-0">
-              {/* ✅ NEW: Plan Card */}
+              {/* Plan Card */}
               {subscription && (
                 <div className="rounded-2xl bg-white border border-slate-200 p-5 overflow-hidden relative">
                   <div
@@ -606,60 +736,101 @@ export default async function OwnerDashboardPage({
                       </span>
                     </div>
 
-                    {/* Days remaining */}
-                    <div className="pt-3 border-t border-slate-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-500 font-medium">
-                          Days Remaining
-                        </span>
-                        <span
-                          className={`text-sm font-bold ${
+                    {/* 🆕 Days Tracker — Passed + Left */}
+                    <div className="pt-3 border-t border-slate-100 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Days Passed */}
+                        <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-center">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Days Passed
+                          </p>
+                          <p className="text-xl font-bold text-slate-800 mt-1">
+                            {subscription.daysPassed}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            of {subscription.daysTotal}
+                          </p>
+                        </div>
+
+                        {/* Days Left */}
+                        <div
+                          className={`rounded-xl border p-3 text-center ${
                             subscription.daysRemaining <= 3
-                              ? 'text-rose-600'
+                              ? 'bg-rose-50 border-rose-100'
                               : subscription.daysRemaining <= 7
-                              ? 'text-amber-600'
-                              : 'text-emerald-600'
+                              ? 'bg-amber-50 border-amber-100'
+                              : 'bg-emerald-50 border-emerald-100'
                           }`}
                         >
-                          {subscription.daysRemaining} days
-                        </span>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Days Left
+                          </p>
+                          <p
+                            className={`text-xl font-bold mt-1 ${
+                              subscription.daysRemaining <= 3
+                                ? 'text-rose-600'
+                                : subscription.daysRemaining <= 7
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                            }`}
+                          >
+                            {subscription.daysRemaining}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            remaining
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Progress bar */}
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${
-                            subscription.daysRemaining <= 3
-                              ? 'bg-rose-500'
-                              : subscription.daysRemaining <= 7
-                              ? 'bg-amber-500'
-                              : 'bg-emerald-500'
-                          }`}
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              (subscription.daysRemaining /
-                                (subscription.billingCycle === 'yearly'
-                                  ? 365
-                                  : 30)) *
-                                100
-                            )}%`,
-                          }}
-                        />
+                      {/* Progress Bar */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-semibold text-slate-500">
+                            Subscription Progress
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-600">
+                            {Math.round(subscription.progressPercent)}%
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              subscription.daysRemaining <= 3
+                                ? 'bg-gradient-to-r from-rose-500 to-pink-500'
+                                : subscription.daysRemaining <= 7
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                            }`}
+                            style={{
+                              width: `${subscription.progressPercent}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Started:{' '}
+                            {new Date(
+                              subscription.startDate
+                            ).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Ends:{' '}
+                            {new Date(
+                              subscription.endDate
+                            ).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        </div>
                       </div>
-
-                      <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        Expires:{' '}
-                        {new Date(subscription.endDate).toLocaleDateString(
-                          'en-US',
-                          {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          }
-                        )}
-                      </p>
                     </div>
 
                     {/* Upgrade CTA */}
@@ -892,12 +1063,14 @@ function SubscriptionBanner({
   academy: SerializedAcademy;
   planBadge: { bg: string; text: string; gradient: string };
 }) {
-  // Determine banner style
   const isExpired = subscription.isExpired;
   const isExpiringSoon =
-    !isExpired && subscription.daysRemaining <= 7 && subscription.daysRemaining > 0;
+    !isExpired &&
+    subscription.daysRemaining <= 7 &&
+    subscription.daysRemaining > 0;
   const isFree = subscription.isFree || !academy.isPublic;
   const hasPending = subscription.hasPendingPayment;
+  const isTrial = subscription.isTrial;
 
   let bannerStyle = '';
   let icon = null;
@@ -916,10 +1089,20 @@ function SubscriptionBanner({
     bannerStyle = 'bg-rose-50 border-rose-300';
     icon = <AlertTriangle className="h-6 w-6 text-rose-600" />;
     title = 'Subscription Expired';
-    message =
-      'Your plan has expired. Renew now to continue adding students and keep your academy public.';
+    message = `You used ${subscription.daysTotal} day${
+      subscription.daysTotal !== 1 ? 's' : ''
+    } of your ${subscription.planName} plan. Renew now to continue adding students and keep your academy public.`;
     ctaText = 'Renew Plan';
     ctaStyle = 'from-rose-600 to-pink-600';
+  } else if (isTrial) {
+    bannerStyle = 'bg-violet-50 border-violet-300';
+    icon = <Zap className="h-6 w-6 text-violet-600" />;
+    title = `Free Trial Active — ${subscription.daysRemaining} day${
+      subscription.daysRemaining !== 1 ? 's' : ''
+    } left`;
+    message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Add students and explore all features. Upgrade anytime to keep your academy running without interruption.`;
+    ctaText = 'Upgrade Now';
+    ctaStyle = 'from-violet-600 to-fuchsia-600';
   } else if (isFree) {
     bannerStyle = 'bg-amber-50 border-amber-300';
     icon = <Lock className="h-6 w-6 text-amber-600" />;
@@ -934,13 +1117,16 @@ function SubscriptionBanner({
     title = `Plan Expiring in ${subscription.daysRemaining} Day${
       subscription.daysRemaining !== 1 ? 's' : ''
     }`;
-    message = `Your ${subscription.planName} plan will expire on ${new Date(
-      subscription.endDate
-    ).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })}. Renew to avoid interruption.`;
+    message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Your ${
+      subscription.planName
+    } plan will expire on ${new Date(subscription.endDate).toLocaleDateString(
+      'en-US',
+      {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }
+    )}. Renew to avoid interruption.`;
     ctaText = 'Renew Now';
     ctaStyle = 'from-amber-600 to-orange-600';
   } else {
@@ -963,8 +1149,9 @@ function SubscriptionBanner({
               </span>
             </div>
             <p className="text-xs text-emerald-700 mt-0.5">
+              {subscription.daysPassed}/{subscription.daysTotal} days used ·{' '}
               {subscription.daysRemaining} day
-              {subscription.daysRemaining !== 1 ? 's' : ''} remaining · Expires{' '}
+              {subscription.daysRemaining !== 1 ? 's' : ''} left · Expires{' '}
               {new Date(subscription.endDate).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
