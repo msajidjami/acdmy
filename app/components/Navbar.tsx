@@ -143,7 +143,7 @@ export default function Navbar() {
     { href: '/', label: 'Home', icon: null },
     { href: '/explore', label: 'Explore', icon: Compass },
     { href: '/courses', label: 'Courses', icon: null },
-    { href: '/articles', label: 'Articles', icon: null },
+    { href: '/blog', label: 'Blog', icon: null },
     { href: '/about', label: 'About', icon: null },
     { href: '/contact', label: 'Contact', icon: null },
   ];
@@ -167,7 +167,7 @@ export default function Navbar() {
             <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </div>
           <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-700 to-emerald-600 bg-clip-text text-transparent truncate">
-            OnlineAcadmiesHub
+            ilmora786
           </h1>
         </Link>
 

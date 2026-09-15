@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 
 import connectDB from '@/app/lib/dbConnect';
 import Assignment from '@/models/Assignment';
+import Payment from '@/models/Payment1';
 import Academy from '@/models/Academy';
 import User from '@/models/User';
 import Student from '@/models/Student';
@@ -15,28 +16,15 @@ export const dynamic = 'force-dynamic';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-const VALID_DAYS = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-] as const;
-
-const VALID_STATUSES = [
-  'scheduled',
-  'ongoing',
-  'completed',
-  'cancelled',
-] as const;
-
-const VALID_PROVIDERS = ['zoom', 'livekit', 'none'] as const;
+const VALID_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as const;
+const VALID_STATUSES = ['scheduled','ongoing','completed','cancelled'] as const;
+const VALID_PROVIDERS = ['zoom','livekit','none'] as const;
+const VALID_CURRENCIES = ['PKR','USD'] as const;
 
 type JwtPayload = { userId?: string };
 type AssignmentStatus = (typeof VALID_STATUSES)[number];
 type Provider = (typeof VALID_PROVIDERS)[number];
+type Currency = (typeof VALID_CURRENCIES)[number];
 
 type RequestBody = {
   studentId?: string;
@@ -47,19 +35,10 @@ type RequestBody = {
   endTime?: string;
   status?: string;
   notes?: string;
-
-  zoomMeetingId?: string | number | null;
-  zoomMeetingNumber?: string | number | null;
-  zoomPassword?: string | null;
-  zoomLink?: string | null;
-  zoomStartUrl?: string | null;
-  zoomHostUserId?: string | number | null;
-  zoomTimezone?: string | null;
-  zoomProvider?: string | null;
-  zoomUuid?: string | null;
-  zoomMeetingCreated?: boolean;
-
-  // ✅ LiveKit
+  feeAmount?: number | string;
+  currency?: string;
+  teacherFeeAmount?: number | string;
+  teacherCurrency?: string;
   livekitRoomName?: string | null;
   livekitHostToken?: string | null;
   livekitHostIdentity?: string | null;
@@ -71,40 +50,24 @@ function getJwtSecret(): string {
   return JWT_SECRET;
 }
 
-async function getUserFromRequest(req: NextRequest) {
+async function getUser(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
   if (!token) return null;
-
   try {
-    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
-    if (!decoded?.userId) return null;
+    const d = jwt.verify(token, getJwtSecret()) as JwtPayload;
+    if (!d?.userId) return null;
     await connectDB();
-    return await User.findById(decoded.userId).select('-password').lean();
-  } catch (error) {
-    console.error('getUserFromRequest error:', error);
+    return await User.findById(d.userId).select('-password').lean();
+  } catch {
     return null;
   }
 }
 
-function normalizeDays(daysOfWeek: unknown[]): string[] {
-  return [
-    ...new Set(
-      daysOfWeek
-        .map((day) => String(day).trim())
-        .filter((day) => Boolean(day))
-    ),
-  ];
+function normalizeDays(days: unknown[]): string[] {
+  return [...new Set(days.map((d) => String(d).trim()).filter(Boolean))];
 }
 
-function buildScheduleKey({
-  academyId,
-  studentId,
-  teacherId,
-  courseId,
-  daysOfWeek,
-  startTime,
-  endTime,
-}: {
+function buildScheduleKey(args: {
   academyId: mongoose.Types.ObjectId;
   studentId: mongoose.Types.ObjectId;
   teacherId: mongoose.Types.ObjectId;
@@ -113,293 +76,212 @@ function buildScheduleKey({
   startTime: string;
   endTime: string;
 }): string {
-  const sortedDays = [...daysOfWeek].sort();
+  const sorted = [...args.daysOfWeek].sort();
   return [
-    String(academyId),
-    String(studentId),
-    String(teacherId),
-    String(courseId),
-    sortedDays.join('-'),
-    startTime.trim(),
-    endTime.trim(),
+    String(args.academyId),
+    String(args.studentId),
+    String(args.teacherId),
+    String(args.courseId),
+    sorted.join('-'),
+    args.startTime.trim(),
+    args.endTime.trim(),
   ].join('_');
 }
 
 /* ========================================================
- * PUT
- * ======================================================== */
+   ✅ Payment sync helper (PUT کے لیے)
+   ======================================================== */
+function getCurrentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function syncMonthlyPayment(args: {
+  academyId: mongoose.Types.ObjectId;
+  assignmentId: mongoose.Types.ObjectId;
+  studentId: mongoose.Types.ObjectId;
+  teacherId: mongoose.Types.ObjectId;
+  courseId: mongoose.Types.ObjectId;
+  amount: number;
+  currency: Currency;
+}): Promise<void> {
+  const month = getCurrentMonth();
+
+  const existing = await Payment.findOne({
+    assignmentId: args.assignmentId,
+    month,
+  })
+    .select('_id status')
+    .lean();
+
+  if (!existing) {
+    try {
+      await Payment.create({
+        academyId: args.academyId,
+        assignmentId: args.assignmentId,
+        studentId: args.studentId,
+        teacherId: args.teacherId,
+        courseId: args.courseId,
+        month,
+        amount: args.amount,
+        currency: args.currency,
+        status: 'pending',
+        paidAmount: 0,
+        paidAt: null,
+        paymentMethod: '',
+        notes: '',
+      });
+    } catch (err: any) {
+      if (err?.code !== 11000) throw err;
+    }
+    return;
+  }
+
+  if (existing.status !== 'paid') {
+    await Payment.updateOne(
+      { _id: existing._id },
+      {
+        $set: {
+          amount: args.amount,
+          currency: args.currency,
+          studentId: args.studentId,
+          teacherId: args.teacherId,
+          courseId: args.courseId,
+        },
+      }
+    );
+  }
+}
+
+/* ========================================================
+   PUT
+   ======================================================== */
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getUserFromRequest(req);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = await getUser(req);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await connectDB();
 
     const academy = await Academy.findOne({ ownerId: user._id });
-    if (!academy) {
-      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
-    }
+    if (!academy) return NextResponse.json({ error: 'No academy found' }, { status: 404 });
 
     const { id } = await params;
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Assignment ID is required' },
-        { status: 400 }
-      );
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: 'Invalid assignment ID' }, { status: 400 });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: 'Invalid assignment ID' },
-        { status: 400 }
-      );
-    }
-
-    const assignment = await Assignment.findOne({
-      _id: id,
-      academyId: academy._id,
-    });
-
-    if (!assignment) {
-      return NextResponse.json(
-        { error: 'Assignment not found' },
-        { status: 404 }
-      );
-    }
+    const assignment = await Assignment.findOne({ _id: id, academyId: academy._id });
+    if (!assignment) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
     const body = (await req.json()) as RequestBody;
 
     const {
-      studentId,
-      teacherId,
-      courseId,
-      daysOfWeek,
-      startTime,
-      endTime,
-      status,
-      notes,
-
-      zoomMeetingId,
-      zoomMeetingNumber,
-      zoomPassword,
-      zoomLink,
-      zoomStartUrl,
-      zoomHostUserId,
-      zoomTimezone,
-      zoomProvider,
-      zoomUuid,
-      zoomMeetingCreated,
-
-      // ✅ LiveKit
-      livekitRoomName,
-      livekitHostToken,
-      livekitHostIdentity,
-      livekitProvider,
+      studentId, teacherId, courseId, daysOfWeek, startTime, endTime,
+      status, notes, feeAmount, currency,
+      teacherFeeAmount, teacherCurrency,
+      livekitRoomName, livekitHostToken, livekitHostIdentity, livekitProvider,
     } = body;
 
     /* Student */
     if (studentId !== undefined) {
       if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
-        return NextResponse.json(
-          { error: 'Invalid student ID' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid student ID' }, { status: 400 });
       }
-      const student = await Student.findOne({
-        _id: studentId,
-        academyId: academy._id,
-      }).lean();
-      if (!student) {
-        return NextResponse.json(
-          { error: 'Student not found in your academy' },
-          { status: 404 }
-        );
-      }
+      const s = await Student.findOne({ _id: studentId, academyId: academy._id }).lean();
+      if (!s) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
       assignment.studentId = new mongoose.Types.ObjectId(studentId);
     }
 
     /* Teacher */
     if (teacherId !== undefined) {
       if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
-        return NextResponse.json(
-          { error: 'Invalid teacher ID' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid teacher ID' }, { status: 400 });
       }
-      const teacher = await Teacher.findOne({
-        _id: teacherId,
-        academyId: academy._id,
-      }).lean();
-      if (!teacher) {
-        return NextResponse.json(
-          { error: 'Teacher not found in your academy' },
-          { status: 404 }
-        );
-      }
+      const t = await Teacher.findOne({ _id: teacherId, academyId: academy._id }).lean();
+      if (!t) return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
       assignment.teacherId = new mongoose.Types.ObjectId(teacherId);
     }
 
     /* Course */
     if (courseId !== undefined) {
       if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
-        return NextResponse.json(
-          { error: 'Invalid course ID' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid course ID' }, { status: 400 });
       }
-      const course = await Course.findOne({
-        _id: courseId,
-        academyId: academy._id,
-      }).lean();
-      if (!course) {
-        return NextResponse.json(
-          { error: 'Course not found in your academy' },
-          { status: 404 }
-        );
-      }
+      const c = await Course.findOne({ _id: courseId, academyId: academy._id }).lean();
+      if (!c) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
       assignment.courseId = new mongoose.Types.ObjectId(courseId);
     }
 
     /* Days */
     if (daysOfWeek !== undefined) {
       if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0) {
-        return NextResponse.json(
-          { error: 'At least one day must be selected' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'At least one day required' }, { status: 400 });
       }
-      const uniqueDays = normalizeDays(daysOfWeek);
-      const invalidDays = uniqueDays.filter(
-        (day) => !VALID_DAYS.includes(day as (typeof VALID_DAYS)[number])
-      );
-      if (invalidDays.length > 0) {
-        return NextResponse.json(
-          { error: `Invalid day(s): ${invalidDays.join(', ')}` },
-          { status: 400 }
-        );
+      const u = normalizeDays(daysOfWeek);
+      const bad = u.filter((d) => !VALID_DAYS.includes(d as (typeof VALID_DAYS)[number]));
+      if (bad.length) {
+        return NextResponse.json({ error: `Invalid day(s): ${bad.join(', ')}` }, { status: 400 });
       }
-      assignment.daysOfWeek = uniqueDays;
+      assignment.daysOfWeek = u;
     }
 
-    /* Start time */
+    /* Time */
     if (startTime !== undefined) {
-      const value = String(startTime).trim();
-      if (!/^\d{2}:\d{2}$/.test(value)) {
-        return NextResponse.json(
-          { error: 'Invalid start time' },
-          { status: 400 }
-        );
+      const v = String(startTime).trim();
+      if (!/^\d{2}:\d{2}$/.test(v)) {
+        return NextResponse.json({ error: 'Invalid start time' }, { status: 400 });
       }
-      assignment.startTime = value;
+      assignment.startTime = v;
     }
-
-    /* End time */
     if (endTime !== undefined) {
-      const value = String(endTime).trim();
-      if (!/^\d{2}:\d{2}$/.test(value)) {
-        return NextResponse.json(
-          { error: 'Invalid end time' },
-          { status: 400 }
-        );
+      const v = String(endTime).trim();
+      if (!/^\d{2}:\d{2}$/.test(v)) {
+        return NextResponse.json({ error: 'Invalid end time' }, { status: 400 });
       }
-      assignment.endTime = value;
+      assignment.endTime = v;
     }
-
     if (assignment.endTime <= assignment.startTime) {
-      return NextResponse.json(
-        { error: 'End time must be after start time' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
     }
 
     /* Status */
     if (status !== undefined) {
       if (!VALID_STATUSES.includes(status as AssignmentStatus)) {
-        return NextResponse.json(
-          { error: 'Invalid assignment status' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
       }
       assignment.status = status as AssignmentStatus;
     }
 
     /* Notes */
     if (notes !== undefined) {
-      assignment.notes =
-        typeof notes === 'string' ? notes.trim().slice(0, 1000) : '';
+      assignment.notes = typeof notes === 'string' ? notes.trim().slice(0, 1000) : '';
     }
 
-    /* Zoom fields */
-    if (zoomMeetingId !== undefined) {
-      assignment.zoomMeetingId =
-        zoomMeetingId !== null && zoomMeetingId !== ''
-          ? String(zoomMeetingId).trim()
-          : '';
+    /* Student Fee */
+    if (feeAmount !== undefined) {
+      assignment.feeAmount = Math.max(0, Number(feeAmount) || 0);
     }
-    if (zoomMeetingNumber !== undefined) {
-      assignment.zoomMeetingNumber =
-        zoomMeetingNumber !== null && zoomMeetingNumber !== ''
-          ? String(zoomMeetingNumber).trim()
-          : '';
-    }
-    if (zoomPassword !== undefined) {
-      assignment.zoomPassword =
-        typeof zoomPassword === 'string' ? zoomPassword.trim() : '';
-    }
-    if (zoomLink !== undefined) {
-      assignment.zoomLink =
-        typeof zoomLink === 'string' ? zoomLink.trim() : '';
-    }
-    if (zoomStartUrl !== undefined) {
-      assignment.zoomStartUrl =
-        typeof zoomStartUrl === 'string' ? zoomStartUrl.trim() : '';
-    }
-    if (zoomHostUserId !== undefined) {
-      assignment.zoomHostUserId =
-        zoomHostUserId !== null && zoomHostUserId !== ''
-          ? String(zoomHostUserId).trim()
-          : '';
-    }
-    if (zoomTimezone !== undefined) {
-      assignment.zoomTimezone =
-        typeof zoomTimezone === 'string' && zoomTimezone.trim()
-          ? zoomTimezone.trim()
-          : 'Asia/Karachi';
-    }
-    if (zoomProvider !== undefined) {
-      const normalizedProvider =
-        typeof zoomProvider === 'string' ? zoomProvider.trim() : '';
-      if (
-        normalizedProvider &&
-        !VALID_PROVIDERS.includes(normalizedProvider as Provider)
-      ) {
-        return NextResponse.json(
-          { error: 'Invalid Zoom provider' },
-          { status: 400 }
-        );
-      }
-      assignment.zoomProvider = (normalizedProvider ||
-        (assignment.zoomMeetingId ||
-        assignment.zoomMeetingNumber ||
-        assignment.zoomLink ||
-        assignment.zoomStartUrl
-          ? 'zoom'
-          : 'none')) as Provider;
-    }
-    if (zoomUuid !== undefined) {
-      assignment.zoomUuid =
-        zoomUuid !== null ? String(zoomUuid).trim() : '';
-    }
-    if (zoomMeetingCreated !== undefined) {
-      assignment.zoomMeetingCreated = Boolean(zoomMeetingCreated);
+    if (currency !== undefined) {
+      assignment.currency = VALID_CURRENCIES.includes(currency as Currency)
+        ? (currency as Currency)
+        : 'PKR';
     }
 
-    /* ✅ LiveKit fields */
+    /* ✅ Teacher Fee */
+    if (teacherFeeAmount !== undefined) {
+      assignment.teacherFeeAmount = Math.max(0, Number(teacherFeeAmount) || 0);
+    }
+    if (teacherCurrency !== undefined) {
+      assignment.teacherCurrency = VALID_CURRENCIES.includes(teacherCurrency as Currency)
+        ? (teacherCurrency as Currency)
+        : 'PKR';
+    }
+
+    /* LiveKit */
     if (livekitRoomName !== undefined) {
       assignment.livekitRoomName =
         typeof livekitRoomName === 'string' ? livekitRoomName.trim() : '';
@@ -410,36 +292,22 @@ export async function PUT(
     }
     if (livekitHostIdentity !== undefined) {
       assignment.livekitHostIdentity =
-        typeof livekitHostIdentity === 'string'
-          ? livekitHostIdentity.trim()
-          : '';
+        typeof livekitHostIdentity === 'string' ? livekitHostIdentity.trim() : '';
     }
     if (livekitProvider !== undefined) {
-      const normalizedLivekitProvider =
-        typeof livekitProvider === 'string' ? livekitProvider.trim() : '';
-      if (
-        normalizedLivekitProvider &&
-        !VALID_PROVIDERS.includes(normalizedLivekitProvider as Provider)
-      ) {
-        return NextResponse.json(
-          { error: 'Invalid LiveKit provider' },
-          { status: 400 }
-        );
+      const v = typeof livekitProvider === 'string' ? livekitProvider.trim() : '';
+      if (v && !VALID_PROVIDERS.includes(v as Provider)) {
+        return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
       }
-      assignment.livekitProvider = (normalizedLivekitProvider ||
-        (assignment.livekitRoomName ? 'livekit' : 'none')) as Provider;
+      assignment.livekitProvider = (v || (assignment.livekitRoomName ? 'livekit' : 'none')) as Provider;
     }
 
     /* Final days */
     const finalDays = Array.isArray(assignment.daysOfWeek)
       ? normalizeDays(assignment.daysOfWeek)
       : [];
-
     if (finalDays.length === 0) {
-      return NextResponse.json(
-        { error: 'At least one day must be selected' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'At least one day required' }, { status: 400 });
     }
     assignment.daysOfWeek = finalDays;
 
@@ -456,107 +324,79 @@ export async function PUT(
     assignment.scheduleKey = scheduleKey;
 
     /* Duplicate check */
-    if (
-      assignment.status === 'scheduled' ||
-      assignment.status === 'ongoing'
-    ) {
-      const duplicate = await Assignment.findOne({
-        _id: { $ne: assignment._id },
-        academyId: academy._id,
-        scheduleKey,
-        status: { $in: ['scheduled', 'ongoing'] },
-      })
-        .select('_id')
-        .lean();
+    const dup = await Assignment.findOne({
+      _id: { $ne: assignment._id },
+      academyId: academy._id,
+      scheduleKey,
+    })
+      .select('_id status')
+      .lean();
 
-      if (duplicate) {
-        return NextResponse.json(
-          {
-            error: 'یہ schedule پہلے ہی کسی دوسری assignment میں موجود ہے۔',
-            code: 'DUPLICATE_ASSIGNMENT',
-            assignmentId: String(duplicate._id),
-          },
-          { status: 409 }
-        );
-      }
-    }
-
-    await assignment.save();
-
-    return NextResponse.json({ success: true, assignment });
-  } catch (error: unknown) {
-    console.error('PUT /api/owner/assignments/[id] error:', error);
-
-    const mongoError = error as {
-      code?: number;
-      name?: string;
-      message?: string;
-    };
-
-    if (mongoError.code === 11000) {
+    if (dup) {
       return NextResponse.json(
         {
-          error: 'یہ کلاس پہلے ہی اسی schedule پر موجود ہے۔',
+          error: 'Another assignment already uses this schedule.',
           code: 'DUPLICATE_ASSIGNMENT',
+          assignmentId: String(dup._id),
         },
         { status: 409 }
       );
     }
 
-    if (mongoError.name === 'CastError') {
-      return NextResponse.json(
-        { error: 'Invalid assignment, student, teacher, or course ID' },
-        { status: 400 }
-      );
+    await assignment.save();
+
+    /* ✅ Payment sync */
+    try {
+      await syncMonthlyPayment({
+        academyId: academy._id as mongoose.Types.ObjectId,
+        assignmentId: assignment._id as mongoose.Types.ObjectId,
+        studentId: assignment.studentId as mongoose.Types.ObjectId,
+        teacherId: assignment.teacherId as mongoose.Types.ObjectId,
+        courseId: assignment.courseId as mongoose.Types.ObjectId,
+        amount: Number(assignment.feeAmount) || 0,
+        currency: (assignment.currency as Currency) || 'PKR',
+      });
+    } catch (payErr) {
+      console.error('Payment sync failed (PUT):', payErr);
     }
 
-    if (mongoError.name === 'ValidationError') {
+    return NextResponse.json({ success: true, assignment });
+  } catch (error: unknown) {
+    console.error('PUT assignment error:', error);
+    const e = error as { code?: number; name?: string; message?: string };
+
+    if (e.code === 11000) {
       return NextResponse.json(
-        { error: mongoError.message || 'Assignment validation failed' },
-        { status: 400 }
+        { error: 'Duplicate schedule', code: 'DUPLICATE_ASSIGNMENT' },
+        { status: 409 }
       );
     }
-
     return NextResponse.json(
-      { error: mongoError.message || 'Server error' },
+      { error: e.message || 'Server error' },
       { status: 500 }
     );
   }
 }
 
 /* ========================================================
- * DELETE
- * ======================================================== */
+   DELETE
+   ======================================================== */
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getUserFromRequest(req);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = await getUser(req);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await connectDB();
 
     const academy = await Academy.findOne({ ownerId: user._id });
-    if (!academy) {
-      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
-    }
+    if (!academy) return NextResponse.json({ error: 'No academy found' }, { status: 404 });
 
     const { id } = await params;
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Assignment ID is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: 'Invalid assignment ID' },
-        { status: 400 }
-      );
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
     }
 
     const assignment = await Assignment.findOneAndDelete({
@@ -564,32 +404,13 @@ export async function DELETE(
       academyId: academy._id,
     });
 
-    if (!assignment) {
-      return NextResponse.json(
-        { error: 'Assignment not found' },
-        { status: 404 }
-      );
-    }
+    if (!assignment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Assignment deleted successfully',
-    });
+    await Payment.deleteMany({ assignmentId: assignment._id });
+
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    console.error('DELETE /api/owner/assignments/[id] error:', error);
-
-    const mongoError = error as { name?: string; message?: string };
-
-    if (mongoError.name === 'CastError') {
-      return NextResponse.json(
-        { error: 'Invalid assignment ID' },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: mongoError.message || 'Server error' },
-      { status: 500 }
-    );
+    console.error('DELETE assignment error:', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

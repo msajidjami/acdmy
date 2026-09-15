@@ -7,12 +7,11 @@ import {
   LayoutDashboard,
   School,
   Users,
-  Mail,
   Settings,
   LogOut,
   User,
   BookOpen,
-  CalendarIcon,
+  Calendar,
   Menu,
   X,
   GraduationCap,
@@ -20,6 +19,9 @@ import {
   Sparkles,
   MessageSquare,
   Inbox,
+  FileText,
+  Banknote,
+  Wallet,
 } from 'lucide-react';
 
 /* ============================================================
@@ -38,10 +40,7 @@ interface OwnerLayoutProps {
 }
 
 /* ============================================================
-   NAVBAR HEIGHT — اپنی ویب سائٹ کی navbar کے مطابق
-   • h-16 (64px) → '4rem'
-   • h-20 (80px) → '5rem'
-   • h-24 (96px) → '6rem'
+   NAVBAR HEIGHT
    ============================================================ */
 
 const NAVBAR_H = '4rem';
@@ -59,13 +58,16 @@ const mainNavItems: NavItem[] = [
 
 const contentNavItems: NavItem[] = [
   { name: 'Courses', href: '/owner/courses', icon: BookOpen },
-  { name: 'Assignments', href: '/owner/assignments', icon: CalendarIcon },
+  { name: 'Assignments', href: '/owner/assignments', icon: Calendar },
+  { name: 'Articles', href: '/owner/articles', icon: FileText },
+  { name: 'Student Payments', href: '/owner/payments', icon: Banknote },
+  { name: 'Teacher Payouts', href: '/owner/teacher-payments', icon: Wallet }, // ✅ نیا
 ];
 
 const systemNavItems: NavItem[] = [
   { name: 'Messages', href: '/owner/messages', icon: MessageSquare },
   { name: 'Inquiries', href: '/owner/inquiries', icon: Inbox },
-  { name: 'Billing', href: '/owner/billing', icon: Sparkles }, // ✅ نیا
+  { name: 'Billing', href: '/owner/billing', icon: Sparkles },
   { name: 'Settings', href: '/owner/settings', icon: Settings },
 ];
 
@@ -86,8 +88,14 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     router.push('/login');
   };
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => {
+    /* ✅ Teacher Payouts کو Student Payments سے الگ رکھیں
+       ورنہ /owner/payments، /owner/teacher-payments کو بھی میچ کر لے گا */
+    if (href === '/owner/payments') {
+      return pathname === '/owner/payments' || pathname.startsWith('/owner/payments/');
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   /* ---------- Nav Item ---------- */
   const renderNavItem = (item: NavItem, onClick?: () => void) => {

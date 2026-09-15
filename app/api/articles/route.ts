@@ -1,109 +1,229 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/models/Article';
-import { v2 as cloudinary } from 'cloudinary';
+import User from '@/models/User';
+import Academy from '@/models/Academy';
+import { detectAiContent } from '@/app/lib/aiDetector';
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
-  api_key: process.env.CLOUDINARY_API_KEY || '',
-  api_secret: process.env.CLOUDINARY_API_SECRET || '',
-});
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+/* ============================================================
+   GET — Public listing (only published)
+   ============================================================ */
 
-async function uploadToCloudinary(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_stream(
-      { resource_type: 'image', folder: 'articles', transformation: [{ width: 1200, height: 630, crop: 'fill' }, { quality: 'auto' }, { fetch_format: 'auto' }] },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result?.secure_url || '');
-      }
-    ).end(buffer);
-  });
-}
-
-function decodeFormData(value: string | null): string {
-  if (!value) return '';
+export async function GET(req: NextRequest) {
   try {
-    return decodeURIComponent(value.replace(/\+/g, ' '));
-  } catch {
-    return value;
+    await connectDB();
+
+    const { searchParams } = req.nextUrl;
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(50, parseInt(searchParams.get('limit') || '12', 10));
+    const category = searchParams.get('category');
+    const language = searchParams.get('language');
+    const q = (searchParams.get('q') || '').trim();
+
+    const query: Record<string, unknown> = { status: 'published' };
+    if (category && category !== 'all') query.category = category;
+    if (language && language !== 'all') query.language = language;
+    if (q) {
+      query.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { excerpt: { $regex: q, $options: 'i' } },
+      ];
+    }
+
+    const [articles, total] = await Promise.all([
+      Article.find(query)
+        .sort({ publishedAt: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select('-content') // listing میں پورا content نہیں بھیجیں
+        .lean(),
+      Article.countDocuments(query),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: articles,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error: any) {
+    console.error('GET /api/articles error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
 
-// ─── GET ──────────────────────────────────────────────────────────────────
+/* ============================================================
+   POST — Create article (owner only)
+   ============================================================ */
 
-export async function GET(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
+    /* ---------- Auth ---------- */
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Login required' },
+        { status: 401 }
+      );
+    }
+
+    let userId = '';
+    let userRole = '';
+    let userName = '';
+
+    try {
+      const secret = process.env.JWT_SECRET;
+      if (!secret) throw new Error('JWT_SECRET missing');
+      const decoded = jwt.verify(token, secret) as {
+        userId?: string;
+        role?: string;
+        name?: string;
+      };
+      userId = String(decoded.userId || '');
+      userRole = String(decoded.role || '');
+      userName = String(decoded.name || '');
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid session' },
+        { status: 401 }
+      );
+    }
+
+    /* ✅ صرف owner / admin */
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Only academy owners can publish articles' },
+        { status: 403 }
+      );
+    }
+
+    /* ---------- Body ---------- */
+    const body = await req.json();
+
+    const title = String(body.title || '').trim();
+    const content = String(body.content || '').trim();
+    const language = ['en', 'ur', 'ar'].includes(body.language)
+      ? body.language
+      : 'en';
+    const category = String(body.category || 'General').trim();
+    const thumbnail = String(body.thumbnail || '').trim();
+    const tags = Array.isArray(body.tags) ? body.tags.filter(Boolean) : [];
+
+    if (!title || title.length < 5) {
+      return NextResponse.json(
+        { success: false, error: 'Title must be at least 5 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (!content || content.length < 300) {
+      return NextResponse.json(
+        { success: false, error: 'Content must be at least 300 characters' },
+        { status: 400 }
+      );
+    }
+
+    /* ---------- AI Detection ---------- */
+    const ai = detectAiContent(content, language);
+
+    if (ai.status === 'rejected') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Article rejected: AI-generated content detected',
+          aiScore: ai.score,
+          aiReasons: ai.reasons,
+        },
+        { status: 422 }
+      );
+    }
+
+    /* ---------- Owner info + academy ---------- */
     await connectDB();
-    const { searchParams } = request.nextUrl;
-    const query: any = {};
-    if (searchParams.get('category') && searchParams.get('category') !== 'all') query.category = decodeFormData(searchParams.get('category'));
-    if (searchParams.get('language') && searchParams.get('language') !== 'all') query.language = searchParams.get('language');
-    
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    
-    const articles = await Article.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean();
-    return NextResponse.json({ success: true, data: articles });
+
+    const user = await User.findById(userId).select('name avatar').lean();
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    const academy = await Academy.findOne({ ownerId: userId })
+      .select('_id')
+      .lean();
+
+    /* ---------- Status ---------- */
+    let status: 'pending' | 'published' | 'rejected' = 'pending';
+
+    // ✅ Clean pass — auto publish
+    if (ai.status === 'passed') {
+      status = 'published';
+    }
+    // ⚠️ Warning — manual review
+    else if (ai.status === 'warning') {
+      status = 'pending';
+    }
+
+    /* ---------- Create ---------- */
+    const article = await Article.create({
+      title,
+      content,
+      language,
+      category,
+      thumbnail,
+      tags,
+
+      author: user.name || userName || 'Anonymous',
+      authorId: user._id,
+      authorName: user.name || userName || 'Anonymous',
+      authorAvatar: user.avatar || '',
+      academyId: academy?._id || null,
+
+      aiScore: ai.score,
+      aiStatus: ai.status,
+      aiReasons: ai.reasons,
+
+      status,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message:
+          status === 'published'
+            ? 'Article published successfully!'
+            : 'Article submitted for review',
+        data: {
+          id: article._id,
+          slug: article.slug,
+          status: article.status,
+          aiScore: ai.score,
+          aiStatus: ai.status,
+        },
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-}
-
-// ─── POST (زبان کے ویلیڈیشن کو bypass کیا گیا) ──────────────────────────────
-
-export async function POST(request: NextRequest) {
-  try {
-    await connectDB();
-    const formData = await request.formData();
-
-    // ڈیٹا کو سیف طریقے سے نکالنا
-    const articleData: any = {
-      title: decodeFormData(formData.get('title') as string),
-      content: decodeFormData(formData.get('content') as string),
-      language: formData.get('language') || 'ur', // یہاں سے زبان کا انتخاب
-      category: decodeFormData(formData.get('category') as string) || 'General',
-      author: decodeFormData(formData.get('author') as string) || 'Admin',
-      seo: {
-        metaTitle: decodeFormData(formData.get('metaTitle') as string),
-        metaDescription: decodeFormData(formData.get('metaDescription') as string),
-      }
-    };
-
-    // تھمب نیل
-    const file = formData.get('thumbnail') as File;
-    if (file && file.size > 0) articleData.thumbnail = await uploadToCloudinary(file);
-
-    // Mongoose ویلیڈیشن کو نظر انداز کرنے کے لیے براہ راست سیو
-    const article = new Article(articleData);
-    await article.save(); 
-
-    return NextResponse.json({ success: true, data: article }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
-}
-
-// ─── PUT ──────────────────────────────────────────────────────────────────
-
-export async function PUT(request: NextRequest) {
-  try {
-    await connectDB();
-    const formData = await request.formData();
-    const id = formData.get('id');
-
-    const updateData: any = {};
-    if (formData.has('title')) updateData.title = decodeFormData(formData.get('title') as string);
-    if (formData.has('language')) updateData.language = formData.get('language');
-    // ... دیگر فیلڈز
-
-    const updated = await Article.findByIdAndUpdate(id, { $set: updateData }, { new: true });
-    return NextResponse.json({ success: true, data: updated });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('POST /api/articles error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Server error' },
+      { status: 500 }
+    );
   }
 }

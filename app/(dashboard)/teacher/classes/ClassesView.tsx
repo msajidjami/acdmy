@@ -22,6 +22,11 @@ import {
   Signal,
   ShieldCheck,
   Zap,
+  Lock,
+  AlertTriangle,
+  Rocket,
+  Crown,
+  ArrowUpRight,
 } from 'lucide-react';
 
 /* ------------------ Types ------------------ */
@@ -36,16 +41,26 @@ type ClassRow = {
   endTime: string;
   status: string;
   notes: string;
-  // ✅ LiveKit fields
   livekitRoomName: string;
   livekitHostIdentity: string;
   livekitProvider: string;
 };
 
+type PlanReason =
+  | 'active'
+  | 'no-subscription'
+  | 'pending'
+  | 'expired'
+  | 'unpaid'
+  | 'no-academy';
+
 type Props = {
   teacherName: string;
   teacherEmail: string;
   classes: ClassRow[];
+  hasPlan: boolean;
+  academyName: string;
+  planReason: PlanReason;
 };
 
 /* ------------------ Helpers ------------------ */
@@ -90,6 +105,9 @@ export default function ClassesView({
   teacherName,
   teacherEmail,
   classes,
+  hasPlan,
+  academyName,
+  planReason,
 }: Props) {
   const todayName = getTodayName();
 
@@ -146,7 +164,6 @@ export default function ClassesView({
       result = result.filter((c) => isTodayClass(c, todayName));
     }
 
-    /* Sort: today first, ongoing next, then by start time */
     return [...result].sort((a, b) => {
       const aToday = isTodayClass(a, todayName) ? 0 : 1;
       const bToday = isTodayClass(b, todayName) ? 0 : 1;
@@ -185,12 +202,153 @@ export default function ClassesView({
 
   const todayCount = stats.today;
 
+  /* ============================================================
+     🚫 اگر پلان نہیں ہے → صرف پیغام دکھائیں، classes نہیں
+     ============================================================ */
+  if (!hasPlan) {
+    return (
+      <div className="space-y-6 pb-8">
+        {/* HERO HEADER (still shows teacher info) */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800 p-6 sm:p-8 text-white shadow-2xl">
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <div className="absolute -top-24 -right-16 h-80 w-80 rounded-full bg-white/40 blur-3xl" />
+            <div className="absolute -bottom-28 -left-16 h-80 w-80 rounded-full bg-slate-300/50 blur-3xl" />
+          </div>
+
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-xs font-semibold">
+              <Sparkles className="h-3.5 w-3.5" />
+              Teacher Panel
+            </div>
+
+            <h1 className="mt-4 text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+              My Classes 📚
+            </h1>
+
+            <p className="mt-2 text-base sm:text-lg text-slate-200">
+              {teacherName}
+              <span className="opacity-60 mx-2">·</span>
+              <span className="text-sm opacity-90 break-all">
+                {teacherEmail}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* PAYWALL MESSAGE */}
+        <div className="relative overflow-hidden rounded-3xl bg-white border-2 border-slate-200 shadow-xl">
+          <div
+            className={`h-2 bg-gradient-to-r ${
+              planReason === 'no-academy'
+                ? 'from-indigo-500 to-purple-600'
+                : planReason === 'pending'
+                ? 'from-amber-500 to-orange-600'
+                : planReason === 'expired'
+                ? 'from-rose-500 to-pink-600'
+                : planReason === 'unpaid'
+                ? 'from-amber-500 to-orange-600'
+                : 'from-slate-500 to-slate-700'
+            }`}
+          />
+
+          <div className="p-8 sm:p-12 text-center">
+            {/* Icon */}
+            <div
+              className={`inline-flex items-center justify-center h-20 w-20 rounded-3xl shadow-lg mb-6 ${
+                planReason === 'no-academy'
+                  ? 'bg-indigo-100'
+                  : planReason === 'expired'
+                  ? 'bg-rose-100'
+                  : 'bg-amber-100'
+              }`}
+            >
+              {planReason === 'no-academy' ? (
+                <GraduationCap className="h-10 w-10 text-indigo-600" />
+              ) : planReason === 'expired' ? (
+                <Lock className="h-10 w-10 text-rose-600" />
+              ) : planReason === 'pending' ? (
+                <Clock className="h-10 w-10 text-amber-600" />
+              ) : planReason === 'unpaid' ? (
+                <AlertTriangle className="h-10 w-10 text-amber-600" />
+              ) : (
+                <Lock className="h-10 w-10 text-slate-600" />
+              )}
+            </div>
+
+            {/* Title */}
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">
+              {planReason === 'no-academy' && 'Academy setup incomplete'}
+              {planReason === 'no-subscription' && 'No active plan'}
+              {planReason === 'pending' && 'Payment under review'}
+              {planReason === 'expired' && 'Academy plan expired'}
+              {planReason === 'unpaid' && 'Payment not confirmed'}
+            </h2>
+
+            {/* Academy name */}
+            {academyName && (
+              <p className="mt-2 text-sm text-slate-500">
+                Academy:{' '}
+                <strong className="text-slate-700">{academyName}</strong>
+              </p>
+            )}
+
+            {/* Description */}
+            <p className="mt-4 text-base text-slate-600 max-w-lg mx-auto leading-relaxed">
+              {planReason === 'no-academy' &&
+                'Your academy has not been set up yet. Please contact your academy owner to complete the setup.'}
+              {planReason === 'no-subscription' &&
+                'The academy you belong to does not have an active subscription. Classes will appear here once the owner subscribes to a plan.'}
+              {planReason === 'pending' &&
+                'The academy subscription payment is currently under review. Classes will be visible once the payment is verified (usually within 24 hours).'}
+              {planReason === 'expired' &&
+                'The academy subscription has expired. Please ask the owner to renew the plan to restore access to classes.'}
+              {planReason === 'unpaid' &&
+                'The academy subscription payment is not confirmed yet. Classes will appear once payment is completed.'}
+            </p>
+
+            {/* What unlocks */}
+            <div className="mt-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50/40 border border-indigo-200 p-5 text-left max-w-md mx-auto">
+              <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <Crown className="h-3.5 w-3.5" />
+                Active plan unlocks
+              </p>
+              <ul className="space-y-2">
+                {[
+                  'View all assigned classes',
+                  'Student information',
+                  'Weekly class schedule',
+                  'LiveKit video classrooms',
+                  'Class notes and materials',
+                ].map((f) => (
+                  <li
+                    key={f}
+                    className="flex items-center gap-2 text-sm text-slate-700"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Info banner */}
+            <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600">
+              <Info className="h-3.5 w-3.5" />
+              Only the academy owner can manage subscriptions
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ============================================================
+     ✅ اگر پلان ہے → normal view
+     ============================================================ */
+
   return (
     <div className="space-y-6 pb-8">
-      {/* ================================================= */}
-      {/* HERO HEADER                                        */}
-      {/* ================================================= */}
-
+      {/* HERO HEADER */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 sm:p-8 text-white shadow-2xl shadow-purple-500/20">
         <div className="absolute inset-0 opacity-30 pointer-events-none">
           <div className="absolute -top-24 -right-16 h-80 w-80 rounded-full bg-white/40 blur-3xl" />
@@ -248,10 +406,7 @@ export default function ClassesView({
         </div>
       </div>
 
-      {/* ================================================= */}
-      {/* STATS CARDS                                        */}
-      {/* ================================================= */}
-
+      {/* STATS CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatCard
           title="Total"
@@ -296,195 +451,189 @@ export default function ClassesView({
         />
       </div>
 
-      {/* ================================================= */}
-      {/* FILTERS + SEARCH                                   */}
-      {/* ================================================= */}
-
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by course, student, or notes..."
-            className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition"
-            >
-              <X className="h-3 w-3 text-slate-600" />
-            </button>
-          )}
-        </div>
-
-        {/* Status Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
-            <Filter className="h-3.5 w-3.5" />
-            Status
-          </div>
-          {(
-            [
-              { key: 'all', label: 'All', count: classes.length },
-              {
-                key: 'scheduled',
-                label: 'Scheduled',
-                count: classes.filter((c) => c.status === 'scheduled').length,
-              },
-              {
-                key: 'ongoing',
-                label: 'Ongoing',
-                count: classes.filter((c) => c.status === 'ongoing').length,
-              },
-            ] as const
-          ).map((opt) => {
-            const active = statusFilter === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setStatusFilter(opt.key as any)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-                  active
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-purple-500/25'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {opt.label}
-                <span
-                  className={`inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[10px] font-bold ${
-                    active
-                      ? 'bg-white/25 text-white'
-                      : 'bg-white text-slate-500'
-                  }`}
-                >
-                  {opt.count}
-                </span>
-              </button>
-            );
-          })}
-
-          {/* LiveKit Toggle */}
-          <button
-            type="button"
-            onClick={() => setLivekitOnly((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
-              livekitOnly
-                ? 'bg-gradient-to-r from-sky-500 to-cyan-600 text-white shadow-md shadow-sky-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Video className="h-3.5 w-3.5" />
-            LiveKit only
-          </button>
-
-          {/* Today Toggle */}
-          <button
-            type="button"
-            onClick={() => setTodayOnly((v) => !v)}
-            disabled={todayCount === 0}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
-              todayOnly
-                ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/25'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Flame className="h-3.5 w-3.5" />
-            Today only
-          </button>
-        </div>
-
-        {/* Day Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
-            <Calendar className="h-3.5 w-3.5" />
-            Day
-          </div>
-          <button
-            type="button"
-            onClick={() => setDayFilter('all')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-              dayFilter === 'all'
-                ? 'bg-slate-900 text-white shadow-md'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            All
-          </button>
-          {DAYS.map((day) => {
-            const isToday = day === todayName;
-            const active = dayFilter === day;
-            const count = classes.filter((c) =>
-              c.daysOfWeek.includes(day)
-            ).length;
-            if (count === 0) return null;
-
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => setDayFilter(day)}
-                className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                  active
-                    ? 'bg-slate-900 text-white shadow-md'
-                    : isToday
-                    ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 ring-1 ring-rose-200'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {DAY_SHORT[day]}
-                {isToday && (
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      active ? 'bg-rose-300' : 'bg-rose-500 animate-pulse'
-                    }`}
-                  />
-                )}
-                <span
-                  className={`text-[10px] font-bold ${
-                    active ? 'text-white/70' : 'text-slate-400'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active Summary */}
-        {(hasActiveFilters || filtered.length !== classes.length) && (
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-            <p className="text-xs text-slate-500">
-              Showing{' '}
-              <span className="font-bold text-slate-800">
-                {filtered.length}
-              </span>{' '}
-              of {classes.length} classes
-            </p>
-            {hasActiveFilters && (
+      {/* FILTERS + SEARCH */}
+      {classes.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by course, student, or notes..."
+              className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-400 transition bg-slate-50/50 focus:bg-white text-sm placeholder:text-slate-400"
+            />
+            {search && (
               <button
                 type="button"
-                onClick={clearAll}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center transition"
               >
-                <X className="h-3 w-3" />
-                Clear filters
+                <X className="h-3 w-3 text-slate-600" />
               </button>
             )}
           </div>
-        )}
-      </div>
 
-      {/* ================================================= */}
-      {/* EMPTY STATE                                        */}
-      {/* ================================================= */}
+          {/* Status Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+              <Filter className="h-3.5 w-3.5" />
+              Status
+            </div>
+            {(
+              [
+                { key: 'all', label: 'All', count: classes.length },
+                {
+                  key: 'scheduled',
+                  label: 'Scheduled',
+                  count: classes.filter((c) => c.status === 'scheduled').length,
+                },
+                {
+                  key: 'ongoing',
+                  label: 'Ongoing',
+                  count: classes.filter((c) => c.status === 'ongoing').length,
+                },
+              ] as const
+            ).map((opt) => {
+              const active = statusFilter === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setStatusFilter(opt.key as any)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
+                    active
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-purple-500/25'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[10px] font-bold ${
+                      active
+                        ? 'bg-white/25 text-white'
+                        : 'bg-white text-slate-500'
+                    }`}
+                  >
+                    {opt.count}
+                  </span>
+                </button>
+              );
+            })}
 
+            <button
+              type="button"
+              onClick={() => setLivekitOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
+                livekitOnly
+                  ? 'bg-gradient-to-r from-sky-500 to-cyan-600 text-white shadow-md shadow-sky-500/25'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Video className="h-3.5 w-3.5" />
+              LiveKit only
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTodayOnly((v) => !v)}
+              disabled={todayCount === 0}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
+                todayOnly
+                  ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/25'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Flame className="h-3.5 w-3.5" />
+              Today only
+            </button>
+          </div>
+
+          {/* Day Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+              <Calendar className="h-3.5 w-3.5" />
+              Day
+            </div>
+            <button
+              type="button"
+              onClick={() => setDayFilter('all')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                dayFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-md'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All
+            </button>
+            {DAYS.map((day) => {
+              const isToday = day === todayName;
+              const active = dayFilter === day;
+              const count = classes.filter((c) =>
+                c.daysOfWeek.includes(day)
+              ).length;
+              if (count === 0) return null;
+
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setDayFilter(day)}
+                  className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                    active
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : isToday
+                      ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 ring-1 ring-rose-200'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {DAY_SHORT[day]}
+                  {isToday && (
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        active ? 'bg-rose-300' : 'bg-rose-500 animate-pulse'
+                      }`}
+                    />
+                  )}
+                  <span
+                    className={`text-[10px] font-bold ${
+                      active ? 'text-white/70' : 'text-slate-400'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active Summary */}
+          {(hasActiveFilters || filtered.length !== classes.length) && (
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                Showing{' '}
+                <span className="font-bold text-slate-800">
+                  {filtered.length}
+                </span>{' '}
+                of {classes.length} classes
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" />
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EMPTY STATE */}
       {classes.length === 0 ? (
         <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border-2 border-dashed border-indigo-200 shadow-sm">
           <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center mx-auto mb-4">
@@ -518,10 +667,6 @@ export default function ClassesView({
           )}
         </div>
       ) : (
-        /* ================================================= */
-        /* CLASSES GRID                                       */
-        /* ================================================= */
-
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           {filtered.map((row) => (
             <ClassCard
@@ -615,7 +760,6 @@ function ClassCard({
           : 'border border-slate-200 shadow-sm hover:shadow-xl hover:border-transparent'
       }`}
     >
-      {/* Top gradient strip */}
       <div
         className={`h-1 bg-gradient-to-r ${
           isToday
@@ -626,13 +770,11 @@ function ClassCard({
         }`}
       />
 
-      {/* TODAY pulsing glow */}
       {isToday && (
         <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-rose-400/20 blur-3xl pointer-events-none animate-pulse" />
       )}
 
       <div className="relative p-5">
-        {/* Header row */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-start gap-3 min-w-0 flex-1">
             <div
@@ -694,7 +836,6 @@ function ClassCard({
           )}
         </div>
 
-        {/* Student Info */}
         <div className="flex items-center gap-2 text-sm text-slate-700 mb-3">
           <Users className="h-4 w-4 text-slate-400 shrink-0" />
           <span className="font-semibold truncate">{row.studentName}</span>
@@ -706,7 +847,6 @@ function ClassCard({
           )}
         </div>
 
-        {/* Time + Timezone */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600 mb-3">
           <span className="inline-flex items-center gap-1.5">
             <Clock className="h-4 w-4 text-slate-400" />
@@ -724,7 +864,6 @@ function ClassCard({
           </span>
         </div>
 
-        {/* Weekly Days */}
         {row.daysOfWeek.length > 0 && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 mb-1.5">
@@ -756,7 +895,6 @@ function ClassCard({
           </div>
         )}
 
-        {/* Notes */}
         {row.notes && (
           <div className="mb-3 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
             <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed line-clamp-3">
@@ -765,7 +903,6 @@ function ClassCard({
           </div>
         )}
 
-        {/* LiveKit details strip */}
         {hasLiveKit && (
           <div className="mb-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-100 px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -786,7 +923,6 @@ function ClassCard({
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex flex-wrap gap-2">
           {hasLiveKit ? (
             <Link

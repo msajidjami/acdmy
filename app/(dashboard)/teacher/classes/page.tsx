@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
 import User from '@/models/User';
 import Teacher from '@/models/Teacher';
+import Academy from '@/models/Academy';
+import Subscription from '@/models/Subscription';
 import Assignment from '@/models/Assignment';
 import Student from '@/models/Student';
 import Course from '@/models/Course';
@@ -12,6 +14,10 @@ import Course from '@/models/Course';
 import ClassesView from './ClassesView';
 
 export const dynamic = 'force-dynamic';
+
+/* ============================================================
+   CONSTANTS
+   ============================================================ */
 
 const DAY_ORDER = [
   'Monday',
@@ -22,6 +28,10 @@ const DAY_ORDER = [
   'Saturday',
   'Sunday',
 ];
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
 
 function normalizeEmail(value: unknown): string {
   return String(value || '').trim().toLowerCase();
@@ -53,6 +63,137 @@ function getClassKey(assignment: any): string {
   ].join('|');
 }
 
+/* ============================================================
+   ✅ PLAN CHECK — MULTIPLE SUBSCRIPTIONS SUPPORT
+   ============================================================
+   اگر academy کے پاس ایک سے زیادہ subscriptions ہوں اور
+   کوئی بھی active ہو → plan چل رہا ہے۔
+   ============================================================ */
+
+type PlanReason =
+  | 'active'
+  | 'no-subscription'
+  | 'pending'
+  | 'expired'
+  | 'unpaid'
+  | 'no-academy';
+
+type PlanCheckResult = {
+  hasPlan: boolean;
+  reason: PlanReason;
+};
+
+async function checkAcademyPlan(
+  academyId: unknown
+): Promise<PlanCheckResult> {
+  if (!academyId) {
+    return { hasPlan: false, reason: 'no-academy' };
+  }
+
+  const now = new Date();
+
+  /* ============================================================
+     ✅ 1. کوئی بھی ACTIVE subscription ڈھونڈیں
+     (پرانی ہو یا نئی — اگر active ہے تو plan چل رہا ہے)
+     ============================================================ */
+  const activeSubscription = await Subscription.findOne({
+    academyId,
+    $or: [
+      { paymentStatus: 'paid' },
+      { status: 'active' },
+      { status: 'trial' },
+    ],
+    $and: [
+      {
+        $or: [
+          { endDate: { $gte: now } },
+          { endDate: null },
+          { endDate: { $exists: false } },
+        ],
+      },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (activeSubscription) {
+    return { hasPlan: true, reason: 'active' };
+  }
+
+  /* ============================================================
+     ✅ 2. کوئی active نہیں → latest subscription کا reason بتائیں
+     ============================================================ */
+  const latest = await Subscription.findOne({ academyId })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (!latest) {
+    return { hasPlan: false, reason: 'no-subscription' };
+  }
+
+  const status = String((latest as any).status || '').toLowerCase();
+  const endDate = (latest as any).endDate
+    ? new Date((latest as any).endDate)
+    : null;
+
+  /* Expired */
+  if (endDate && endDate.getTime() < now.getTime()) {
+    return { hasPlan: false, reason: 'expired' };
+  }
+
+  /* Cancelled */
+  if (status === 'cancelled') {
+    return { hasPlan: false, reason: 'expired' };
+  }
+
+  /* Pending */
+  if (status === 'pending') {
+    return { hasPlan: false, reason: 'pending' };
+  }
+
+  /* باقی — unpaid */
+  return { hasPlan: false, reason: 'unpaid' };
+}
+
+/* ============================================================
+   ✅ TEACHER LOOKUP — email + userId fallback
+   ============================================================ */
+
+async function findTeacherForUser(
+  userId: unknown,
+  userEmail: string
+): Promise<any | null> {
+  /* Try 1: userId */
+  if (userId) {
+    try {
+      const byUserId = await Teacher.findOne({
+        $or: [{ userId }, { user: userId }],
+      })
+        .select('_id name email academyId active')
+        .lean();
+
+      if (byUserId) return byUserId;
+    } catch {
+      // silent
+    }
+  }
+
+  /* Try 2: email */
+  if (userEmail) {
+    const byEmail = await Teacher.findOne({ email: userEmail })
+      .select('_id name email academyId active')
+      .lean();
+
+    if (byEmail) return byEmail;
+  }
+
+  return null;
+}
+
+/* ============================================================
+   ✅ SCHEDULE FETCHER
+   ============================================================ */
+
 async function getTeacherSchedule() {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
@@ -69,7 +210,7 @@ async function getTeacherSchedule() {
     redirect('/login');
   }
 
-  if (!decoded?.userId || !decoded?.email) redirect('/login');
+  if (!decoded?.userId) redirect('/login');
 
   await connectDB();
 
@@ -79,34 +220,104 @@ async function getTeacherSchedule() {
 
   if (!user) redirect('/login');
 
-  const sessionEmail = normalizeEmail(decoded.email);
   const userEmail = normalizeEmail((user as any).email);
 
-  if (!sessionEmail || sessionEmail !== userEmail) redirect('/login');
+  /* ---------- Teacher Lookup ---------- */
+  const teacher = await findTeacherForUser(decoded.userId, userEmail);
 
-  const teacher = await Teacher.findOne({ email: userEmail })
-    .select('_id name email academyId')
-    .lean();
-
-  if (!teacher?.academyId) {
+  /* ---------- No Teacher Record ---------- */
+  if (!teacher) {
     return {
       teacherName: String((user as any).name || 'Teacher'),
       teacherEmail: userEmail,
       rows: [],
+      hasPlan: false,
+      academyName: '',
+      planReason: 'no-academy' as PlanReason,
     };
   }
 
-  // ✅ LiveKit fields منتخب کریں
+  /* ---------- Not Active ---------- */
+  if ((teacher as any).active === false) {
+    return {
+      teacherName: String(
+        (teacher as any).name || (user as any).name || 'Teacher'
+      ),
+      teacherEmail: userEmail,
+      rows: [],
+      hasPlan: false,
+      academyName: '',
+      planReason: 'no-academy' as PlanReason,
+    };
+  }
+
+  /* ---------- No Academy ---------- */
+  if (!(teacher as any).academyId) {
+    return {
+      teacherName: String(
+        (teacher as any).name || (user as any).name || 'Teacher'
+      ),
+      teacherEmail: userEmail,
+      rows: [],
+      hasPlan: false,
+      academyName: '',
+      planReason: 'no-academy' as PlanReason,
+    };
+  }
+
+  /* ---------- Academy ---------- */
+  const academy = await Academy.findById((teacher as any).academyId)
+    .select('name slug')
+    .lean();
+
+  if (!academy) {
+    return {
+      teacherName: String(
+        (teacher as any).name || (user as any).name || 'Teacher'
+      ),
+      teacherEmail: userEmail,
+      rows: [],
+      hasPlan: false,
+      academyName: '',
+      planReason: 'no-academy' as PlanReason,
+    };
+  }
+
+  /* ---------- Plan Check ---------- */
+  const planResult = await checkAcademyPlan((teacher as any).academyId);
+
+  if (!planResult.hasPlan) {
+    return {
+      teacherName: String(
+        (teacher as any).name || (user as any).name || 'Teacher'
+      ),
+      teacherEmail: userEmail,
+      rows: [],
+      hasPlan: false,
+      academyName: String((academy as any).name || ''),
+      planReason: planResult.reason,
+    };
+  }
+
+  /* ---------- Fetch Classes (active plan) ---------- */
   const assignments = await Assignment.find({
-    academyId: teacher.academyId,
-    teacherId: teacher._id,
+    academyId: (teacher as any).academyId,
+    teacherId: (teacher as any)._id,
     status: { $ne: 'cancelled' },
   })
     .select(
       [
-        'studentId', 'teacherId', 'courseId',
-        'daysOfWeek', 'startTime', 'endTime', 'status', 'notes',
-        'livekitRoomName', 'livekitHostIdentity', 'livekitProvider',
+        'studentId',
+        'teacherId',
+        'courseId',
+        'daysOfWeek',
+        'startTime',
+        'endTime',
+        'status',
+        'notes',
+        'livekitRoomName',
+        'livekitHostIdentity',
+        'livekitProvider',
       ].join(' ')
     )
     .sort({ startTime: 1, createdAt: 1 })
@@ -131,19 +342,23 @@ async function getTeacherSchedule() {
   ];
 
   const [students, courses] = await Promise.all([
-    Student.find({
-      _id: { $in: studentIds },
-      academyId: teacher.academyId,
-    })
-      .select('name fatherName')
-      .lean(),
+    studentIds.length
+      ? Student.find({
+          _id: { $in: studentIds },
+          academyId: (teacher as any).academyId,
+        })
+          .select('name fatherName')
+          .lean()
+      : Promise.resolve([]),
 
-    Course.find({
-      _id: { $in: courseIds },
-      academyId: teacher.academyId,
-    })
-      .select('name title')
-      .lean(),
+    courseIds.length
+      ? Course.find({
+          _id: { $in: courseIds },
+          academyId: (teacher as any).academyId,
+        })
+          .select('name title')
+          .lean()
+      : Promise.resolve([]),
   ]);
 
   const studentMap = new Map(
@@ -163,7 +378,7 @@ async function getTeacherSchedule() {
     ])
   );
 
-  /* Merge same class across multiple weekday records */
+  /* ---------- Merge Same Class ---------- */
   const mergedClasses = new Map<string, any>();
 
   for (const assignment of assignments as any[]) {
@@ -189,7 +404,6 @@ async function getTeacherSchedule() {
         endTime: String(assignment.endTime || ''),
         status: String(assignment.status || 'scheduled'),
         notes: String(assignment.notes || ''),
-        // ✅ LiveKit fields
         livekitRoomName: String(assignment.livekitRoomName || ''),
         livekitHostIdentity: String(assignment.livekitHostIdentity || ''),
         livekitProvider: String(assignment.livekitProvider || 'none'),
@@ -226,20 +440,39 @@ async function getTeacherSchedule() {
   rows.sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
 
   return {
-    teacherName: String(teacher.name || (user as any).name || 'Teacher'),
+    teacherName: String(
+      (teacher as any).name || (user as any).name || 'Teacher'
+    ),
     teacherEmail: userEmail,
     rows,
+    hasPlan: true,
+    academyName: String((academy as any).name || ''),
+    planReason: 'active' as PlanReason,
   };
 }
 
+/* ============================================================
+   PAGE
+   ============================================================ */
+
 export default async function TeacherClassesPage() {
-  const { teacherName, teacherEmail, rows } = await getTeacherSchedule();
+  const {
+    teacherName,
+    teacherEmail,
+    rows,
+    hasPlan,
+    academyName,
+    planReason,
+  } = await getTeacherSchedule();
 
   return (
     <ClassesView
       teacherName={teacherName}
       teacherEmail={teacherEmail}
       classes={rows}
+      hasPlan={hasPlan}
+      academyName={academyName}
+      planReason={planReason}
     />
   );
 }
