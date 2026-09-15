@@ -17,157 +17,6 @@ type JwtPayload = {
   role?: string;
 };
 
-type ZoomMeResponse = {
-  id?: string;
-  email?: string;
-  first_name?: string;
-  last_name?: string;
-};
-
-/* ============================================================
-   ENV HELPER
-   ============================================================ */
-
-function getEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is not configured`);
-  }
-  return value;
-}
-
-/* ============================================================
-   ZOOM HELPERS
-   ============================================================ */
-
-/**
- * Get a fresh Server-to-Server OAuth access token from Zoom.
- */
-async function getZoomAccessToken(): Promise<string> {
-  const accountId = getEnv('ZOOM_ACCOUNT_ID');
-  const clientId = getEnv('ZOOM_CLIENT_ID');
-  const clientSecret = getEnv('ZOOM_CLIENT_SECRET');
-
-  const basicAuth = Buffer.from(
-    `${clientId}:${clientSecret}`
-  ).toString('base64');
-
-  const body = new URLSearchParams();
-  body.set('grant_type', 'account_credentials');
-  body.set('account_id', accountId);
-
-  const response = await fetch('https://zoom.us/oauth/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${basicAuth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-    cache: 'no-store',
-  });
-
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok || !data?.access_token) {
-    console.error('Zoom token error:', data);
-    throw new Error(
-      data?.reason ||
-        data?.message ||
-        `Zoom authentication failed (HTTP ${response.status})`
-    );
-  }
-
-  return String(data.access_token);
-}
-
-/**
- * Get the Zoom account owner's actual Zoom User ID.
- */
-async function getZoomAccountUser(accessToken: string): Promise<{
-  userId: string;
-  email: string;
-}> {
-  const response = await fetch('https://api.zoom.us/v2/users/me', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-store',
-  });
-
-  const data = (await response.json().catch(() => null)) as
-    | ZoomMeResponse
-    | null;
-
-  if (!response.ok) {
-    console.error('Zoom /users/me error:', data);
-    throw new Error(
-      `Unable to read Zoom account information (HTTP ${response.status})`
-    );
-  }
-
-  if (!data?.id) {
-    throw new Error('Zoom account user ID was not returned.');
-  }
-
-  return {
-    userId: String(data.id),
-    email: String(data.email || ''),
-  };
-}
-
-/**
- * Configure the Academy's Zoom host account.
- * Errors are swallowed — academy save should not fail.
- */
-async function configureAcademyZoom(academy: any): Promise<{
-  connected: boolean;
-  accountId: string;
-  hostUserId: string;
-  hostEmail: string;
-}> {
-  try {
-    const accountId = getEnv('ZOOM_ACCOUNT_ID');
-    const accessToken = await getZoomAccessToken();
-    const zoomUser = await getZoomAccountUser(accessToken);
-
-    academy.zoomConnected = true;
-    academy.zoomAccountId = accountId;
-    academy.zoomHostUserId = zoomUser.userId;
-    academy.zoomHostEmail = zoomUser.email;
-
-    await academy.save();
-
-    return {
-      connected: true,
-      accountId,
-      hostUserId: zoomUser.userId,
-      hostEmail: zoomUser.email,
-    };
-  } catch (error) {
-    /* ✅ Zoom errors لاگ ہوں گے لیکن academy save ہو گا */
-    console.warn(
-      'Zoom configuration skipped:',
-      error instanceof Error ? error.message : error
-    );
-
-    academy.zoomConnected = false;
-    academy.zoomAccountId = '';
-    academy.zoomHostUserId = '';
-    academy.zoomHostEmail = '';
-
-    await academy.save();
-
-    return {
-      connected: false,
-      accountId: '',
-      hostUserId: '',
-      hostEmail: '',
-    };
-  }
-}
-
 /* ============================================================
    POST — Create / Update Academy
    ============================================================ */
@@ -182,10 +31,7 @@ export async function POST(request: NextRequest) {
     const token = cookieStore.get('token')?.value;
 
     if (!token) {
-      return NextResponse.redirect(
-        new URL('/login', request.url),
-        303 // ✅ POST → GET conversion
-      );
+      return NextResponse.redirect(new URL('/login', request.url), 303);
     }
 
     let userId = '';
@@ -201,25 +47,16 @@ export async function POST(request: NextRequest) {
       userId = String(decoded.userId || '');
       userRole = String(decoded.role || '');
     } catch {
-      return NextResponse.redirect(
-        new URL('/login', request.url),
-        303
-      );
+      return NextResponse.redirect(new URL('/login', request.url), 303);
     }
 
     if (!userId) {
-      return NextResponse.redirect(
-        new URL('/login', request.url),
-        303
-      );
+      return NextResponse.redirect(new URL('/login', request.url), 303);
     }
 
     /* Only owner/admin can manage academy */
     if (userRole !== 'owner' && userRole !== 'admin') {
-      return NextResponse.redirect(
-        new URL('/', request.url),
-        303
-      );
+      return NextResponse.redirect(new URL('/', request.url), 303);
     }
 
     /* --------------------------------------------------
@@ -229,19 +66,14 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
 
     const name = String(formData.get('name') || '').trim();
-    const description = String(
-      formData.get('description') || ''
-    ).trim();
+    const description = String(formData.get('description') || '').trim();
     const contactEmail = String(formData.get('contactEmail') || '')
       .trim()
       .toLowerCase();
     const logo = String(formData.get('logo') || '').trim();
-    const thumbnail = String(
-      formData.get('thumbnail') || ''
-    ).trim();
+    const thumbnail = String(formData.get('thumbnail') || '').trim();
     const accentColor =
-      String(formData.get('accentColor') || '#10b981').trim() ||
-      '#10b981';
+      String(formData.get('accentColor') || '#10b981').trim() || '#10b981';
     const address = String(formData.get('address') || '').trim();
 
     let slug = String(formData.get('slug') || '')
@@ -272,9 +104,7 @@ export async function POST(request: NextRequest) {
        5. Find existing academy
     -------------------------------------------------- */
 
-    const existingAcademy = await Academy.findOne({
-      ownerId: userId,
-    });
+    const existingAcademy = await Academy.findOne({ ownerId: userId });
 
     /* --------------------------------------------------
        6. Slug preparation
@@ -299,9 +129,7 @@ export async function POST(request: NextRequest) {
 
     const slugExists = await Academy.findOne({
       slug: finalSlug,
-      ...(existingAcademy
-        ? { _id: { $ne: existingAcademy._id } }
-        : {}),
+      ...(existingAcademy ? { _id: { $ne: existingAcademy._id } } : {}),
     });
 
     if (slugExists) {
@@ -339,12 +167,6 @@ export async function POST(request: NextRequest) {
         slug: finalSlug,
         isActive: true,
 
-        /* Zoom defaults */
-        zoomConnected: false,
-        zoomAccountId: '',
-        zoomHostUserId: '',
-        zoomHostEmail: '',
-
         /* Followers + Ratings defaults */
         followers: [],
         followerCount: 0,
@@ -355,23 +177,11 @@ export async function POST(request: NextRequest) {
     }
 
     /* --------------------------------------------------
-       9. Configure Zoom (non-blocking)
-    -------------------------------------------------- */
-
-    const zoomResult = await configureAcademyZoom(academy);
-
-    /* --------------------------------------------------
-       10. Redirect with 303 (POST → GET) ✅
+       9. Redirect with 303 (POST → GET)
     -------------------------------------------------- */
 
     const redirectUrl = new URL('/owner/academy', request.url);
     redirectUrl.searchParams.set('success', 'true');
-
-    if (zoomResult.connected) {
-      redirectUrl.searchParams.set('zoom', 'connected');
-    } else {
-      redirectUrl.searchParams.set('zoom', 'not-configured');
-    }
 
     return NextResponse.redirect(redirectUrl, 303);
   } catch (error) {
@@ -381,9 +191,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : 'Internal server error',
+          error instanceof Error ? error.message : 'Internal server error',
       },
       { status: 500 }
     );
