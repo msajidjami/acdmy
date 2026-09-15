@@ -1,115 +1,104 @@
-// app/api/auth/google/callback/route.ts
-
-import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-
-import dbConnect from "@/app/lib/dbConnect";
-import User from "@/models/User";
+import { NextRequest, NextResponse } from 'next/server';
+import jwt from 'jsonwebtoken';
+import dbConnect from '@/app/lib/dbConnect';
+import User from '@/models/User';
+import { setAuthCookie } from '@/app/lib/cookies';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const JWT_SECRET = process.env.JWT_SECRET!;
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 const REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || `${APP_URL}/api/auth/google/callback`;
 
 export async function GET(req: NextRequest) {
-  // ✅ state سے redirect منزل لیں
-  const redirectTo = req.nextUrl.searchParams.get("state") || "/";
+  // state decode
+  let redirectTo = '/';
+  try {
+    const stateParam = req.nextUrl.searchParams.get('state') || '';
+    const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+    redirectTo = decoded.redirectTo || '/';
+  } catch {
+    redirectTo = '/';
+  }
 
   try {
-    const code = req.nextUrl.searchParams.get("code");
-    const errorParam = req.nextUrl.searchParams.get("error");
+    const code = req.nextUrl.searchParams.get('code');
+    const errorParam = req.nextUrl.searchParams.get('error');
 
     if (errorParam) {
-      return NextResponse.redirect(
-        new URL(`/login?error=${errorParam}`, req.url)
-      );
+      return NextResponse.redirect(new URL(`/login?error=${errorParam}`, req.url));
     }
-
     if (!code) {
-      return NextResponse.redirect(new URL("/login?error=NoCode", req.url));
+      return NextResponse.redirect(new URL('/login?error=NoCode', req.url));
+    }
+    if (!JWT_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      console.error('❌ Missing Google/JWT env vars');
+      return NextResponse.redirect(new URL('/login?error=ServerConfig', req.url));
     }
 
     // 1. code → access token
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
         redirect_uri: REDIRECT_URI,
-        grant_type: "authorization_code",
+        grant_type: 'authorization_code',
       }),
     });
-
-    const tokenData = await tokenResponse.json();
-
-    if (!tokenResponse.ok) {
-      console.error("Google Token Error:", tokenData);
-      return NextResponse.redirect(new URL("/login?error=TokenError", req.url));
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      console.error('Google Token Error:', tokenData);
+      return NextResponse.redirect(new URL('/login?error=TokenError', req.url));
     }
 
     // 2. access token → profile
-    const profileResponse = await fetch(
-      "https://www.googleapis.com/oauth2/v2/userinfo",
-      { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
-    );
-    const profile = await profileResponse.json();
-
-    if (!profileResponse.ok) {
-      console.error("Google Profile Error:", profile);
-      return NextResponse.redirect(
-        new URL("/login?error=ProfileError", req.url)
-      );
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await profileRes.json();
+    if (!profileRes.ok || !profile.email) {
+      return NextResponse.redirect(new URL('/login?error=ProfileError', req.url));
     }
 
     const { id: googleId, email, name, picture } = profile;
 
-    if (!email) {
-      return NextResponse.redirect(new URL("/login?error=NoEmail", req.url));
-    }
-
     await dbConnect();
-
     const user = await User.findOne({ email: email.toLowerCase() });
 
-    // ═══════════════════════════════════════════════════════
-    // ✅ نیا user — Role انتخاب کرنے کے لیے بھیجیں
-    // ═══════════════════════════════════════════════════════
+    // نیا user → role منتخب کرنے کے لیے
     if (!user) {
       const tempToken = jwt.sign(
         {
-          type: "google-signup",
+          type: 'google-signup',
           googleId,
           email: email.toLowerCase(),
-          name: name || email.split("@")[0],
-          avatar: picture || "",
-          redirectTo, // ✅ اگلے مرحلے کے لیے محفوظ
+          name: name || email.split('@')[0],
+          avatar: picture || '',
+          redirectTo,
         },
         JWT_SECRET,
-        { expiresIn: "15m" }
+        { expiresIn: '15m' }
       );
 
-      const response = NextResponse.redirect(new URL("/choose-role", req.url));
+      const response = NextResponse.redirect(new URL('/choose-role', req.url));
       response.cookies.set({
-        name: "google_temp",
+        name: 'google_temp',
         value: tempToken,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
         maxAge: 60 * 15,
       });
       return response;
     }
 
-    // ═══════════════════════════════════════════════════════
-    // ✅ پرانا user — سیدھا ہوم پیج پر بھیجیں
-    // ═══════════════════════════════════════════════════════
-    user.provider = user.provider || "google";
+    // پرانا user → سیدھا login
+    user.provider = 'google';
     user.googleId = googleId;
     user.avatar = picture || user.avatar;
     user.isVerified = true;
@@ -126,23 +115,14 @@ export async function GET(req: NextRequest) {
         provider: user.provider,
       },
       JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: '7d' }
     );
 
-    // ✅ '/' پر بھیجیں، '/dashboard' پر نہیں
     const response = NextResponse.redirect(new URL(redirectTo, req.url));
-    response.cookies.set({
-      name: "token",
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    setAuthCookie(response, token); // ✅ helper
     return response;
   } catch (error) {
-    console.error("Google Callback Error:", error);
-    return NextResponse.redirect(new URL("/login?error=ServerError", req.url));
+    console.error('Google Callback Error:', error);
+    return NextResponse.redirect(new URL('/login?error=ServerError', req.url));
   }
 }

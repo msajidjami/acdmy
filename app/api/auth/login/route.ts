@@ -3,11 +3,17 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dbConnect from '@/app/lib/dbConnect';
 import User from '@/models/User';
+import { setAuthCookie } from '@/app/lib/cookies';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
+    if (!JWT_SECRET) {
+      console.error('❌ JWT_SECRET missing');
+      return NextResponse.json({ message: 'Server config error' }, { status: 500 });
+    }
+
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -19,7 +25,6 @@ export async function POST(req: NextRequest) {
 
     await dbConnect();
 
-    /* ✅ +password سے select کریں ورنہ schema کی select:false کی وجہ سے نہیں آئے گا */
     const user = await User.findOne({
       email: String(email).toLowerCase().trim(),
     }).select('+password');
@@ -31,19 +36,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ✅ Google users کے پاس password نہیں ہوتا */
     if (!user.password) {
       return NextResponse.json(
-        {
-          message:
-            'This account was created with Google. Please sign in with Google.',
-        },
+        { message: 'This account was created with Google. Please sign in with Google.' },
         { status: 401 }
       );
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return NextResponse.json(
         { message: 'Invalid email or password' },
@@ -81,16 +81,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
 
-    response.cookies.set({
-      name: 'token',
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
+    setAuthCookie(response, token); // ✅ helper
     return response;
   } catch (error) {
     console.error('login error:', error);

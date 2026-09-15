@@ -1,119 +1,155 @@
+// app/api/auth/signup/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/dbConnect';
 import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET;
-
-// ✅ Role کی type محفوظ طریقے سے define کریں
+// ============================================================
+// Types
+// ============================================================
 type UserRole = 'admin' | 'owner' | 'teacher' | 'user' | 'student';
 
-const PUBLIC_ROLES: UserRole[] = ['user', 'student', 'owner'];
+const PUBLIC_ROLES: readonly UserRole[] = ['user', 'student', 'owner'] as const;
+const VALID_ROLES: readonly UserRole[] = [
+  'admin',
+  'owner',
+  'teacher',
+  'user',
+  'student',
+] as const;
 
-// ----- Helper to check MongoDB duplicate key error -----
+// ============================================================
+// Helpers
+// ============================================================
 function isDuplicateKeyError(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    (error as any).code === 11000
+    (error as { code?: number }).code === 11000
   );
 }
 
+function isValidEmail(email: string): boolean {
+  // سادہ لیکن کافی email regex
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ success: false, message }, { status });
+}
+
+// ============================================================
+// POST /api/auth/signup
+// ============================================================
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
+    // ✅ env var کو request کے وقت پڑھیں (serverless میں محفوظ)
+    const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
-    const body = await request.json();
-    const { name, email, password, role, secretCode } = body;
-
-    if (!name || !email || !password || !role) {
-      return NextResponse.json(
-        { message: 'All required fields are required.' },
-        { status: 400 }
-      );
+    // ---------- Body parse ----------
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return jsonError('Invalid request body.', 400);
     }
 
+    const { name, email, password, role, secretCode } = body ?? {};
+
+    // ---------- Required fields ----------
+    if (!name || !email || !password || !role) {
+      return jsonError('All required fields are required.', 400);
+    }
+
+    // ---------- Normalize ----------
     const cleanName = String(name).trim();
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanRole = String(role).trim().toLowerCase() as UserRole;
+    const cleanPassword = String(password);
+    const cleanSecretCode =
+      typeof secretCode === 'string' ? secretCode.trim() : '';
 
-    if (!cleanName) {
-      return NextResponse.json(
-        { message: 'Name is required.' },
-        { status: 400 }
-      );
+    // ---------- Validate name ----------
+    if (cleanName.length < 2 || cleanName.length > 60) {
+      return jsonError('Name must be between 2 and 60 characters.', 400);
+    }
+
+    // ---------- Validate email ----------
+    if (!isValidEmail(cleanEmail)) {
+      return jsonError('Invalid email address.', 400);
     }
 
     if (!cleanEmail.endsWith('@gmail.com')) {
-      return NextResponse.json(
-        { message: 'Only Gmail addresses are allowed.' },
-        { status: 400 }
-      );
+      return jsonError('Only Gmail addresses are allowed.', 400);
     }
 
-    if (String(password).length < 6) {
-      return NextResponse.json(
-        { message: 'Password must be at least 6 characters.' },
-        { status: 400 }
-      );
+    // ---------- Validate password ----------
+    if (cleanPassword.length < 6) {
+      return jsonError('Password must be at least 6 characters.', 400);
     }
 
-    // ✅ public roles صرف یہی 3 ہیں
+    if (cleanPassword.length > 128) {
+      return jsonError('Password is too long.', 400);
+    }
+
+    // ---------- Validate role ----------
+    if (!VALID_ROLES.includes(cleanRole)) {
+      return jsonError('Invalid account type.', 400);
+    }
+
+    // عوامی طور پر صرف یہ 3 roles منتخب ہو سکتے ہیں
     if (!PUBLIC_ROLES.includes(cleanRole)) {
-      return NextResponse.json(
-        { message: 'Invalid account type.' },
-        { status: 400 }
-      );
+      return jsonError('Invalid account type.', 400);
     }
 
-    const existingUser = await User.findOne({ email: cleanEmail });
-    if (existingUser) {
-      return NextResponse.json(
-        { message: 'Email already registered.' },
-        { status: 400 }
-      );
-    }
-
-    // ✅ finalRole کو UserRole type دیں
+    // ---------- Admin secret (optional) ----------
     let finalRole: UserRole = cleanRole;
 
-    if (secretCode) {
+    if (cleanSecretCode) {
       if (!ADMIN_SECRET) {
-        console.error('ADMIN_SECRET is not configured in environment variables.');
-        return NextResponse.json(
-          { message: 'Admin registration is currently unavailable.' },
-          { status: 500 }
-        );
+        console.error('❌ ADMIN_SECRET is not configured in env vars');
+        return jsonError('Admin registration is currently unavailable.', 500);
       }
 
-      if (secretCode !== ADMIN_SECRET) {
-        return NextResponse.json(
-          { message: 'Invalid admin secret code.' },
-          { status: 400 }
-        );
+      if (cleanSecretCode !== ADMIN_SECRET) {
+        return jsonError('Invalid admin secret code.', 400);
       }
 
       finalRole = 'admin';
     }
 
-    const hashedPassword = await bcrypt.hash(String(password), 10);
+    // ---------- DB connect ----------
+    await connectDB();
 
-    // ✅ اب User.create کو صحیح type ملے گی
+    // ---------- Existing user check ----------
+    const existingUser = await User.findOne({ email: cleanEmail })
+      .select('_id')
+      .lean();
+
+    if (existingUser) {
+      return jsonError('Email already registered.', 409);
+    }
+
+    // ---------- Create user ----------
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+
     const user = await User.create({
       name: cleanName,
       email: cleanEmail,
       password: hashedPassword,
       role: finalRole,
-      provider: 'credentials',       // ✅ یہ بھی شامل کریں
+      provider: 'credentials',
       isVerified: false,
     });
 
     return NextResponse.json(
       {
+        success: true,
         message: 'User created successfully.',
         user: {
-          id: user._id,
+          id: user._id.toString(),
           name: user.name,
           email: user.email,
           role: user.role,
@@ -122,18 +158,12 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('❌ Signup error:', error);
 
     if (isDuplicateKeyError(error)) {
-      return NextResponse.json(
-        { message: 'Email already registered.' },
-        { status: 400 }
-      );
+      return jsonError('Email already registered.', 409);
     }
 
-    return NextResponse.json(
-      { message: 'Internal server error.' },
-      { status: 500 }
-    );
+    return jsonError('Something went wrong. Please try again.', 500);
   }
 }

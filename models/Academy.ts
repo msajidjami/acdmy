@@ -1,4 +1,4 @@
-import mongoose, { Schema, models, model, Model, Document, Types } from 'mongoose';
+import { Schema, models, model, Model, Document, Types } from 'mongoose';
 
 /* ============================================================
    TYPES
@@ -46,12 +46,6 @@ export interface IAcademy extends Document {
   ratings: IRating[];
   avgRating: number;
   ratingCount: number;
-
-  // Zoom
-  zoomConnected: boolean;
-  zoomAccountId: string;
-  zoomHostUserId: string;
-  zoomHostEmail: string;
 
   // ✅ Subscription / Billing
   isPublic: boolean;
@@ -200,22 +194,6 @@ const AcademySchema = new Schema<IAcademy>(
     },
 
     /* ========================================================
-       ZOOM
-       ======================================================== */
-    zoomConnected: { type: Boolean, default: false, index: true },
-
-    zoomAccountId: { type: String, default: '', trim: true },
-
-    zoomHostUserId: { type: String, default: '', trim: true, index: true },
-
-    zoomHostEmail: {
-      type: String,
-      default: '',
-      trim: true,
-      lowercase: true,
-    },
-
-    /* ========================================================
        ✅ SUBSCRIPTION / BILLING
        ======================================================== */
 
@@ -296,7 +274,6 @@ const AcademySchema = new Schema<IAcademy>(
    ============================================================ */
 
 AcademySchema.index({ ownerId: 1, isActive: 1 });
-AcademySchema.index({ zoomHostUserId: 1 });
 AcademySchema.index({ followerCount: -1 });
 AcademySchema.index({ avgRating: -1 });
 
@@ -328,15 +305,11 @@ AcademySchema.methods.recalculateStats = function () {
 };
 
 /* ============================================================
-   ✅ CACHE-SAFE EXPORT
+   ✅ CACHE-SAFE EXPORT (serverless / Next.js safe)
    ============================================================ */
 
-let Academy: Model<IAcademy>;
-
-if (models.Academy) {
-  delete mongoose.models.Academy;
-}
-
-Academy = model<IAcademy>('Academy', AcademySchema);
+const Academy: Model<IAcademy> =
+  (models.Academy as Model<IAcademy>) ||
+  model<IAcademy>('Academy', AcademySchema);
 
 export default Academy;
