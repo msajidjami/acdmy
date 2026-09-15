@@ -35,6 +35,15 @@ function getCheckoutUrl(planId: string, cycle: BillingCycle): string {
 }
 
 /* ============================================================
+   FREE TRIAL URL HELPER
+   ============================================================ */
+
+function getFreeTrialUrl(planId: string): string {
+  // Owner dashboard پر بھیجیں اور فری ٹرائل خودکار طور پر شروع کر دیں
+  return `/owner/dashboard?startTrial=true&plan=${planId}`;
+}
+
+/* ============================================================
    MAIN PAGE
    ============================================================ */
 
@@ -275,9 +284,12 @@ function PlanCard({
       ? Building2
       : Users;
 
-  /* ---------- CTA URL ---------- */
+  /* ---------- CTA URL ----------
+     فری پلان → سیدھا owner dashboard پر جائیں اور ٹرائل شروع کریں
+     باقی پلانز → checkout پر جائیں
+  */
   const ctaHref = isFree
-    ? '/register'
+    ? getFreeTrialUrl(plan.id)
     : getCheckoutUrl(plan.id, billingCycle);
 
   return (
