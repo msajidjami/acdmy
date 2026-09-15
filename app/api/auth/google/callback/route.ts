@@ -11,33 +11,53 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 const REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || `${APP_URL}/api/auth/google/callback`;
 
+// ✅ open redirect سے بچاؤ
+function safeRedirect(path: string | null | undefined): string {
+  if (!path) return '/';
+  if (!path.startsWith('/')) return '/';
+  if (path.startsWith('//')) return '/';
+  if (path.startsWith('/\\')) return '/';
+  return path;
+}
+
 export async function GET(req: NextRequest) {
-  // state decode
+  // ✅ default error redirect helper
+  const errorRedirect = (code: string) =>
+    NextResponse.redirect(new URL(`/login?error=${code}`, req.url));
+
+  // ---------- 1) state decode + verify ----------
   let redirectTo = '/';
   try {
     const stateParam = req.nextUrl.searchParams.get('state') || '';
-    const decoded = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
-    redirectTo = decoded.redirectTo || '/';
+    if (!stateParam) return errorRedirect('InvalidState');
+
+    const decoded = JSON.parse(
+      Buffer.from(stateParam, 'base64url').toString()
+    );
+
+    const cookieNonce = req.cookies.get('oauth_state')?.value;
+    if (!cookieNonce || !decoded.nonce || cookieNonce !== decoded.nonce) {
+      return errorRedirect('InvalidState');
+    }
+
+    redirectTo = safeRedirect(decoded.redirectTo);
   } catch {
-    redirectTo = '/';
+    return errorRedirect('InvalidState');
   }
 
   try {
     const code = req.nextUrl.searchParams.get('code');
     const errorParam = req.nextUrl.searchParams.get('error');
 
-    if (errorParam) {
-      return NextResponse.redirect(new URL(`/login?error=${errorParam}`, req.url));
-    }
-    if (!code) {
-      return NextResponse.redirect(new URL('/login?error=NoCode', req.url));
-    }
+    if (errorParam) return errorRedirect(errorParam);
+    if (!code) return errorRedirect('NoCode');
+
     if (!JWT_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
       console.error('❌ Missing Google/JWT env vars');
-      return NextResponse.redirect(new URL('/login?error=ServerConfig', req.url));
+      return errorRedirect('ServerConfig');
     }
 
-    // 1. code → access token
+    // ---------- 2) code → access token ----------
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -49,34 +69,44 @@ export async function GET(req: NextRequest) {
         grant_type: 'authorization_code',
       }),
     });
+
     const tokenData = await tokenRes.json();
-    if (!tokenRes.ok) {
+
+    if (!tokenRes.ok || !tokenData.access_token) {
       console.error('Google Token Error:', tokenData);
-      return NextResponse.redirect(new URL('/login?error=TokenError', req.url));
+      return errorRedirect('TokenError');
     }
 
-    // 2. access token → profile
-    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
+    // ---------- 3) access token → profile ----------
+    const profileRes = await fetch(
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      }
+    );
+
     const profile = await profileRes.json();
+
     if (!profileRes.ok || !profile.email) {
-      return NextResponse.redirect(new URL('/login?error=ProfileError', req.url));
+      console.error('Google Profile Error:', profile);
+      return errorRedirect('ProfileError');
     }
 
     const { id: googleId, email, name, picture } = profile;
+    const lowerEmail = email.toLowerCase();
 
+    // ---------- 4) DB ----------
     await dbConnect();
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: lowerEmail });
 
-    // نیا user → role منتخب کرنے کے لیے
+    // ✅ نیا user → role منتخب کرنے کے لیے
     if (!user) {
       const tempToken = jwt.sign(
         {
           type: 'google-signup',
           googleId,
-          email: email.toLowerCase(),
-          name: name || email.split('@')[0],
+          email: lowerEmail,
+          name: name || lowerEmail.split('@')[0],
           avatar: picture || '',
           redirectTo,
         },
@@ -84,7 +114,10 @@ export async function GET(req: NextRequest) {
         { expiresIn: '15m' }
       );
 
-      const response = NextResponse.redirect(new URL('/choose-role', req.url));
+      const response = NextResponse.redirect(
+        new URL('/choose-role', req.url)
+      );
+
       response.cookies.set({
         name: 'google_temp',
         value: tempToken,
@@ -94,18 +127,23 @@ export async function GET(req: NextRequest) {
         path: '/',
         maxAge: 60 * 15,
       });
+
+      // ✅ oauth_state اب کام ختم، delete کر دیں
+      response.cookies.delete('oauth_state');
+
       return response;
     }
 
-    // پرانا user → سیدھا login
-    user.provider = 'google';
-    user.googleId = googleId;
+    // ✅ پرانا user → provider کو صرف اسی صورت سیٹ کریں جب خالی ہو
+    if (!user.provider) user.provider = 'google';
+    if (!user.googleId) user.googleId = googleId;
     user.avatar = picture || user.avatar;
     user.isVerified = true;
     user.lastLogin = new Date();
     user.loginCount = (user.loginCount || 0) + 1;
     await user.save();
 
+    // ---------- 5) JWT ----------
     const token = jwt.sign(
       {
         userId: user._id.toString(),
@@ -118,11 +156,19 @@ export async function GET(req: NextRequest) {
       { expiresIn: '7d' }
     );
 
-    const response = NextResponse.redirect(new URL(redirectTo, req.url));
-    setAuthCookie(response, token); // ✅ helper
+    const response = NextResponse.redirect(
+      new URL(redirectTo, req.url)
+    );
+
+    setAuthCookie(response, token);
+
+    // ✅ cleanup
+    response.cookies.delete('oauth_state');
+    response.cookies.delete('google_temp');
+
     return response;
   } catch (error) {
     console.error('Google Callback Error:', error);
-    return NextResponse.redirect(new URL('/login?error=ServerError', req.url));
+    return errorRedirect('ServerError');
   }
 }
