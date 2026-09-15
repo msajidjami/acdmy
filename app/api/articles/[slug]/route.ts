@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
+
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/models/Article';
-import mongoose from 'mongoose';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: NextRequest,
@@ -11,24 +15,33 @@ export async function GET(
     await connectDB();
     const { slug } = await params;
 
-    // Try to find by slug
-    let article = await Article.findOne({ slug }).lean();
+    let article = await Article.findOne({ slug, status: 'published' }).lean();
 
-    // If not found and slug is a valid ObjectId, try by ID
     if (!article && mongoose.Types.ObjectId.isValid(slug)) {
-      article = await Article.findById(slug).lean();
+      article = await Article.findOne({
+        _id: slug,
+        status: 'published',
+      }).lean();
     }
 
     if (!article) {
-      return NextResponse.json({ error: 'Article not found' }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: 'Article not found' },
+        { status: 404 }
+      );
     }
 
-    // ❌ Do NOT increment views here – we'll track unique views separately
-    // await Article.findByIdAndUpdate(article._id, { $inc: { views: 1 } });
+    // ✅ increment views (silent)
+    Article.updateOne({ _id: article._id }, { $inc: { views: 1 } }).catch(
+      () => {}
+    );
 
-    return NextResponse.json(article);
-  } catch (error) {
+    return NextResponse.json({ success: true, data: article });
+  } catch (error: any) {
     console.error('GET /api/articles/[slug] error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

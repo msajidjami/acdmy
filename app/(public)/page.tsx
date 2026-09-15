@@ -8,8 +8,8 @@ import HomeClient from '@/app/components/home/HomeClient';
 import StemBoardLauncher from '@/app/components/home/StemBoardLauncher';
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_APP_URL || 'https://www.quranandislamic.com';
-const SITE_NAME = 'OnlineAcadmiesHub';
+  process.env.NEXT_PUBLIC_APP_URL || 'https://www.ilmora786.com';
+const SITE_NAME = 'ilmora786';
 
 /* ============================================================
    METADATA
@@ -93,9 +93,9 @@ function StructuredData() {
     description:
       'A platform for discovering and creating online academies with live classes and interactive whiteboards.',
     sameAs: [
-      'https://facebook.com/onlineacadmieshub',
-      'https://twitter.com/onlineacadmieshub',
-      'https://linkedin.com/company/onlineacadmieshub',
+      'https://facebook.com/ilmora786',
+      'https://twitter.com/ilmora786',
+      'https://linkedin.com/company/ilmora786',
     ],
   };
 

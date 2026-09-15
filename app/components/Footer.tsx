@@ -20,12 +20,12 @@ export default function Footer() {
           <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-9 h-9 bg-gradient-to-br from-teal-600 to-emerald-500 rounded-xl flex items-center justify-center shadow-md shadow-teal-500/20">
-                <span className="text-white font-bold text-lg">G</span>
+                <span className="text-white font-bold text-lg">i</span>
               </div>
               <span className="text-xl font-bold text-white tracking-tight">
-                Online
+                ilmora
                 <span className="bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
-                  AcadmiesHub
+                  786
                 </span>
               </span>
             </div>
@@ -251,7 +251,7 @@ export default function Footer() {
           <p>
             © {currentYear}{' '}
             <span className="text-white/60 font-semibold">
-              OnlineAcadmiesHub
+              ilmora786
             </span>
             . All rights reserved.
           </p>
