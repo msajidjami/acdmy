@@ -10,8 +10,8 @@ export interface IUser extends Document {
   googleId?: string;
   avatar?: string;
   resetToken?: string;
-  resetTokenExpiry?: Date;
-  lastLogin?: Date;
+  resetTokenExpiry?: Date | null;
+  lastLogin?: Date | null;
   loginCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -31,7 +31,6 @@ const UserSchema = new Schema<IUser>(
       unique: true,
       lowercase: true,
       trim: true,
-      /* ✅ index: true ہٹا دیا — unique خود index بناتا ہے */
     },
 
     password: {
@@ -75,7 +74,7 @@ const UserSchema = new Schema<IUser>(
       default: '',
     },
 
-    /* ✅ field-level پر sparse ہٹا دیا */
+    /* ✅ sparse — صرف موجود ہونے پر index */
     resetToken: {
       type: String,
       default: undefined,
@@ -103,18 +102,24 @@ const UserSchema = new Schema<IUser>(
 );
 
 /* ============================================================
-   INDEXES — صرف یہاں ایک بار ڈیفائن کریں
+   INDEXES
    ============================================================ */
 
 UserSchema.index({ resetToken: 1 }, { sparse: true });
 
-/* ✅ Cache-safe export */
-let User: Model<IUser>;
+/* ============================================================
+   ✅ Cache-safe export — serverless (Vercel) کے لیے لازمی
+   ============================================================
+   `delete mongoose.models.User` غلط تھا کیونکہ:
+   - Serverless میں ہر request پر module re-evaluate ہوتا ہے
+   - delete کرنے سے race condition بنتا ہے → "Schema hasn't been registered" error
+   - Hot reload پر بھی مسائل پیدا کرتا ہے
 
-if (mongoose.models.User) {
-  delete mongoose.models.User;
-}
+   صحیح طریقہ: existing model کو reuse کریں
+   ============================================================ */
 
-User = mongoose.model<IUser>('User', UserSchema);
+const User: Model<IUser> =
+  (mongoose.models.User as Model<IUser>) ||
+  mongoose.model<IUser>('User', UserSchema);
 
 export default User;
