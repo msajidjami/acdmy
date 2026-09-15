@@ -14,8 +14,6 @@ import {
   PencilSquareIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  VideoCameraIcon,
-  InformationCircleIcon,
   ArrowRightIcon,
   SparklesIcon,
   UserGroupIcon,
@@ -34,7 +32,6 @@ export const dynamic = 'force-dynamic';
 type PageProps = {
   searchParams?: Promise<{
     success?: string;
-    zoom?: string;
   }>;
 };
 
@@ -71,10 +68,6 @@ export default async function OwnerAcademyPage({ searchParams }: PageProps) {
 
   const params = searchParams ? await searchParams : {};
   const isSuccess = params.success === 'true';
-
-  const zoomConnected =
-    academy?.zoomConnected === true && Boolean(academy?.zoomHostUserId);
-  const zoomNotConfigured = params.zoom === 'not-configured';
 
   /* ---------- Serialize ---------- */
   const academyData = academy
@@ -161,12 +154,6 @@ export default async function OwnerAcademyPage({ searchParams }: PageProps) {
             <p className="text-xs sm:text-sm text-emerald-700 mt-0.5">
               Academy information has been saved.
             </p>
-            {params.zoom === 'connected' && (
-              <p className="text-xs text-emerald-700 mt-1 flex items-center gap-1">
-                <VideoCameraIcon className="h-3.5 w-3.5" />
-                Zoom account connected successfully.
-              </p>
-            )}
           </div>
         </div>
       )}
@@ -241,122 +228,9 @@ export default async function OwnerAcademyPage({ searchParams }: PageProps) {
       )}
 
       {/* ============================================
-          ZOOM STATUS
-      ============================================ */}
-      {isEditing && (
-        <div
-          className={`relative overflow-hidden rounded-2xl border p-5 sm:p-6 shadow-sm ${
-            zoomConnected
-              ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50/40'
-              : 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/40'
-          }`}
-        >
-          <div className="flex items-start gap-4">
-            <div
-              className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                zoomConnected ? 'bg-emerald-100' : 'bg-amber-100'
-              }`}
-            >
-              {zoomConnected ? (
-                <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
-              ) : (
-                <ExclamationTriangleIcon className="h-6 w-6 text-amber-600" />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <VideoCameraIcon
-                  className={`h-4 w-4 ${
-                    zoomConnected ? 'text-emerald-600' : 'text-amber-600'
-                  }`}
-                />
-                <h2
-                  className={`font-bold text-sm sm:text-base ${
-                    zoomConnected ? 'text-emerald-800' : 'text-amber-800'
-                  }`}
-                >
-                  {zoomConnected
-                    ? 'Zoom Account Connected'
-                    : 'Zoom Account Not Configured'}
-                </h2>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    zoomConnected
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  {zoomConnected ? 'Active' : 'Setup Required'}
-                </span>
-              </div>
-
-              {zoomConnected ? (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-white/70 border border-emerald-100 p-3">
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">
-                      Host Email
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {(academy as any)?.zoomHostEmail || 'Not available'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-white/70 border border-emerald-100 p-3">
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">
-                      Zoom Host ID
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {(academy as any)?.zoomHostUserId || 'Not available'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-white/70 border border-emerald-100 p-3">
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">
-                      Account ID
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-800 mt-1 truncate font-medium">
-                      {(academy as any)?.zoomAccountId || 'Not available'}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3">
-                  <p className="text-xs sm:text-sm text-amber-700">
-                    Zoom is not configured for this academy yet.
-                  </p>
-                  <p className="text-xs text-amber-600 mt-1">
-                    Save this academy after configuring the Zoom Server-to-Server
-                    OAuth credentials in your environment.
-                  </p>
-
-                  {zoomNotConfigured && (
-                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-amber-200 text-amber-700 text-xs font-medium">
-                      <InformationCircleIcon className="h-3.5 w-3.5" />
-                      Zoom config missing from environment
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {zoomConnected && (
-                <p className="mt-3 text-[11px] text-emerald-600 flex items-center gap-1">
-                  <InformationCircleIcon className="h-3.5 w-3.5" />
-                  This Zoom account will be used as host for your online classes.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================
           FORM — Client Component
       ============================================ */}
-      <AcademyForm
-        academy={academyData}
-        isEditing={isEditing}
-      />
+      <AcademyForm academy={academyData} isEditing={isEditing} />
 
       {/* ============================================
           DANGER ZONE
