@@ -1,3 +1,4 @@
+// app/api/owner/students/[id]/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 import connectDB from '@/app/lib/dbConnect';
@@ -35,7 +36,6 @@ interface StudentBody {
    CONSTANTS
    ============================================================ */
 
-// ✅ FIXED: 'pending' شامل کیا
 const VALID_STATUSES = ['active', 'inactive', 'pending', 'graduated'] as const;
 
 /* ============================================================
@@ -155,7 +155,6 @@ export async function PUT(
        ------------------------------------------------------------ */
     if (body.status !== undefined) {
       const status = String(body.status).trim();
-      // ✅ FIXED: 'pending' supported
       if (!VALID_STATUSES.includes(status as any)) {
         return NextResponse.json(
           { error: 'Invalid student status.' },
@@ -222,8 +221,7 @@ export async function PUT(
       );
     }
 
-    const message =
-      error instanceof Error ? error.message : 'Server error';
+    const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -269,18 +267,53 @@ export async function DELETE(
       );
     }
 
+    /* ✅ Agar yeh student enrollment se linked tha,
+       to enrollment ka studentId null kar do taake dobara enroll ho sake */
+    if ((student as any).enrollmentId) {
+      try {
+        const Enrollment = (await import('@/models/Enrollment')).default;
+
+        await Enrollment.updateOne(
+          { _id: (student as any).enrollmentId },
+          {
+            $set: {
+              studentId: null,
+              /* Status ko 'cancelled' kar do taake student count clean rahe */
+              status: 'cancelled',
+              respondedAt: new Date(),
+              responseNote: 'Student removed from academy',
+            },
+          }
+        );
+      } catch (linkErr) {
+        console.warn('Failed to unlink enrollment:', linkErr);
+      }
+    }
+
     /* ------------------------------------------------------------
        ✅ DECREMENT STUDENT COUNT (0 سے کم نہ ہو)
        ------------------------------------------------------------ */
-    await Academy.findByIdAndUpdate(academy._id, [
-      {
-        $set: {
-          currentStudentCount: {
-            $max: [0, { $subtract: ['$currentStudentCount', 1] }],
+    await Academy.updateOne(
+      { _id: academy._id },
+      [
+        {
+          $set: {
+            currentStudentCount: {
+              $max: [
+                0,
+                {
+                  $subtract: [
+                    { $ifNull: ['$currentStudentCount', 0] },
+                    1,
+                  ],
+                },
+              ],
+            },
           },
         },
-      },
-    ]);
+      ],
+      { updatePipeline: true }
+    );
 
     return NextResponse.json({
       success: true,
@@ -288,8 +321,7 @@ export async function DELETE(
     });
   } catch (error: unknown) {
     console.error('DELETE /api/owner/students/[id] error:', error);
-    const message =
-      error instanceof Error ? error.message : 'Server error';
+    const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

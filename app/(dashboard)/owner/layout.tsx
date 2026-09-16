@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -22,6 +22,7 @@ import {
   FileText,
   Banknote,
   Wallet,
+  ClipboardList,
 } from 'lucide-react';
 
 /* ============================================================
@@ -59,9 +60,10 @@ const mainNavItems: NavItem[] = [
 const contentNavItems: NavItem[] = [
   { name: 'Courses', href: '/owner/courses', icon: BookOpen },
   { name: 'Assignments', href: '/owner/assignments', icon: Calendar },
+  { name: 'Enrollments', href: '/owner/enrollments', icon: ClipboardList }, // ✅ نیا
   { name: 'Articles', href: '/owner/articles', icon: FileText },
   { name: 'Student Payments', href: '/owner/payments', icon: Banknote },
-  { name: 'Teacher Payouts', href: '/owner/teacher-payments', icon: Wallet }, // ✅ نیا
+  { name: 'Teacher Payouts', href: '/owner/teacher-payments', icon: Wallet },
 ];
 
 const systemNavItems: NavItem[] = [
@@ -79,20 +81,66 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [ownerName, setOwnerName] = useState('Academy Owner');
+
+  /* Sidebar بند کریں جب route تبدیل ہو */
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
+
+  /* Owner کا نام لائیں */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/owner/profile', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (cancelled) return;
+        const name = d?.user?.name || d?.name;
+        if (name) setOwnerName(String(name));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
   const closeSidebar = () => setIsSidebarOpen(false);
 
-  const handleLogout = () => {
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC';
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      /* ignore */
+    }
+
+    document.cookie =
+      'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+
     router.push('/login');
+    router.refresh();
   };
 
+  /* ============================================================
+     IS ACTIVE — careful matching
+     ============================================================ */
   const isActive = (href: string) => {
-    /* ✅ Teacher Payouts کو Student Payments سے الگ رکھیں
-       ورنہ /owner/payments، /owner/teacher-payments کو بھی میچ کر لے گا */
+    /* Exact matches for ambiguous prefixes */
     if (href === '/owner/payments') {
-      return pathname === '/owner/payments' || pathname.startsWith('/owner/payments/');
+      return (
+        pathname === '/owner/payments' ||
+        pathname.startsWith('/owner/payments/')
+      );
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
@@ -305,7 +353,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 truncate">
-                    Academy Owner
+                    {ownerName}
                   </p>
                   <p className="text-[11px] text-slate-500 truncate">
                     Manage your academy
