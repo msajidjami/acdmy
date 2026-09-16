@@ -1,6 +1,6 @@
+// app/api/owner/students/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
 import connectDB from '@/app/lib/dbConnect';
 import Student from '@/models/Student';
 import Academy from '@/models/Academy';
@@ -31,6 +31,10 @@ interface StudentBody {
   subjects?: string[];
   status?: string;
   notes?: string;
+  /* ✅ naye optional fields (enrollment se linked ho to) */
+  userId?: string | null;
+  enrollmentId?: string | null;
+  enrollmentDate?: string;
 }
 
 /* ============================================================
@@ -81,30 +85,45 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    // ✅ Academy ID محفوظ کریں تاکہ TypeScript کو پتہ ہو
     const academyId = academy._id;
 
     /* ✅ Actual count sync */
-    const actualCount = await Student.countDocuments({
-      academyId,
-    });
+    const actualCount = await Student.countDocuments({ academyId });
 
-    // Cached count mismatch — sync کریں
     if (academy.currentStudentCount !== actualCount) {
       await Academy.findByIdAndUpdate(academyId, {
         $set: { currentStudentCount: actualCount },
       });
     }
 
+    /* ✅ Explicit fields — frontend ke "From Enrollment" badge ke liye
+       userId aur enrollmentId bahut zaroori hain */
     const students = await Student.find({ academyId })
+      .select(
+        [
+          'name',
+          'email',
+          'phone',
+          'parentName',
+          'parentPhone',
+          'address',
+          'subjects',
+          'status',
+          'notes',
+          'enrollmentDate',
+          'userId',
+          'enrollmentId',
+          'createdAt',
+          'updatedAt',
+        ].join(' ')
+      )
       .sort({ createdAt: -1 })
       .lean();
 
     return NextResponse.json(students);
   } catch (error: unknown) {
     console.error('GET /api/owner/students error:', error);
-    const message =
-      error instanceof Error ? error.message : 'Server error';
+    const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -127,7 +146,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No academy found' }, { status: 404 });
     }
 
-    // ✅ Academy ID محفوظ کریں
     const academyId = academy._id;
 
     /* ------------------------------------------------------------
@@ -164,6 +182,16 @@ export async function POST(req: NextRequest) {
     const status = String(body.status || 'active').trim();
     const notes = String(body.notes || '').trim();
 
+    /* ✅ Optional linked fields */
+    const enrollmentId =
+      body.enrollmentId && String(body.enrollmentId).trim()
+        ? String(body.enrollmentId).trim()
+        : null;
+    const linkedUserId =
+      body.userId && String(body.userId).trim()
+        ? String(body.userId).trim()
+        : null;
+
     /* ------------------------------------------------------------
        VALIDATION
        ------------------------------------------------------------ */
@@ -199,10 +227,7 @@ export async function POST(req: NextRequest) {
     /* ------------------------------------------------------------
        DUPLICATE CHECK
        ------------------------------------------------------------ */
-    const existing = await Student.findOne({
-      email,
-      academyId,
-    });
+    const existing = await Student.findOne({ email, academyId });
 
     if (existing) {
       return NextResponse.json(
@@ -228,17 +253,18 @@ export async function POST(req: NextRequest) {
       status,
       notes,
       academyId,
+      /* ✅ Enrollment se linked ho to set karo */
+      userId: linkedUserId,
+      enrollmentId,
       enrollmentDate: new Date(),
     });
 
     await newStudent.save();
 
     /* ------------------------------------------------------------
-       ✅ SYNC student count from actual DB count
+       SYNC student count
        ------------------------------------------------------------ */
-    const actualCount = await Student.countDocuments({
-      academyId,
-    });
+    const actualCount = await Student.countDocuments({ academyId });
 
     await Academy.findByIdAndUpdate(academyId, {
       $set: { currentStudentCount: actualCount },
@@ -259,8 +285,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const message =
-      error instanceof Error ? error.message : 'Server error';
+    const message = error instanceof Error ? error.message : 'Server error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
