@@ -14,12 +14,25 @@ import {
   BookOpenIcon, CalendarIcon, ClockIcon, VideoCameraIcon,
   CheckCircleIcon, AcademicCapIcon, UsersIcon, ClipboardDocumentListIcon,
   ExclamationTriangleIcon, ArrowPathIcon, SparklesIcon,
-  MagnifyingGlassIcon, FunnelIcon, LockClosedIcon, BellAlertIcon,
-  NoSymbolIcon, CalendarDaysIcon, SunIcon, PlayCircleIcon,
-  CheckBadgeIcon, FireIcon, SignalIcon, KeyIcon, GlobeAltIcon,
-  BanknotesIcon,
-  WalletIcon,
+  MagnifyingGlassIcon, FunnelIcon,
+  BellAlertIcon, NoSymbolIcon, CalendarDaysIcon, SunIcon, PlayCircleIcon,
+  CheckBadgeIcon, FireIcon, SignalIcon,
+  BanknotesIcon, WalletIcon,
 } from '@heroicons/react/24/outline';
+
+/* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
 
 /* ============================================================
    TYPES
@@ -45,7 +58,6 @@ interface Assignment {
   notes: string;
   feeAmount: number;
   currency: Currency;
-  /* ✅ Teacher fee */
   teacherFeeAmount: number;
   teacherCurrency: Currency;
   livekitRoomName: string;
@@ -70,7 +82,6 @@ interface AssignmentFormData {
   notes: string;
   feeAmount: string;
   currency: Currency;
-  /* ✅ Teacher fee */
   teacherFeeAmount: string;
   teacherCurrency: Currency;
   livekitRoomName: string;
@@ -92,7 +103,7 @@ const DAY_SHORT: Record<string, string> = {
 };
 
 const STATUS_META: Record<AssignmentStatus, { label: string; classes: string; dot: string }> = {
-  scheduled: { label: 'Scheduled', classes: 'bg-blue-50 text-blue-700 border-blue-100', dot: 'bg-blue-500' },
+  scheduled: { label: 'Scheduled', classes: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' },
   ongoing: { label: 'Ongoing', classes: 'bg-amber-50 text-amber-700 border-amber-100', dot: 'bg-amber-500' },
   completed: { label: 'Completed', classes: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' },
   cancelled: { label: 'Cancelled', classes: 'bg-rose-50 text-rose-700 border-rose-100', dot: 'bg-rose-500' },
@@ -101,7 +112,7 @@ const STATUS_META: Record<AssignmentStatus, { label: string; classes: string; do
 const TIME_STATUS_META: Record<TimeStatus, { label: string; classes: string; dot: string; icon: string }> = {
   alarm: { label: 'Starting Soon', classes: 'bg-orange-100 text-orange-800 border-orange-300', dot: 'bg-orange-500', icon: '🔔' },
   ongoing: { label: 'Live Now', classes: 'bg-emerald-100 text-emerald-800 border-emerald-300', dot: 'bg-emerald-500', icon: '🟢' },
-  upcoming: { label: 'Upcoming', classes: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500', icon: '⏰' },
+  upcoming: { label: 'Upcoming', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: '⏰' },
   completed: { label: 'Completed', classes: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', icon: '✓' },
   off: { label: 'Off Today', classes: 'bg-slate-50 text-slate-500 border-slate-200', dot: 'bg-slate-300', icon: '—' },
 };
@@ -228,7 +239,6 @@ export default function AssignmentsClient() {
     return () => clearInterval(id);
   }, []);
 
-  /* ---------- Fetch ---------- */
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -259,7 +269,6 @@ export default function AssignmentsClient() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  /* ---------- Form actions ---------- */
   const handleDayToggle = (day: string) => {
     setFormData((p) => ({
       ...p,
@@ -345,7 +354,6 @@ export default function AssignmentsClient() {
     return true;
   };
 
-  /* ---------- LiveKit ---------- */
   const createLiveKitRoom = async () => {
     if (!validateForm()) return;
     const t = teachers.find((x) => x._id === formData.teacherId);
@@ -400,7 +408,6 @@ export default function AssignmentsClient() {
     }
   };
 
-  /* ---------- Submit ---------- */
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -496,7 +503,6 @@ export default function AssignmentsClient() {
     }
   };
 
-  /* ---------- Derived ---------- */
   const assignedStudentIds = useMemo(
     () => new Set(assignments.map((a) => a.studentId?._id).filter(Boolean) as string[]),
     [assignments]
@@ -604,28 +610,24 @@ export default function AssignmentsClient() {
     );
   }, [students, studentSearch]);
 
-  /* ---------- Loading ---------- */
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-indigo-600 mx-auto" />
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-emerald-600 mx-auto" />
           <p className="text-slate-500 mt-4 text-sm font-medium">Loading...</p>
         </div>
       </div>
     );
   }
 
-  /* ============================================================
-     RENDER
-     ============================================================ */
   return (
-    <div dir="ltr" className="space-y-6 sm:space-y-8">
+    <div dir="ltr" className="space-y-6 sm:space-y-8" style={FONT_BODY}>
       {/* HERO */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-700 to-fuchsia-700 p-6 sm:p-8 shadow-xl">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-800 to-teal-800 p-6 sm:p-8 shadow-xl">
         <div className="absolute inset-0 opacity-20 pointer-events-none">
           <div className="absolute -top-16 -right-10 w-64 h-64 bg-white rounded-full blur-3xl" />
-          <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-purple-300 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-teal-300 rounded-full blur-3xl" />
         </div>
         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-start gap-4 min-w-0">
@@ -637,9 +639,14 @@ export default function AssignmentsClient() {
                 <SparklesIcon className="h-3 w-3" />
                 LiveKit Class Management
               </div>
-              <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-white leading-tight">Assignments</h1>
+              <h1
+                className="mt-2 text-4xl sm:text-5xl tracking-wider text-white leading-[0.95]"
+                style={FONT_HEADING}
+              >
+                Assignments
+              </h1>
               <p className="mt-1 text-white/80 text-sm sm:text-base max-w-lg">
-                Assign one class to multiple students at once. Track student & teacher payments separately.
+                Assign one class to multiple students at once. Track student &amp; teacher payments separately.
               </p>
             </div>
           </div>
@@ -654,7 +661,8 @@ export default function AssignmentsClient() {
               type="button"
               onClick={() => openAddModal()}
               disabled={!canCreate}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white text-indigo-700 hover:bg-indigo-50 font-semibold text-sm rounded-xl shadow-lg transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+              style={FONT_INHERIT}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white text-emerald-700 hover:bg-emerald-50 font-semibold text-sm rounded-xl shadow-lg transition whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <PlusIcon className="h-4 w-4" />
               New Assignment
@@ -663,38 +671,45 @@ export default function AssignmentsClient() {
         </div>
       </div>
 
-      {/* FEE SUMMARY + LINKS TO PAYMENTS */}
+      {/* FEE SUMMARY + LINKS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Student Fees */}
         <div className="rounded-2xl bg-white border border-emerald-200 p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
             <div className="h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
               <BanknotesIcon className="h-6 w-6 text-emerald-600" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{formatMoney(totalFeeSum)}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold uppercase tracking-wider">
+          <p
+            className="text-3xl tracking-wider text-slate-900 leading-none"
+            style={FONT_HEADING}
+          >
+            {formatMoney(totalFeeSum)}
+          </p>
+          <p className="text-xs text-slate-500 mt-2 font-semibold uppercase tracking-wider">
             Student Fees (all classes)
           </p>
         </div>
 
-        {/* Teacher Payouts */}
-        <div className="rounded-2xl bg-white border border-violet-200 p-5 shadow-sm">
+        <div className="rounded-2xl bg-white border border-teal-200 p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <div className="h-11 w-11 rounded-xl bg-violet-50 flex items-center justify-center">
-              <AcademicCapIcon className="h-6 w-6 text-violet-600" />
+            <div className="h-11 w-11 rounded-xl bg-teal-50 flex items-center justify-center">
+              <AcademicCapIcon className="h-6 w-6 text-teal-600" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900">{formatMoney(totalTeacherFeeSum)}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold uppercase tracking-wider">
+          <p
+            className="text-3xl tracking-wider text-slate-900 leading-none"
+            style={FONT_HEADING}
+          >
+            {formatMoney(totalTeacherFeeSum)}
+          </p>
+          <p className="text-xs text-slate-500 mt-2 font-semibold uppercase tracking-wider">
             Teacher Payouts (all classes)
           </p>
         </div>
 
-        {/* Student Payments Link */}
         <Link
           href="/owner/payments"
-          className="group rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-5 shadow-lg hover:shadow-xl transition text-white flex flex-col justify-between"
+          className="group rounded-2xl bg-emerald-600 hover:bg-emerald-700 p-5 shadow-lg hover:shadow-xl transition text-white flex flex-col justify-between"
         >
           <div className="flex items-start justify-between mb-3">
             <div className="h-11 w-11 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
@@ -705,17 +720,21 @@ export default function AssignmentsClient() {
             </span>
           </div>
           <div>
-            <p className="text-lg font-bold">Student Payments</p>
-            <p className="text-xs text-white/80 mt-1">
+            <p
+              className="text-2xl tracking-wider leading-none"
+              style={FONT_HEADING}
+            >
+              Student Payments
+            </p>
+            <p className="text-xs text-white/80 mt-1.5">
               Track which students paid this month
             </p>
           </div>
         </Link>
 
-        {/* Teacher Payments Link */}
         <Link
           href="/owner/teacher-payments"
-          className="group rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 p-5 shadow-lg hover:shadow-xl transition text-white flex flex-col justify-between"
+          className="group rounded-2xl bg-teal-600 hover:bg-teal-700 p-5 shadow-lg hover:shadow-xl transition text-white flex flex-col justify-between"
         >
           <div className="flex items-start justify-between mb-3">
             <div className="h-11 w-11 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
@@ -726,8 +745,13 @@ export default function AssignmentsClient() {
             </span>
           </div>
           <div>
-            <p className="text-lg font-bold">Teacher Payouts</p>
-            <p className="text-xs text-white/80 mt-1">
+            <p
+              className="text-2xl tracking-wider leading-none"
+              style={FONT_HEADING}
+            >
+              Teacher Payouts
+            </p>
+            <p className="text-xs text-white/80 mt-1.5">
               Track what you owe each teacher
             </p>
           </div>
@@ -736,19 +760,22 @@ export default function AssignmentsClient() {
 
       {/* LIVE ALARMS */}
       {mounted && (todaysAlarms.length > 0 || todaysOngoing.length > 0) && (
-        <div className="relative overflow-hidden rounded-2xl border-2 border-orange-300 bg-gradient-to-r from-orange-50 via-amber-50 to-yellow-50 p-5 shadow-lg animate-pulse-slow">
+        <div className="relative overflow-hidden rounded-2xl border-2 border-orange-300 bg-orange-50 p-5 shadow-lg">
           <div className="relative flex items-start gap-4">
             <div className="h-12 w-12 rounded-xl bg-orange-100 border-2 border-orange-300 flex items-center justify-center shrink-0">
               <BellAlertIcon className="h-6 w-6 text-orange-600 animate-bounce" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-orange-900 text-base sm:text-lg">
+                <h3
+                  className="text-2xl tracking-wider text-orange-900"
+                  style={FONT_HEADING}
+                >
                   {todaysOngoing.length > 0 && todaysAlarms.length > 0
-                    ? '🔴 Live class + upcoming soon'
+                    ? 'Live class + upcoming soon'
                     : todaysOngoing.length > 0
-                    ? '🔴 A class is happening now'
-                    : '🔔 A class is starting soon'}
+                    ? 'A class is happening now'
+                    : 'A class is starting soon'}
                 </h3>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-orange-600 text-white px-2 py-0.5 rounded-full">
                   <FireIcon className="h-3 w-3" />
@@ -781,12 +808,17 @@ export default function AssignmentsClient() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
                 <CalendarDaysIcon className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-800">Today&apos;s Schedule</h2>
-                <p className="text-[11px] text-slate-500">{currentDayName} · {currentClock}</p>
+                <h2
+                  className="text-2xl tracking-wider text-slate-800 leading-none"
+                  style={FONT_HEADING}
+                >
+                  Today&apos;s Schedule
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-1">{currentDayName} · {currentClock}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -796,7 +828,7 @@ export default function AssignmentsClient() {
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
                 <PlayCircleIcon className="h-3.5 w-3.5" /> {todaysOngoing.length} live
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
                 <ClockIcon className="h-3.5 w-3.5" /> {todaysUpcoming.length} upcoming
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold">
@@ -812,7 +844,7 @@ export default function AssignmentsClient() {
                   <CalendarIcon className="h-6 w-6 text-slate-400" />
                 </div>
                 <p className="text-slate-600 font-semibold text-sm">No classes scheduled today</p>
-                <p className="text-slate-400 text-xs mt-1">Enjoy your day off 🎉</p>
+                <p className="text-slate-400 text-xs mt-1">Enjoy your day off</p>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -825,9 +857,9 @@ export default function AssignmentsClient() {
                       key={assignment._id}
                       className={`rounded-xl border p-3.5 ${
                         isAlarm
-                          ? 'border-orange-300 bg-gradient-to-r from-orange-50 to-amber-50 ring-2 ring-orange-200'
+                          ? 'border-orange-300 bg-orange-50 ring-2 ring-orange-200'
                           : isOngoing
-                          ? 'border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 ring-2 ring-emerald-200'
+                          ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-200'
                           : info.status === 'completed'
                           ? 'border-slate-200 bg-slate-50/70 opacity-80'
                           : 'border-slate-200 bg-white'
@@ -870,7 +902,7 @@ export default function AssignmentsClient() {
                               </span>
                             )}
                             {Number(assignment.teacherFeeAmount) > 0 && (
-                              <span className="inline-flex items-center gap-1 text-violet-600 font-bold">
+                              <span className="inline-flex items-center gap-1 text-teal-600 font-bold">
                                 <AcademicCapIcon className="h-3 w-3" />
                                 {formatMoney(assignment.teacherFeeAmount, assignment.teacherCurrency)}
                               </span>
@@ -880,7 +912,8 @@ export default function AssignmentsClient() {
                         <button
                           type="button"
                           onClick={() => openEditModal(assignment)}
-                          className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition"
+                          style={FONT_INHERIT}
+                          className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition"
                         >
                           <PencilSquareIcon className="h-4 w-4" />
                         </button>
@@ -921,32 +954,41 @@ export default function AssignmentsClient() {
       {/* STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
-          { title: 'Teachers', value: teachers.length, icon: AcademicCapIcon, gradient: 'from-indigo-500 to-blue-600', bg: 'bg-indigo-50', text: 'text-indigo-600' },
-          { title: 'Students', value: students.length, icon: UsersIcon, gradient: 'from-blue-500 to-cyan-600', bg: 'bg-blue-50', text: 'text-blue-600' },
-          { title: 'Assignments', value: assignments.length, icon: ClipboardDocumentListIcon, gradient: 'from-purple-500 to-pink-600', bg: 'bg-purple-50', text: 'text-purple-600' },
-          { title: 'Scheduled', value: scheduledCount, icon: CalendarIcon, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-50', text: 'text-amber-600' },
-          { title: 'LiveKit', value: livekitCount, icon: VideoCameraIcon, gradient: 'from-emerald-500 to-teal-600', bg: 'bg-emerald-50', text: 'text-emerald-600' },
+          { title: 'Teachers', value: teachers.length, icon: AcademicCapIcon, bg: 'bg-emerald-50', text: 'text-emerald-600' },
+          { title: 'Students', value: students.length, icon: UsersIcon, bg: 'bg-teal-50', text: 'text-teal-600' },
+          { title: 'Assignments', value: assignments.length, icon: ClipboardDocumentListIcon, bg: 'bg-emerald-50', text: 'text-emerald-700' },
+          { title: 'Scheduled', value: scheduledCount, icon: CalendarIcon, bg: 'bg-emerald-50', text: 'text-emerald-600' },
+          { title: 'LiveKit', value: livekitCount, icon: VideoCameraIcon, bg: 'bg-emerald-50', text: 'text-emerald-600' },
         ].map((s) => (
           <div key={s.title} className="group relative bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-xl transition overflow-hidden">
-            <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${s.gradient} opacity-0 group-hover:opacity-100 transition`} />
             <div className={`h-10 w-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}>
               <s.icon className={`h-5 w-5 ${s.text}`} />
             </div>
-            <p className="text-xl font-bold text-slate-900">{s.value}</p>
-            <p className="text-[11px] text-slate-500 mt-1 font-semibold uppercase tracking-wider">{s.title}</p>
+            <p
+              className="text-3xl tracking-wider text-slate-900 leading-none"
+              style={FONT_HEADING}
+            >
+              {s.value}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-2 font-semibold uppercase tracking-wider">{s.title}</p>
           </div>
         ))}
       </div>
 
       {/* REQUIREMENTS */}
       {!canCreate && (
-        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/40 p-5">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <div className="flex items-start gap-4">
             <div className="h-11 w-11 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
               <ExclamationTriangleIcon className="h-5 w-5 text-amber-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-slate-900 text-sm">Requirements</h3>
+              <h3
+                className="text-xl tracking-wider text-slate-900"
+                style={FONT_HEADING}
+              >
+                Requirements
+              </h3>
               <p className="text-xs text-slate-600 mt-1">
                 Add at least one teacher, student, and course before creating an assignment.
               </p>
@@ -978,7 +1020,8 @@ export default function AssignmentsClient() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search teachers or students..."
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-sm"
+                style={FONT_INHERIT}
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-sm"
               />
             </div>
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 overflow-x-auto">
@@ -997,7 +1040,8 @@ export default function AssignmentsClient() {
                 <button
                   key={opt.key}
                   onClick={() => setFilterKey(opt.key)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${filterKey === opt.key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}
+                  style={FONT_INHERIT}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${filterKey === opt.key ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-white'}`}
                 >
                   {opt.label}
                 </button>
@@ -1011,10 +1055,15 @@ export default function AssignmentsClient() {
       {filteredTeachers.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <AcademicCapIcon className="h-4 w-4 text-indigo-600" />
+            <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <AcademicCapIcon className="h-4 w-4 text-emerald-600" />
             </div>
-            <h2 className="text-lg font-bold text-slate-800">Teacher Assignments</h2>
+            <h2
+              className="text-2xl tracking-wider text-slate-800"
+              style={FONT_HEADING}
+            >
+              Teacher Assignments
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -1031,7 +1080,7 @@ export default function AssignmentsClient() {
 
               return (
                 <div key={teacher._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 px-5 py-4 text-white overflow-hidden">
+                  <div className="relative bg-gradient-to-br from-emerald-700 via-emerald-800 to-teal-800 px-5 py-4 text-white overflow-hidden">
                     <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/10 rounded-full" />
                     <div className="relative flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -1039,8 +1088,13 @@ export default function AssignmentsClient() {
                           {getInitials(teacher.name)}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-base font-bold truncate">{teacher.name}</h3>
-                          <p className="text-indigo-100 text-xs truncate">{teacher.email || 'No email'}</p>
+                          <h3
+                            className="text-xl tracking-wider truncate leading-none"
+                            style={FONT_HEADING}
+                          >
+                            {teacher.name}
+                          </h3>
+                          <p className="text-emerald-100 text-xs truncate mt-1">{teacher.email || 'No email'}</p>
                         </div>
                       </div>
                       <span className="px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs font-bold whitespace-nowrap border border-white/10 shrink-0">
@@ -1058,7 +1112,7 @@ export default function AssignmentsClient() {
                         </div>
                       )}
                       {teacherMonthlyPayment > 0 && (
-                        <div className="rounded-lg bg-violet-500/30 border border-violet-300/40 px-3 py-1.5 inline-flex items-center gap-2">
+                        <div className="rounded-lg bg-white/10 border border-white/20 px-3 py-1.5 inline-flex items-center gap-2">
                           <AcademicCapIcon className="h-3.5 w-3.5" />
                           <span className="text-[11px] font-bold">
                             Payout: {formatMoney(teacherMonthlyPayment, teacherPayoutCurrency)}/month
@@ -1097,7 +1151,7 @@ export default function AssignmentsClient() {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                                       {getInitials(a.studentId?.name || 'U')}
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -1134,7 +1188,7 @@ export default function AssignmentsClient() {
 
                                   <div className="mt-2 flex flex-wrap gap-2">
                                     {Number(a.feeAmount) > 0 && (
-                                      <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-2">
+                                      <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2">
                                         <BanknotesIcon className="h-3.5 w-3.5 text-emerald-600" />
                                         <span className="text-[11px] font-bold text-emerald-700">
                                           Student: {formatMoney(a.feeAmount, a.currency)}/month
@@ -1142,9 +1196,9 @@ export default function AssignmentsClient() {
                                       </div>
                                     )}
                                     {Number(a.teacherFeeAmount) > 0 && (
-                                      <div className="flex items-center gap-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200 rounded-lg p-2">
-                                        <AcademicCapIcon className="h-3.5 w-3.5 text-violet-600" />
-                                        <span className="text-[11px] font-bold text-violet-700">
+                                      <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-2">
+                                        <AcademicCapIcon className="h-3.5 w-3.5 text-teal-600" />
+                                        <span className="text-[11px] font-bold text-teal-700">
                                           Teacher: {formatMoney(a.teacherFeeAmount, a.teacherCurrency)}/month
                                         </span>
                                       </div>
@@ -1166,12 +1220,12 @@ export default function AssignmentsClient() {
                                       </span>
                                     )}
                                     {isAlarm && (
-                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-orange-600 text-white text-[10px] font-bold uppercase animate-pulse-slow">
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-orange-600 text-white text-[10px] font-bold uppercase">
                                         <BellAlertIcon className="h-3 w-3" /> Ringing
                                       </span>
                                     )}
                                     {isOngoing && (
-                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold uppercase animate-pulse-slow">
+                                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-bold uppercase">
                                         <PlayCircleIcon className="h-3 w-3" /> Live
                                       </span>
                                     )}
@@ -1195,7 +1249,8 @@ export default function AssignmentsClient() {
                                   <button
                                     type="button"
                                     onClick={() => openEditModal(a)}
-                                    className="h-8 w-8 rounded-md flex items-center justify-center text-indigo-600 hover:bg-indigo-50 transition"
+                                    style={FONT_INHERIT}
+                                    className="h-8 w-8 rounded-md flex items-center justify-center text-emerald-600 hover:bg-emerald-50 transition"
                                     title="Edit"
                                   >
                                     <PencilSquareIcon className="h-4 w-4" />
@@ -1204,6 +1259,7 @@ export default function AssignmentsClient() {
                                   <button
                                     type="button"
                                     onClick={() => deleteAssignment(a._id)}
+                                    style={FONT_INHERIT}
                                     className="h-8 w-8 rounded-md flex items-center justify-center text-rose-600 hover:bg-rose-50 transition"
                                     title="Delete"
                                   >
@@ -1223,7 +1279,8 @@ export default function AssignmentsClient() {
                       type="button"
                       onClick={() => openAddModal(teacher._id)}
                       disabled={students.length === 0 || courses.length === 0}
-                      className="w-full py-2.5 bg-white border-2 border-indigo-100 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-600 font-bold rounded-xl transition flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                      style={FONT_INHERIT}
+                      className="w-full py-2.5 bg-white border-2 border-emerald-100 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-600 font-bold rounded-xl transition flex items-center justify-center gap-2 text-sm disabled:opacity-50"
                     >
                       <PlusIcon className="h-4 w-4" />
                       Assign New Students
@@ -1244,7 +1301,12 @@ export default function AssignmentsClient() {
               <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <UsersIcon className="h-4 w-4 text-emerald-600" />
               </div>
-              <h2 className="text-lg font-bold text-slate-800">Student Directory</h2>
+              <h2
+                className="text-2xl tracking-wider text-slate-800"
+                style={FONT_HEADING}
+              >
+                Student Directory
+              </h2>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-[11px] font-bold border border-slate-200">
@@ -1284,7 +1346,7 @@ export default function AssignmentsClient() {
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`relative h-11 w-11 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm ${isAssigned ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'}`}>
+                    <div className={`relative h-11 w-11 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm ${isAssigned ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white' : 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white'}`}>
                       {getInitials(student.name)}
                       {hasAlarm && (
                         <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-orange-500 border-2 border-white flex items-center justify-center">
@@ -1319,7 +1381,8 @@ export default function AssignmentsClient() {
                     type="button"
                     onClick={() => openAddModal(undefined, student._id)}
                     disabled={teachers.length === 0 || courses.length === 0}
-                    className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition disabled:opacity-50 ${isAssigned ? 'bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50' : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'}`}
+                    style={FONT_INHERIT}
+                    className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition disabled:opacity-50 ${isAssigned ? 'bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                     title={isAssigned ? 'Add another' : 'Assign'}
                   >
                     <PlusIcon className="h-4 w-4" />
@@ -1343,16 +1406,18 @@ export default function AssignmentsClient() {
             className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95vh] sm:max-h-[92vh] overflow-hidden flex flex-col"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-100 bg-white">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shrink-0">
+                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0">
                     {editingAssignment ? <PencilSquareIcon className="h-5 w-5" /> : <PlusIcon className="h-5 w-5" />}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Class Management</p>
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Class Management</p>
+                    <h2
+                      className="text-2xl tracking-wider text-slate-900 truncate leading-none mt-0.5"
+                      style={FONT_HEADING}
+                    >
                       {editingAssignment ? 'Edit Assignment' : 'Create New Assignment'}
                     </h2>
                   </div>
@@ -1361,6 +1426,7 @@ export default function AssignmentsClient() {
                   type="button"
                   onClick={closeModal}
                   disabled={submitting || creatingRoom}
+                  style={FONT_INHERIT}
                   className="h-9 w-9 rounded-lg flex items-center justify-center bg-slate-50 hover:bg-slate-100 border border-slate-200 disabled:opacity-50"
                 >
                   <XMarkIcon className="h-5 w-5 text-slate-500" />
@@ -1373,11 +1439,14 @@ export default function AssignmentsClient() {
 
                 {/* TEACHER + COURSE */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <AcademicCapIcon className="h-4 w-4 text-indigo-600" />
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <AcademicCapIcon className="h-4 w-4 text-emerald-600" />
                     </div>
-                    Teacher & Course
+                    Teacher &amp; Course
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1388,7 +1457,8 @@ export default function AssignmentsClient() {
                         value={formData.teacherId}
                         onChange={(e) => setFormData((p) => ({ ...p, teacherId: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm cursor-pointer"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm cursor-pointer"
                       >
                         <option value="">Choose a teacher...</option>
                         {teachers.map((t) => (
@@ -1406,7 +1476,8 @@ export default function AssignmentsClient() {
                         value={formData.courseId}
                         onChange={(e) => setFormData((p) => ({ ...p, courseId: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm cursor-pointer"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm cursor-pointer"
                       >
                         <option value="">Choose a course...</option>
                         {courses.map((c) => (
@@ -1418,18 +1489,21 @@ export default function AssignmentsClient() {
                 </div>
 
                 {/* STUDENTS — Multi-select */}
-                <div className="bg-white p-5 rounded-2xl border-2 border-blue-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 flex-wrap">
-                    <div className="h-7 w-7 rounded-lg bg-blue-50 flex items-center justify-center">
-                      <UsersIcon className="h-4 w-4 text-blue-600" />
+                <div className="bg-white p-5 rounded-2xl border-2 border-emerald-200 shadow-sm">
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2 flex-wrap"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <UsersIcon className="h-4 w-4 text-emerald-600" />
                     </div>
                     Students
                     {!editingAssignment && (
-                      <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                         Multi-select
                       </span>
                     )}
-                    <span className="ml-auto text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                    <span className="ml-auto text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                       {formData.studentIds.length} selected
                     </span>
                   </h4>
@@ -1441,7 +1515,8 @@ export default function AssignmentsClient() {
                         setFormData((p) => ({ ...p, studentIds: e.target.value ? [e.target.value] : [] }))
                       }
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/40 text-sm cursor-pointer"
+                      style={FONT_INHERIT}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm cursor-pointer"
                     >
                       <option value="">Choose a student...</option>
                       {students.map((s) => (
@@ -1456,13 +1531,15 @@ export default function AssignmentsClient() {
                         <button
                           type="button"
                           onClick={selectAllStudents}
-                          className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+                          style={FONT_INHERIT}
+                          className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition"
                         >
                           Select All
                         </button>
                         <button
                           type="button"
                           onClick={clearAllStudents}
+                          style={FONT_INHERIT}
                           className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
                         >
                           Clear
@@ -1474,7 +1551,8 @@ export default function AssignmentsClient() {
                             value={studentSearch}
                             onChange={(e) => setStudentSearch(e.target.value)}
                             placeholder="Search students..."
-                            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-xs"
+                            style={FONT_INHERIT}
+                            className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-xs"
                           />
                         </div>
                       </div>
@@ -1491,8 +1569,8 @@ export default function AssignmentsClient() {
                                   key={s._id}
                                   className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 cursor-pointer transition ${
                                     selected
-                                      ? 'border-blue-500 bg-blue-50'
-                                      : 'border-slate-200 bg-white hover:border-blue-300'
+                                      ? 'border-emerald-500 bg-emerald-50'
+                                      : 'border-slate-200 bg-white hover:border-emerald-300'
                                   }`}
                                 >
                                   <input
@@ -1501,7 +1579,7 @@ export default function AssignmentsClient() {
                                     onChange={() => toggleStudent(s._id)}
                                     className="sr-only"
                                   />
-                                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${selected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                                     {getInitials(s.name)}
                                   </div>
                                   <div className="min-w-0 flex-1">
@@ -1509,7 +1587,7 @@ export default function AssignmentsClient() {
                                     <p className="text-[10px] text-slate-500 truncate">{s.email || '—'}</p>
                                   </div>
                                   {selected && (
-                                    <CheckCircleIcon className="h-4 w-4 text-blue-600 shrink-0" />
+                                    <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
                                   )}
                                 </label>
                               );
@@ -1519,8 +1597,8 @@ export default function AssignmentsClient() {
                       </div>
 
                       {formData.studentIds.length > 0 && (
-                        <p className="mt-3 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                          ✅ {formData.studentIds.length} assignment{formData.studentIds.length > 1 ? 's' : ''} will be created (one per student with the same schedule & fee).
+                        <p className="mt-3 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                          ✅ {formData.studentIds.length} assignment{formData.studentIds.length > 1 ? 's' : ''} will be created (one per student with the same schedule &amp; fee).
                         </p>
                       )}
                     </>
@@ -1529,9 +1607,12 @@ export default function AssignmentsClient() {
 
                 {/* SCHEDULE */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <CalendarIcon className="h-4 w-4 text-indigo-600" />
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <CalendarIcon className="h-4 w-4 text-emerald-600" />
                     </div>
                     Weekly Schedule
                   </h4>
@@ -1548,7 +1629,7 @@ export default function AssignmentsClient() {
                         <label
                           key={day}
                           className={`relative cursor-pointer rounded-xl border px-2 py-2.5 text-center transition ${
-                            selected ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                            selected ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
                           }`}
                         >
                           <input
@@ -1558,8 +1639,8 @@ export default function AssignmentsClient() {
                             className="sr-only"
                           />
                           <span className="block text-[11px] font-bold uppercase">{day.slice(0, 3)}</span>
-                          {isToday && <span className="block text-[8px] font-bold text-indigo-500 mt-0.5">Today</span>}
-                          {selected && <CheckCircleIcon className="absolute -top-2 -right-2 h-5 w-5 text-indigo-600 bg-white rounded-full" />}
+                          {isToday && <span className="block text-[8px] font-bold text-emerald-500 mt-0.5">Today</span>}
+                          {selected && <CheckCircleIcon className="absolute -top-2 -right-2 h-5 w-5 text-emerald-600 bg-white rounded-full" />}
                         </label>
                       );
                     })}
@@ -1582,7 +1663,8 @@ export default function AssignmentsClient() {
                         value={formData.startTime}
                         onChange={(e) => setFormData((p) => ({ ...p, startTime: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm"
                       />
                     </div>
                     <div>
@@ -1594,7 +1676,8 @@ export default function AssignmentsClient() {
                         value={formData.endTime}
                         onChange={(e) => setFormData((p) => ({ ...p, endTime: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm"
                       />
                     </div>
                   </div>
@@ -1602,7 +1685,10 @@ export default function AssignmentsClient() {
 
                 {/* STUDENT FEE */}
                 <div className="bg-white p-5 rounded-2xl border-2 border-emerald-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2 flex-wrap"
+                    style={FONT_HEADING}
+                  >
                     <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
                       <BanknotesIcon className="h-4 w-4 text-emerald-600" />
                     </div>
@@ -1618,6 +1704,7 @@ export default function AssignmentsClient() {
                       <select
                         value={formData.currency}
                         onChange={(e) => setFormData((p) => ({ ...p, currency: e.target.value as Currency }))}
+                        style={FONT_INHERIT}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm cursor-pointer font-semibold"
                       >
                         <option value="PKR">₨ PKR</option>
@@ -1639,6 +1726,7 @@ export default function AssignmentsClient() {
                           value={formData.feeAmount}
                           onChange={(e) => setFormData((p) => ({ ...p, feeAmount: e.target.value }))}
                           placeholder="0"
+                          style={FONT_INHERIT}
                           className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm font-bold"
                         />
                       </div>
@@ -1646,7 +1734,7 @@ export default function AssignmentsClient() {
                   </div>
 
                   {Number(formData.feeAmount) > 0 && formData.studentIds.length > 1 && (
-                    <div className="mt-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-3">
+                    <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3">
                       <p className="text-xs text-emerald-800">
                         <strong>{formData.studentIds.length} students</strong> × {formatMoney(Number(formData.feeAmount), formData.currency)} ={' '}
                         <strong className="text-emerald-900">{formatMoney(Number(formData.feeAmount) * formData.studentIds.length, formData.currency)}</strong> / month
@@ -1656,13 +1744,16 @@ export default function AssignmentsClient() {
                 </div>
 
                 {/* TEACHER PAYMENT */}
-                <div className="bg-white p-5 rounded-2xl border-2 border-violet-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 flex-wrap">
-                    <div className="h-7 w-7 rounded-lg bg-violet-50 flex items-center justify-center">
-                      <AcademicCapIcon className="h-4 w-4 text-violet-600" />
+                <div className="bg-white p-5 rounded-2xl border-2 border-teal-200 shadow-sm">
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2 flex-wrap"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center">
+                      <AcademicCapIcon className="h-4 w-4 text-teal-600" />
                     </div>
                     Teacher Payment
-                    <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
                       Academy → Teacher
                     </span>
                   </h4>
@@ -1673,7 +1764,8 @@ export default function AssignmentsClient() {
                       <select
                         value={formData.teacherCurrency}
                         onChange={(e) => setFormData((p) => ({ ...p, teacherCurrency: e.target.value as Currency }))}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/40 text-sm cursor-pointer font-semibold"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-teal-500/40 text-sm cursor-pointer font-semibold"
                       >
                         <option value="PKR">₨ PKR</option>
                         <option value="USD">$ USD</option>
@@ -1694,22 +1786,23 @@ export default function AssignmentsClient() {
                           value={formData.teacherFeeAmount}
                           onChange={(e) => setFormData((p) => ({ ...p, teacherFeeAmount: e.target.value }))}
                           placeholder="0"
-                          className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-violet-500/40 text-sm font-bold"
+                          style={FONT_INHERIT}
+                          className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-teal-500/40 text-sm font-bold"
                         />
                       </div>
                     </div>
                   </div>
 
                   {Number(formData.teacherFeeAmount) > 0 && (
-                    <div className="mt-4 rounded-xl bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200 p-3">
-                      <p className="text-xs text-violet-800">
+                    <div className="mt-4 rounded-xl bg-teal-50 border border-teal-200 p-3">
+                      <p className="text-xs text-teal-800">
                         <strong>
                           {formData.teacherId
                             ? teachers.find((t) => t._id === formData.teacherId)?.name || 'Teacher'
                             : 'Teacher'}
                         </strong>{' '}
                         will receive:{' '}
-                        <strong className="text-violet-900">
+                        <strong className="text-teal-900">
                           {formatMoney(Number(formData.teacherFeeAmount), formData.teacherCurrency)}
                         </strong>{' '}
                         / month
@@ -1720,9 +1813,12 @@ export default function AssignmentsClient() {
 
                 {/* LIVEKIT */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <SignalIcon className="h-4 w-4 text-indigo-600" />
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <SignalIcon className="h-4 w-4 text-emerald-600" />
                     </div>
                     LiveKit Room
                     <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Optional</span>
@@ -1732,11 +1828,12 @@ export default function AssignmentsClient() {
                     type="button"
                     onClick={createLiveKitRoom}
                     disabled={creatingRoom || submitting || !canCreateRoom}
-                    className="w-full py-3 bg-white border-2 border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50 text-indigo-700 font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                    style={FONT_INHERIT}
+                    className="w-full py-3 bg-white border-2 border-emerald-200 hover:border-emerald-500 hover:bg-emerald-50 text-emerald-700 font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
                   >
                     {creatingRoom ? (
                       <>
-                        <span className="h-4 w-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                        <span className="h-4 w-4 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
                         Creating...
                       </>
                     ) : (
@@ -1750,12 +1847,12 @@ export default function AssignmentsClient() {
                   {!canCreateRoom && !formData.livekitRoomName && (
                     <p className="text-center text-[11px] text-slate-400 mt-3 flex items-center justify-center gap-1">
                       <ExclamationTriangleIcon className="h-3.5 w-3.5" />
-                      Fill participants & schedule first
+                      Fill participants &amp; schedule first
                     </p>
                   )}
 
                   {formData.livekitRoomName && (
-                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                    <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                       <div className="flex items-center gap-2 text-emerald-700 mb-2">
                         <CheckCircleIcon className="h-5 w-5" />
                         <span className="font-bold text-sm">Room Ready</span>
@@ -1769,9 +1866,12 @@ export default function AssignmentsClient() {
 
                 {/* STATUS + NOTES */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                  <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                      <ClipboardDocumentListIcon className="h-4 w-4 text-indigo-600" />
+                  <h4
+                    className="text-xl tracking-wider text-slate-800 mb-4 flex items-center gap-2"
+                    style={FONT_HEADING}
+                  >
+                    <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <ClipboardDocumentListIcon className="h-4 w-4 text-emerald-600" />
                     </div>
                     Additional Info
                   </h4>
@@ -1781,7 +1881,8 @@ export default function AssignmentsClient() {
                       <select
                         value={formData.status}
                         onChange={(e) => setFormData((p) => ({ ...p, status: e.target.value as AssignmentStatus }))}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm cursor-pointer"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm cursor-pointer"
                       >
                         <option value="scheduled">Scheduled</option>
                         <option value="ongoing">Ongoing</option>
@@ -1799,7 +1900,8 @@ export default function AssignmentsClient() {
                         rows={3}
                         maxLength={1000}
                         placeholder="Syllabus, materials, etc..."
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/40 text-sm resize-none"
+                        style={FONT_INHERIT}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 text-sm resize-none"
                       />
                     </div>
                   </div>
@@ -1814,6 +1916,7 @@ export default function AssignmentsClient() {
                     type="button"
                     onClick={closeModal}
                     disabled={submitting || creatingRoom}
+                    style={FONT_INHERIT}
                     className="sm:w-32 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl border border-slate-200 disabled:opacity-50 text-sm"
                   >
                     Cancel
@@ -1821,7 +1924,8 @@ export default function AssignmentsClient() {
                   <button
                     type="submit"
                     disabled={submitting || creatingRoom}
-                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-sm active:scale-[0.98]"
+                    style={FONT_INHERIT}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-sm active:scale-[0.98]"
                   >
                     {submitting ? (
                       <>
@@ -1843,14 +1947,6 @@ export default function AssignmentsClient() {
           </div>
         </div>
       )}
-
-      <style jsx global>{`
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.85; }
-        }
-        .animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
-      `}</style>
     </div>
   );
 }

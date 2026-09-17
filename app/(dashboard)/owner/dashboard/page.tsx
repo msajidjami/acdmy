@@ -16,16 +16,13 @@ import Subscription from '@/models/Subscription';
 import AlertBanner from '@/app/components/AlertBanner';
 import MessagesSection from '@/app/components/MessagesSection';
 
-// ✅ Shared types
 import {
   type SerializedInquiry,
   serializeInquiry,
 } from '@/app/types/inquiry';
 
-// ✅ Plans helper
 import { getPlan, type PlanId } from '@/app/lib/plans';
 
-// ✅ Heroicons (suffix "Icon" کے ساتھ)
 import {
   BuildingOfficeIcon,
   UserGroupIcon,
@@ -40,7 +37,6 @@ import {
   SparklesIcon,
 } from '@heroicons/react/24/outline';
 
-// ✅ Lucide React (کوئی suffix نہیں)
 import {
   Crown,
   Zap,
@@ -51,6 +47,20 @@ import {
   Receipt,
   Clock,
 } from 'lucide-react';
+
+/* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
 
 /* ============================================================
    TYPES
@@ -89,12 +99,12 @@ interface SubscriptionInfo {
   planName: string;
   status: 'active' | 'expired' | 'cancelled' | 'pending' | 'trial';
   billingCycle: 'monthly' | 'yearly';
-  startDate: string;        // 🆕
+  startDate: string;
   endDate: string;
-  daysTotal: number;        // 🆕 کل دن
-  daysPassed: number;       // 🆕 گزر چکے دن
-  daysRemaining: number;    // ✅ باقی دن
-  progressPercent: number;  // 🆕 0-100
+  daysTotal: number;
+  daysPassed: number;
+  daysRemaining: number;
+  progressPercent: number;
   isExpired: boolean;
   isTrial: boolean;
   isFree: boolean;
@@ -112,7 +122,7 @@ interface OwnerData {
 }
 
 /* ============================================================
-   🆕 FREE TRIAL ACTIVATION
+   FREE TRIAL ACTIVATION
    ============================================================ */
 
 type TrialResult = 'created' | 'exists' | 'no-academy';
@@ -236,9 +246,6 @@ async function getOwnerData(userId: string): Promise<OwnerData> {
     planId: String((academy as any).planId || 'free'),
   };
 
-  /* ============================================================
-     ✅ BUILD SUBSCRIPTION INFO — گزر چکے دن + باقی دن + progress
-     ============================================================ */
   let subscription: SubscriptionInfo | null = null;
 
   if (subscriptionRaw) {
@@ -385,7 +392,6 @@ export default async function OwnerDashboardPage({
   const showDeleted = params.deleted === 'true';
   const showTrialStarted = params.trial === 'started';
 
-  /* ---------- AUTH ---------- */
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
   if (!token) redirect('/login');
@@ -408,9 +414,6 @@ export default async function OwnerDashboardPage({
   if (!userId) redirect('/login');
   if (userRole !== 'owner' && userRole !== 'admin') redirect('/');
 
-  /* ============================================================
-     🆕 FREE TRIAL ACTIVATION
-     ============================================================ */
   if (params.startTrial === 'true') {
     const result = await activateFreeTrial(userId);
 
@@ -425,7 +428,6 @@ export default async function OwnerDashboardPage({
     redirect('/owner/dashboard?trial=started');
   }
 
-  /* ---------- LOAD DATA ---------- */
   const {
     academy,
     inquiries,
@@ -440,18 +442,14 @@ export default async function OwnerDashboardPage({
     ? getPlanBadgeStyle(subscription.planId)
     : getPlanBadgeStyle('free' as PlanId);
 
-  /* ============================================================
-     RENDER
-     ============================================================ */
-
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <div className="space-y-6 sm:space-y-8" style={FONT_BODY}>
       {/* ===== ALERTS ===== */}
       {showTrialStarted && (
         <Suspense fallback={null}>
           <AlertBanner
             type="success"
-            title="🎉 Free Trial Started!"
+            title="Free Trial Started"
             message="Your 14-day free trial is now active. You can start adding students right away!"
             paramKey="trial"
             autoDismissMs={8000}
@@ -463,7 +461,7 @@ export default async function OwnerDashboardPage({
         <Suspense fallback={null}>
           <AlertBanner
             type="success"
-            title="Success!"
+            title="Success"
             message={
               academy
                 ? 'Your academy has been updated successfully!'
@@ -478,7 +476,7 @@ export default async function OwnerDashboardPage({
         <Suspense fallback={null}>
           <AlertBanner
             type="deleted"
-            title="Deleted!"
+            title="Deleted"
             message="Your academy has been deleted."
             paramKey="deleted"
             autoDismissMs={6000}
@@ -512,8 +510,11 @@ export default async function OwnerDashboardPage({
               {academy ? 'Academy Active' : 'Setup Required'}
             </div>
 
-            <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-              Welcome back, Owner 👋
+            <h1
+              className="mt-3 text-4xl sm:text-5xl lg:text-6xl tracking-wider text-white leading-[0.95]"
+              style={FONT_HEADING}
+            >
+              Welcome back, Owner
             </h1>
             <p className="mt-2 text-emerald-100 text-sm sm:text-base max-w-xl">
               {academy
@@ -545,7 +546,10 @@ export default async function OwnerDashboardPage({
       {!academy ? (
         <div className="bg-white rounded-3xl p-10 sm:p-14 text-center border-2 border-dashed border-emerald-200 shadow-sm">
           <div className="text-6xl mb-4">🏛️</div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-800">
+          <h3
+            className="text-3xl tracking-wider text-slate-800"
+            style={FONT_HEADING}
+          >
             No Academy Yet
           </h3>
           <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm sm:text-base">
@@ -554,7 +558,7 @@ export default async function OwnerDashboardPage({
           </p>
           <Link
             href="/owner/academy"
-            className="inline-flex items-center gap-2 mt-6 px-7 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-600/20 transition"
+            className="inline-flex items-center gap-2 mt-6 px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-600/20 transition"
           >
             <PlusCircleIcon className="h-5 w-5" />
             Create Your Academy
@@ -566,7 +570,10 @@ export default async function OwnerDashboardPage({
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+                <h2
+                  className="text-3xl tracking-wider text-slate-800"
+                  style={FONT_HEADING}
+                >
                   Overview
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500">
@@ -582,7 +589,7 @@ export default async function OwnerDashboardPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Academy */}
               <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-x-0 top-0 h-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-start justify-between mb-4">
                   <div className="h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center">
                     <BuildingOfficeIcon className="h-5 w-5 text-emerald-600" />
@@ -591,7 +598,10 @@ export default async function OwnerDashboardPage({
                     Active
                   </span>
                 </div>
-                <p className="text-lg font-bold text-slate-900 truncate">
+                <p
+                  className="text-2xl tracking-wider text-slate-900 truncate"
+                  style={FONT_HEADING}
+                >
                   {academy.name}
                 </p>
                 <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
@@ -607,7 +617,7 @@ export default async function OwnerDashboardPage({
 
               {/* Teachers */}
               <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-x-0 top-0 h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-start justify-between mb-4">
                   <div className="h-11 w-11 rounded-xl bg-blue-50 flex items-center justify-center">
                     <UserGroupIcon className="h-5 w-5 text-blue-600" />
@@ -616,10 +626,13 @@ export default async function OwnerDashboardPage({
                     Team
                   </span>
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+                <p
+                  className="text-4xl tracking-wider text-slate-900 leading-none"
+                  style={FONT_HEADING}
+                >
                   {teacherCount}
                 </p>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+                <p className="text-xs sm:text-sm text-slate-500 mt-2 font-medium">
                   Teachers
                 </p>
                 <Link
@@ -632,7 +645,7 @@ export default async function OwnerDashboardPage({
 
               {/* Students */}
               <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-500 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-x-0 top-0 h-1 bg-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-start justify-between mb-4">
                   <div className="h-11 w-11 rounded-xl bg-purple-50 flex items-center justify-center">
                     <AcademicCapIcon className="h-5 w-5 text-purple-600" />
@@ -643,10 +656,13 @@ export default async function OwnerDashboardPage({
                       : 'No limit'}
                   </span>
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+                <p
+                  className="text-4xl tracking-wider text-slate-900 leading-none"
+                  style={FONT_HEADING}
+                >
                   {studentCount}
                 </p>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+                <p className="text-xs sm:text-sm text-slate-500 mt-2 font-medium">
                   Students
                 </p>
                 <Link
@@ -659,7 +675,7 @@ export default async function OwnerDashboardPage({
 
               {/* Messages */}
               <div className="group relative bg-white rounded-2xl p-5 border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-x-0 top-0 h-1 bg-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="flex items-start justify-between mb-4">
                   <div className="h-11 w-11 rounded-xl bg-amber-50 flex items-center justify-center">
                     <EnvelopeIcon className="h-5 w-5 text-amber-600" />
@@ -670,10 +686,13 @@ export default async function OwnerDashboardPage({
                     </span>
                   )}
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+                <p
+                  className="text-4xl tracking-wider text-slate-900 leading-none"
+                  style={FONT_HEADING}
+                >
                   {inquiries.length}
                 </p>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+                <p className="text-xs sm:text-sm text-slate-500 mt-2 font-medium">
                   Total Messages
                 </p>
                 <p className="mt-4 text-xs font-semibold text-amber-600">
@@ -702,13 +721,15 @@ export default async function OwnerDashboardPage({
 
                   <div className="flex items-center gap-2 mb-4">
                     <Crown className="h-4 w-4 text-violet-600" />
-                    <h3 className="text-sm font-bold text-slate-800">
+                    <h3
+                      className="text-2xl tracking-wider text-slate-800"
+                      style={FONT_HEADING}
+                    >
                       Your Plan
                     </h3>
                   </div>
 
                   <div className="space-y-3">
-                    {/* Plan name */}
                     <div className="flex items-center justify-between">
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${planBadge.bg} ${planBadge.text}`}
@@ -736,23 +757,23 @@ export default async function OwnerDashboardPage({
                       </span>
                     </div>
 
-                    {/* 🆕 Days Tracker — Passed + Left */}
                     <div className="pt-3 border-t border-slate-100 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
-                        {/* Days Passed */}
                         <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-center">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                             Days Passed
                           </p>
-                          <p className="text-xl font-bold text-slate-800 mt-1">
+                          <p
+                            className="text-3xl tracking-wider text-slate-800 mt-1 leading-none"
+                            style={FONT_HEADING}
+                          >
                             {subscription.daysPassed}
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
+                          <p className="text-[10px] text-slate-400 mt-1">
                             of {subscription.daysTotal}
                           </p>
                         </div>
 
-                        {/* Days Left */}
                         <div
                           className={`rounded-xl border p-3 text-center ${
                             subscription.daysRemaining <= 3
@@ -766,23 +787,23 @@ export default async function OwnerDashboardPage({
                             Days Left
                           </p>
                           <p
-                            className={`text-xl font-bold mt-1 ${
+                            className={`text-3xl tracking-wider mt-1 leading-none ${
                               subscription.daysRemaining <= 3
                                 ? 'text-rose-600'
                                 : subscription.daysRemaining <= 7
                                 ? 'text-amber-600'
                                 : 'text-emerald-600'
                             }`}
+                            style={FONT_HEADING}
                           >
                             {subscription.daysRemaining}
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
+                          <p className="text-[10px] text-slate-400 mt-1">
                             remaining
                           </p>
                         </div>
                       </div>
 
-                      {/* Progress Bar */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-[10px] font-semibold text-slate-500">
@@ -796,10 +817,10 @@ export default async function OwnerDashboardPage({
                           <div
                             className={`h-full rounded-full transition-all duration-700 ${
                               subscription.daysRemaining <= 3
-                                ? 'bg-gradient-to-r from-rose-500 to-pink-500'
+                                ? 'bg-rose-500'
                                 : subscription.daysRemaining <= 7
-                                ? 'bg-gradient-to-r from-amber-500 to-orange-500'
-                                : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
                             }`}
                             style={{
                               width: `${subscription.progressPercent}%`,
@@ -833,7 +854,6 @@ export default async function OwnerDashboardPage({
                       </div>
                     </div>
 
-                    {/* Upgrade CTA */}
                     {(subscription.isFree ||
                       subscription.isExpired ||
                       subscription.daysRemaining <= 7) && (
@@ -841,8 +861,8 @@ export default async function OwnerDashboardPage({
                         href="/pricing"
                         className={`inline-flex items-center justify-center w-full gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-md transition ${
                           subscription.isExpired
-                            ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700'
-                            : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700'
+                            ? 'bg-rose-600 hover:bg-rose-700'
+                            : 'bg-violet-600 hover:bg-violet-700'
                         }`}
                       >
                         <TrendingUp className="h-3.5 w-3.5" />
@@ -861,7 +881,10 @@ export default async function OwnerDashboardPage({
               <div className="bg-white rounded-2xl border border-slate-200 p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <ChartBarIcon className="h-4 w-4 text-emerald-600" />
-                  <h3 className="text-sm font-bold text-slate-800">
+                  <h3
+                    className="text-2xl tracking-wider text-slate-800"
+                    style={FONT_HEADING}
+                  >
                     Academy Metrics
                   </h3>
                 </div>
@@ -876,7 +899,10 @@ export default async function OwnerDashboardPage({
                         Teachers
                       </span>
                     </div>
-                    <span className="text-base font-bold text-slate-900">
+                    <span
+                      className="text-2xl tracking-wider text-slate-900 leading-none"
+                      style={FONT_HEADING}
+                    >
                       {teacherCount}
                     </span>
                   </div>
@@ -890,7 +916,10 @@ export default async function OwnerDashboardPage({
                         Students
                       </span>
                     </div>
-                    <span className="text-base font-bold text-slate-900">
+                    <span
+                      className="text-2xl tracking-wider text-slate-900 leading-none"
+                      style={FONT_HEADING}
+                    >
                       {studentCount}
                     </span>
                   </div>
@@ -904,7 +933,10 @@ export default async function OwnerDashboardPage({
                         Courses
                       </span>
                     </div>
-                    <span className="text-base font-bold text-slate-900">
+                    <span
+                      className="text-2xl tracking-wider text-slate-900 leading-none"
+                      style={FONT_HEADING}
+                    >
                       {courseCount}
                     </span>
                   </div>
@@ -918,14 +950,17 @@ export default async function OwnerDashboardPage({
                         Messages
                       </span>
                     </div>
-                    <span className="text-base font-bold text-slate-900">
+                    <span
+                      className="text-2xl tracking-wider text-slate-900 leading-none"
+                      style={FONT_HEADING}
+                    >
                       {inquiries.length}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/40 border border-emerald-100 p-5">
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-5">
                 <div className="flex items-start gap-3">
                   <div className="h-10 w-10 rounded-xl bg-white border border-emerald-100 flex items-center justify-center shrink-0 shadow-sm">
                     <SparklesIcon className="h-5 w-5 text-emerald-600" />
@@ -947,7 +982,10 @@ export default async function OwnerDashboardPage({
           {/* ===== QUICK ACTIONS ===== */}
           <div>
             <div className="mb-4">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+              <h2
+                className="text-3xl tracking-wider text-slate-800"
+                style={FONT_HEADING}
+              >
                 Quick Actions
               </h2>
               <p className="text-xs sm:text-sm text-slate-500">
@@ -966,7 +1004,10 @@ export default async function OwnerDashboardPage({
                     <BuildingOfficeIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-emerald-700 transition">
+                    <h3
+                      className="text-xl tracking-wider text-slate-800 group-hover:text-emerald-700 transition"
+                      style={FONT_HEADING}
+                    >
                       Edit Academy
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -986,7 +1027,10 @@ export default async function OwnerDashboardPage({
                     <UserGroupIcon className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition">
+                    <h3
+                      className="text-xl tracking-wider text-slate-800 group-hover:text-blue-700 transition"
+                      style={FONT_HEADING}
+                    >
                       Teachers
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -1006,7 +1050,10 @@ export default async function OwnerDashboardPage({
                     <Receipt className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-violet-700 transition">
+                    <h3
+                      className="text-xl tracking-wider text-slate-800 group-hover:text-violet-700 transition"
+                      style={FONT_HEADING}
+                    >
                       Billing
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -1027,7 +1074,10 @@ export default async function OwnerDashboardPage({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-800 group-hover:text-amber-700 transition">
+                      <h3
+                        className="text-xl tracking-wider text-slate-800 group-hover:text-amber-700 transition"
+                        style={FONT_HEADING}
+                      >
                         Messages
                       </h3>
                       {pendingCount > 0 && (
@@ -1051,7 +1101,7 @@ export default async function OwnerDashboardPage({
 }
 
 /* ============================================================
-   SUBSCRIPTION BANNER (top of page)
+   SUBSCRIPTION BANNER
    ============================================================ */
 
 function SubscriptionBanner({
@@ -1093,16 +1143,16 @@ function SubscriptionBanner({
       subscription.daysTotal !== 1 ? 's' : ''
     } of your ${subscription.planName} plan. Renew now to continue adding students and keep your academy public.`;
     ctaText = 'Renew Plan';
-    ctaStyle = 'from-rose-600 to-pink-600';
+    ctaStyle = 'bg-rose-600 hover:bg-rose-700';
   } else if (isTrial) {
     bannerStyle = 'bg-violet-50 border-violet-300';
     icon = <Zap className="h-6 w-6 text-violet-600" />;
-    title = `Free Trial Active — ${subscription.daysRemaining} day${
+    title = `Free Trial — ${subscription.daysRemaining} day${
       subscription.daysRemaining !== 1 ? 's' : ''
     } left`;
     message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Add students and explore all features. Upgrade anytime to keep your academy running without interruption.`;
     ctaText = 'Upgrade Now';
-    ctaStyle = 'from-violet-600 to-fuchsia-600';
+    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
   } else if (isFree) {
     bannerStyle = 'bg-amber-50 border-amber-300';
     icon = <Lock className="h-6 w-6 text-amber-600" />;
@@ -1110,7 +1160,7 @@ function SubscriptionBanner({
     message =
       "You're on the Free plan. Upgrade to add students and make your academy public.";
     ctaText = 'View Plans';
-    ctaStyle = 'from-violet-600 to-fuchsia-600';
+    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
   } else if (isExpiringSoon) {
     bannerStyle = 'bg-amber-50 border-amber-300';
     icon = <Clock className="h-6 w-6 text-amber-600" />;
@@ -1128,18 +1178,20 @@ function SubscriptionBanner({
       }
     )}. Renew to avoid interruption.`;
     ctaText = 'Renew Now';
-    ctaStyle = 'from-amber-600 to-orange-600';
+    ctaStyle = 'bg-amber-600 hover:bg-amber-700';
   } else {
-    // All good — compact green banner
     return (
-      <div className="rounded-2xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-4">
+      <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0 shadow-md">
+          <div className="h-10 w-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0 shadow-md">
             <Crown className="h-5 w-5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-bold text-emerald-900 text-sm">
+              <h3
+                className="text-lg tracking-wider text-emerald-900"
+                style={FONT_HEADING}
+              >
                 {subscription.planName} Plan Active
               </h3>
               <span
@@ -1161,7 +1213,7 @@ function SubscriptionBanner({
           </div>
           <Link
             href="/owner/billing"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 text-xs font-bold transition shrink-0"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-emerald-200 hover:bg-emerald-100 text-emerald-700 text-xs font-bold transition shrink-0"
           >
             Manage Plan
             <ArrowRightIcon className="h-3 w-3" />
@@ -1178,7 +1230,10 @@ function SubscriptionBanner({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-slate-900 text-base sm:text-lg">
+          <h3
+            className="text-2xl tracking-wider text-slate-900"
+            style={FONT_HEADING}
+          >
             {title}
           </h3>
           <p className="text-sm text-slate-600 mt-1 leading-relaxed">
@@ -1188,7 +1243,7 @@ function SubscriptionBanner({
           {ctaText && (
             <Link
               href="/pricing"
-              className={`mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r ${ctaStyle} px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition`}
+              className={`mt-3 inline-flex items-center gap-2 rounded-xl ${ctaStyle} px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition`}
             >
               <TrendingUp className="h-4 w-4" />
               {ctaText}

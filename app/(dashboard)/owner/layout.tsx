@@ -26,6 +26,20 @@ import {
 } from 'lucide-react';
 
 /* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
+
+/* ============================================================
    TYPES
    ============================================================ */
 
@@ -60,7 +74,7 @@ const mainNavItems: NavItem[] = [
 const contentNavItems: NavItem[] = [
   { name: 'Courses', href: '/owner/courses', icon: BookOpen },
   { name: 'Assignments', href: '/owner/assignments', icon: Calendar },
-  { name: 'Enrollments', href: '/owner/enrollments', icon: ClipboardList }, // ✅ نیا
+  { name: 'Enrollments', href: '/owner/enrollments', icon: ClipboardList },
   { name: 'Articles', href: '/owner/articles', icon: FileText },
   { name: 'Student Payments', href: '/owner/payments', icon: Banknote },
   { name: 'Teacher Payouts', href: '/owner/teacher-payments', icon: Wallet },
@@ -83,12 +97,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [ownerName, setOwnerName] = useState('Academy Owner');
 
-  /* Sidebar بند کریں جب route تبدیل ہو */
+  /* Close sidebar when route changes */
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [pathname]);
 
-  /* Owner کا نام لائیں */
+  /* Fetch owner name */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -132,10 +146,9 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   };
 
   /* ============================================================
-     IS ACTIVE — careful matching
+     IS ACTIVE
      ============================================================ */
   const isActive = (href: string) => {
-    /* Exact matches for ambiguous prefixes */
     if (href === '/owner/payments') {
       return (
         pathname === '/owner/payments' ||
@@ -160,7 +173,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           text-sm font-medium transition-all duration-200
           ${
             active
-              ? 'bg-gradient-to-r from-emerald-50 to-emerald-50/40 text-emerald-700 shadow-sm'
+              ? 'bg-emerald-50 text-emerald-700 shadow-sm'
               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
           }
         `}
@@ -214,7 +227,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   return (
     <div
       className="min-h-screen bg-slate-50"
-      style={{ paddingTop: NAVBAR_H }}
+      style={{ paddingTop: NAVBAR_H, ...FONT_BODY }}
     >
       {/* =========================================
           MOBILE HEADER
@@ -233,10 +246,13 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
             <GraduationCap className="h-4 w-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-900 leading-tight">
+            <p
+              className="text-lg tracking-wider text-slate-900 leading-none"
+              style={FONT_HEADING}
+            >
               Owner Panel
             </p>
-            <p className="text-[10px] text-slate-500 leading-tight">
+            <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
               Academy Manager
             </p>
           </div>
@@ -245,6 +261,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
         <button
           type="button"
           onClick={toggleSidebar}
+          style={FONT_INHERIT}
           className="
             flex items-center justify-center
             h-10 w-10 rounded-lg
@@ -289,6 +306,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                 <button
                   type="button"
                   onClick={handleLogout}
+                  style={FONT_INHERIT}
                   className="
                     flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl
                     text-sm font-medium text-rose-600 hover:bg-rose-50 transition
@@ -327,10 +345,13 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                   <GraduationCap className="h-5 w-5 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-base font-bold text-slate-900 leading-tight">
+                  <h1
+                    className="text-2xl tracking-wider text-slate-900 leading-none"
+                    style={FONT_HEADING}
+                  >
                     Owner Panel
                   </h1>
-                  <p className="text-[11px] text-slate-500 leading-tight flex items-center gap-1">
+                  <p className="text-[11px] text-slate-500 leading-tight mt-1 flex items-center gap-1">
                     <Sparkles className="h-3 w-3 text-emerald-500" />
                     Academy Manager
                   </p>
@@ -364,6 +385,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
               <button
                 type="button"
                 onClick={handleLogout}
+                style={FONT_INHERIT}
                 className="
                   flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl
                   text-sm font-medium text-rose-600 hover:bg-rose-50 transition
