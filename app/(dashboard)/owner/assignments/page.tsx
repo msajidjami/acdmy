@@ -12,6 +12,20 @@ import AssignmentsClient from './AssignmentsClient';
 export const dynamic = 'force-dynamic';
 
 /* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
+
+/* ============================================================
    TYPES
    ============================================================ */
 
@@ -35,7 +49,7 @@ type PlanCheckResult = {
 };
 
 /* ============================================================
-   ✅ PLAN CHECK — multiple subscriptions support
+   PLAN CHECK
    ============================================================ */
 
 async function checkAcademyPlan(
@@ -47,7 +61,6 @@ async function checkAcademyPlan(
 
   const now = new Date();
 
-  /* 1. کوئی بھی ACTIVE subscription ڈھونڈیں */
   const activeSubscription = await Subscription.findOne({
     academyId,
     $or: [
@@ -76,7 +89,6 @@ async function checkAcademyPlan(
     };
   }
 
-  /* 2. کوئی active نہیں → latest subscription کا reason */
   const latest = await Subscription.findOne({ academyId })
     .sort({ createdAt: -1 })
     .lean();
@@ -108,7 +120,7 @@ async function checkAcademyPlan(
 }
 
 /* ============================================================
-   ✅ INLINE PAYWALL
+   INLINE PAYWALL
    ============================================================ */
 
 function InlinePaywall({
@@ -125,11 +137,13 @@ function InlinePaywall({
     {
       title: string;
       description: string;
-      gradient: string;
-      iconBg: string;
+      ribbon: string;
+      accentBg: string;
+      accentText: string;
       icon: string;
       primaryLabel: string;
       primaryHref: string;
+      primaryClass: string;
       secondaryLabel?: string;
       secondaryHref?: string;
     }
@@ -138,11 +152,13 @@ function InlinePaywall({
       title: 'Create your academy first',
       description:
         'You need an academy before accessing Assignments. Set up your academy in just 2 minutes.',
-      gradient: 'from-indigo-500 to-purple-600',
-      iconBg: 'bg-indigo-100',
+      ribbon: 'bg-indigo-500',
+      accentBg: 'bg-indigo-50',
+      accentText: 'text-indigo-600',
       icon: '🏢',
       primaryLabel: 'Create Academy',
       primaryHref: '/owner/academy',
+      primaryClass: 'bg-indigo-600 hover:bg-indigo-700',
       secondaryLabel: 'View Plans',
       secondaryHref: '/pricing',
     },
@@ -150,11 +166,13 @@ function InlinePaywall({
       title: 'No active plan',
       description:
         'Your academy does not have an active subscription. Choose a plan to unlock teacher assignments, fee tracking, and premium features.',
-      gradient: 'from-rose-500 to-pink-600',
-      iconBg: 'bg-rose-100',
+      ribbon: 'bg-rose-500',
+      accentBg: 'bg-rose-50',
+      accentText: 'text-rose-600',
       icon: '🔒',
       primaryLabel: 'Choose a Plan',
       primaryHref: '/pricing',
+      primaryClass: 'bg-rose-600 hover:bg-rose-700',
       secondaryLabel: 'Go to Dashboard',
       secondaryHref: '/owner/dashboard',
     },
@@ -162,11 +180,13 @@ function InlinePaywall({
       title: 'Payment under review',
       description:
         'Your payment receipt has been submitted and is under review. Our team will verify it within 24 hours.',
-      gradient: 'from-amber-500 to-orange-600',
-      iconBg: 'bg-amber-100',
+      ribbon: 'bg-amber-500',
+      accentBg: 'bg-amber-50',
+      accentText: 'text-amber-600',
       icon: '⏰',
       primaryLabel: 'View Billing',
       primaryHref: '/owner/billing',
+      primaryClass: 'bg-amber-600 hover:bg-amber-700',
       secondaryLabel: 'Go to Dashboard',
       secondaryHref: '/owner/dashboard',
     },
@@ -174,11 +194,13 @@ function InlinePaywall({
       title: 'Subscription expired',
       description:
         'Your academy subscription has expired. Renew now to restore access to assignments, fees, and all premium features.',
-      gradient: 'from-rose-500 to-red-600',
-      iconBg: 'bg-rose-100',
+      ribbon: 'bg-rose-500',
+      accentBg: 'bg-rose-50',
+      accentText: 'text-rose-600',
       icon: '🔴',
       primaryLabel: 'Renew Now',
       primaryHref: '/pricing',
+      primaryClass: 'bg-rose-600 hover:bg-rose-700',
       secondaryLabel: 'Go to Billing',
       secondaryHref: '/owner/billing',
     },
@@ -186,43 +208,51 @@ function InlinePaywall({
       title: 'Payment not confirmed',
       description:
         'Your subscription payment has not been confirmed yet. Please complete the payment or submit your receipt to activate your plan.',
-      gradient: 'from-amber-500 to-orange-600',
-      iconBg: 'bg-amber-100',
+      ribbon: 'bg-amber-500',
+      accentBg: 'bg-amber-50',
+      accentText: 'text-amber-600',
       icon: '⚠️',
       primaryLabel: 'Go to Billing',
       primaryHref: '/owner/billing',
+      primaryClass: 'bg-amber-600 hover:bg-amber-700',
       secondaryLabel: 'Go to Dashboard',
       secondaryHref: '/owner/dashboard',
     },
     active: {
       title: 'Active',
       description: '',
-      gradient: 'from-emerald-500 to-teal-600',
-      iconBg: 'bg-emerald-100',
+      ribbon: 'bg-emerald-500',
+      accentBg: 'bg-emerald-50',
+      accentText: 'text-emerald-600',
       icon: '✅',
       primaryLabel: '',
       primaryHref: '',
+      primaryClass: '',
     },
   };
 
   const c = config[reason] || config['no-subscription'];
 
   return (
-    <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
+    <div
+      className="min-h-[75vh] flex items-center justify-center px-4 py-12"
+      style={FONT_BODY}
+    >
       <div className="max-w-2xl w-full">
         <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 shadow-2xl">
-          <div className={`h-2 bg-gradient-to-r ${c.gradient}`} />
+          <div className={`h-2 ${c.ribbon}`} />
 
           <div className="p-8 sm:p-12 text-center">
-            {/* Icon */}
             <div
-              className={`inline-flex items-center justify-center h-20 w-20 rounded-3xl ${c.iconBg} shadow-lg mb-6 text-4xl`}
+              className={`inline-flex items-center justify-center h-20 w-20 rounded-3xl ${c.accentBg} shadow-lg mb-6 text-4xl`}
             >
               {c.icon}
             </div>
 
-            {/* Title */}
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">
+            <h1
+              className="text-4xl sm:text-5xl tracking-wider text-slate-900 leading-[0.95]"
+              style={FONT_HEADING}
+            >
               {c.title}
             </h1>
 
@@ -239,16 +269,17 @@ function InlinePaywall({
               </p>
             )}
 
-            {/* Description */}
             <p className="mt-4 text-base text-slate-600 max-w-lg mx-auto leading-relaxed">
               {c.description}
             </p>
 
-            {/* Feature Preview */}
             {(reason === 'no-subscription' || reason === 'expired') && (
-              <div className="mt-6 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/40 border border-emerald-200 p-5 text-left max-w-md mx-auto">
-                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-3">
-                  ✨ Active plan unlocks
+              <div className="mt-6 rounded-2xl bg-emerald-50 border border-emerald-200 p-5 text-left max-w-md mx-auto">
+                <p
+                  className="text-lg tracking-wider text-emerald-800 mb-3"
+                  style={FONT_HEADING}
+                >
+                  Active plan unlocks
                 </p>
                 <ul className="space-y-2">
                   {[
@@ -270,11 +301,10 @@ function InlinePaywall({
               </div>
             )}
 
-            {/* CTAs */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
                 href={c.primaryHref}
-                className={`group inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r ${c.gradient} text-white font-bold shadow-lg hover:shadow-xl transition active:scale-[0.98] w-full sm:w-auto justify-center`}
+                className={`group inline-flex items-center gap-2 px-6 py-3.5 rounded-xl ${c.primaryClass} text-white font-bold shadow-lg hover:shadow-xl transition active:scale-[0.98] w-full sm:w-auto justify-center`}
               >
                 <span>
                   {reason === 'expired' || reason === 'unpaid' ? '🚀' : '✨'}
@@ -295,7 +325,6 @@ function InlinePaywall({
               )}
             </div>
 
-            {/* Trust */}
             <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400">
               <span className="text-emerald-500">🛡️</span>
               <span>Secure checkout · Cancel anytime · 14-day money-back</span>
@@ -312,7 +341,6 @@ function InlinePaywall({
    ============================================================ */
 
 export default async function OwnerAssignmentsPage() {
-  /* ---------- 1. AUTH ---------- */
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
 
@@ -335,7 +363,6 @@ export default async function OwnerAssignmentsPage() {
   if (!userId) redirect('/login');
   if (userRole !== 'owner' && userRole !== 'admin') redirect('/');
 
-  /* ---------- 2. LOAD USER + ACADEMY ---------- */
   await connectDB();
 
   const user = await User.findById(userId).select('name email role').lean();
@@ -345,12 +372,10 @@ export default async function OwnerAssignmentsPage() {
     .select('name slug')
     .lean();
 
-  /* ---------- 3. NO ACADEMY ---------- */
   if (!academy) {
     return <InlinePaywall reason="no-academy" />;
   }
 
-  /* ---------- 4. PLAN CHECK ---------- */
   const planResult = await checkAcademyPlan((academy as any)._id);
 
   if (!planResult.hasPlan) {
@@ -363,6 +388,5 @@ export default async function OwnerAssignmentsPage() {
     );
   }
 
-  /* ---------- 5. ACTIVE — Client (کوئی props نہیں) ---------- */
   return <AssignmentsClient />;
 }

@@ -46,6 +46,21 @@ import {
 } from '@heroicons/react/24/outline';
 
 /* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+/** Form controls (button/input/textarea) ko Sora inherit karane ke liye */
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
+
+/* ============================================================
    TYPES
    ============================================================ */
 
@@ -195,7 +210,7 @@ const dotsPatternClass =
   "bg-[url('data:image/svg+xml,%3Csvg width=\"80\" height=\"80\" viewBox=\"0 0 80 80\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%2310b981\" fill-opacity=\"0.06\"%3E%3Ccircle cx=\"40\" cy=\"40\" r=\"2\"/%3E%3Ccircle cx=\"20\" cy=\"20\" r=\"1.5\"/%3E%3Ccircle cx=\"60\" cy=\"20\" r=\"1.5\"/%3E%3Ccircle cx=\"20\" cy=\"60\" r=\"1.5\"/%3E%3Ccircle cx=\"60\" cy=\"60\" r=\"1.5\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]";
 
 /* ============================================================
-   TRUST BADGES — صرف features (کوئی fake numbers نہیں)
+   TRUST BADGES
    ============================================================ */
 
 function TrustBadges() {
@@ -228,7 +243,7 @@ function TrustBadges() {
 }
 
 /* ============================================================
-   STATS SECTION — صرف حقیقی API data
+   STATS SECTION
    ============================================================ */
 
 function StatsSection({ stats }: { stats: Stats | null }) {
@@ -274,11 +289,16 @@ function StatsSection({ stats }: { stats: Stats | null }) {
               className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 text-center border border-emerald-100/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
             >
               <Icon
-                className="h-8 w-8 text-emerald-600 mx-auto mb-2"
+                className="h-8 w-8 text-emerald-600 mx-auto mb-3"
                 aria-hidden="true"
               />
-              <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-              <p className="text-sm text-gray-500">{stat.label}</p>
+              <p
+                className="text-4xl font-normal tracking-wider text-gray-900 leading-none"
+                style={FONT_HEADING}
+              >
+                {stat.value}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">{stat.label}</p>
             </motion.div>
           );
         })}
@@ -331,7 +351,6 @@ function InteractiveHero({
       aria-labelledby="hero-heading"
       className="relative overflow-hidden px-6 pt-12 pb-20 md:pt-16 md:pb-28 bg-gradient-to-br from-emerald-50 via-white to-teal-50"
     >
-      {/* Background decorations */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-200/20 rounded-full blur-3xl" />
@@ -360,7 +379,6 @@ function InteractiveHero({
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        {/* Tab Switcher */}
         <div className="flex justify-center mb-12">
           <div className="relative bg-white/85 backdrop-blur-md border border-gray-200 rounded-2xl p-1.5 shadow-lg inline-flex">
             {(
@@ -375,6 +393,7 @@ function InteractiveHero({
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className="relative px-5 sm:px-7 py-3 rounded-xl text-sm font-bold"
+                  style={FONT_INHERIT}
                   aria-pressed={active}
                 >
                   {active && (
@@ -411,7 +430,6 @@ function InteractiveHero({
         </div>
 
         <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-12 items-center">
-          {/* LEFT: Dynamic content */}
           <div className="relative">
             <AnimatePresence mode="wait">
               {isAcademies ? (
@@ -429,7 +447,8 @@ function InteractiveHero({
 
                   <h1
                     id="hero-heading"
-                    className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-gray-950 leading-[1.05] mt-6"
+                    className="text-5xl md:text-7xl lg:text-8xl tracking-wide text-gray-950 leading-[0.95] mt-6"
+                    style={FONT_HEADING}
                   >
                     Build, Manage &amp;
                     <span className="block bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
@@ -443,7 +462,6 @@ function InteractiveHero({
                     supervise every session — all from one powerful dashboard.
                   </p>
 
-                  {/* Feature highlights — no fake numbers */}
                   <div className="mt-7 flex flex-wrap gap-6">
                     {[
                       {
@@ -472,14 +490,16 @@ function InteractiveHero({
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                           {s.label}
                         </span>
-                        <span className={`text-lg font-bold ${s.color}`}>
+                        <span
+                          className={`text-3xl tracking-wider ${s.color}`}
+                          style={FONT_HEADING}
+                        >
                           {s.value}
                         </span>
                       </motion.div>
                     ))}
                   </div>
 
-                  {/* CTAs */}
                   <div className="mt-9 flex flex-wrap gap-3">
                     {showCreateAcademy && (
                       <motion.div
@@ -587,7 +607,8 @@ function InteractiveHero({
 
                   <h1
                     id="hero-heading"
-                    className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-gray-950 leading-[1.05] mt-6"
+                    className="text-5xl md:text-7xl lg:text-8xl tracking-wide text-gray-950 leading-[0.95] mt-6"
+                    style={FONT_HEADING}
                   >
                     Learn Live from
                     <span className="block bg-gradient-to-r from-violet-600 to-purple-500 bg-clip-text text-transparent">
@@ -629,7 +650,10 @@ function InteractiveHero({
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                           {s.label}
                         </span>
-                        <span className={`text-lg font-bold ${s.color}`}>
+                        <span
+                          className={`text-3xl tracking-wider ${s.color}`}
+                          style={FONT_HEADING}
+                        >
                           {s.value}
                         </span>
                       </motion.div>
@@ -718,7 +742,6 @@ function InteractiveHero({
             </div>
           </div>
 
-          {/* RIGHT: Dynamic preview — no fake numbers */}
           <div className="relative min-h-[520px]">
             <AnimatePresence mode="wait">
               {isAcademies ? (
@@ -736,7 +759,10 @@ function InteractiveHero({
                     <div className="rounded-[1.5rem] overflow-hidden border border-white/10 bg-gray-900">
                       <div className="px-5 py-4 flex items-center justify-between border-b border-white/10">
                         <div>
-                          <p className="text-white font-bold">
+                          <p
+                            className="text-white text-2xl tracking-wider"
+                            style={FONT_HEADING}
+                          >
                             Academy Workspace
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">
@@ -752,7 +778,6 @@ function InteractiveHero({
                       </div>
 
                       <div className="p-5 space-y-4">
-                        {/* Feature tiles instead of numbers */}
                         <div className="grid grid-cols-3 gap-3">
                           <div className="rounded-2xl bg-white/5 border border-white/10 p-3 text-center">
                             <UserGroupIcon className="h-5 w-5 text-emerald-400 mx-auto" />
@@ -911,7 +936,10 @@ function InteractiveHero({
                             A
                           </div>
                           <div>
-                            <p className="text-sm font-bold text-gray-900">
+                            <p
+                              className="text-lg tracking-wider text-gray-900"
+                              style={FONT_HEADING}
+                            >
                               Student Dashboard
                             </p>
                             <p className="text-[10px] text-gray-500">
@@ -954,6 +982,7 @@ function InteractiveHero({
                               whileHover={{ scale: 1.03 }}
                               whileTap={{ scale: 0.97 }}
                               className="mt-3 w-full bg-white text-violet-700 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2"
+                              style={FONT_INHERIT}
                             >
                               <VideoCameraIcon className="h-4 w-4" />
                               Join Live Class
@@ -1205,7 +1234,8 @@ function CoreFeatures() {
           </span>
           <h2
             id="features-heading"
-            className="text-3xl md:text-5xl font-bold text-gray-900 mt-5"
+            className="text-5xl md:text-7xl tracking-wider text-gray-900 mt-5 leading-[0.95]"
+            style={FONT_HEADING}
           >
             Everything your academy needs
           </h2>
@@ -1242,7 +1272,10 @@ function CoreFeatures() {
                     {f.tag}
                   </span>
 
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                  <h3
+                    className="text-3xl tracking-wider text-gray-900 mb-2"
+                    style={FONT_HEADING}
+                  >
                     {f.title}
                   </h3>
                   <p className="text-sm text-gray-600 leading-relaxed">
@@ -1296,7 +1329,8 @@ function WhiteboardShowcase() {
 
             <h2
               id="whiteboard-heading"
-              className="text-3xl md:text-5xl font-bold text-white mt-5 leading-tight"
+              className="text-5xl md:text-7xl tracking-wider text-white mt-5 leading-[0.95]"
+              style={FONT_HEADING}
             >
               Teach Math like
               <span className="block bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
@@ -1356,7 +1390,10 @@ function WhiteboardShowcase() {
                   <span className="w-3 h-3 rounded-full bg-red-400" />
                   <span className="w-3 h-3 rounded-full bg-yellow-400" />
                   <span className="w-3 h-3 rounded-full bg-green-400" />
-                  <span className="ml-3 text-sm font-semibold text-gray-700">
+                  <span
+                    className="ml-3 text-lg tracking-wider text-gray-700"
+                    style={FONT_HEADING}
+                  >
                     Math Live — Interactive Board
                   </span>
                 </div>
@@ -1543,9 +1580,10 @@ function RolesWorkflow() {
           </span>
           <h2
             id="roles-heading"
-            className="text-3xl md:text-5xl font-bold text-gray-900 mt-5"
+            className="text-5xl md:text-7xl tracking-wider text-gray-900 mt-5 leading-[0.95]"
+            style={FONT_HEADING}
           >
-            One academy. Three powerful dashboards.
+            One academy. Three dashboards.
           </h2>
           <p className="text-gray-600 mt-4 text-lg max-w-2xl mx-auto">
             Everyone gets exactly what they need — nothing more, nothing less.
@@ -1568,7 +1606,10 @@ function RolesWorkflow() {
                 {r.icon}
               </div>
 
-              <h3 className="text-xl font-bold text-gray-900 mb-4">
+              <h3
+                className="text-4xl tracking-wider text-gray-900 mb-4"
+                style={FONT_HEADING}
+              >
                 {r.name}
               </h3>
 
@@ -1616,7 +1657,8 @@ function ServicesMini() {
           </p>
           <h2
             id="services-heading"
-            className="text-2xl md:text-3xl font-bold text-gray-900 mt-2"
+            className="text-4xl md:text-5xl tracking-wider text-gray-900 mt-2"
+            style={FONT_HEADING}
           >
             Built for every kind of academy
           </h2>
@@ -1795,7 +1837,10 @@ function AcademyCard({
 
         <div className="p-6 flex flex-col flex-1">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-xl font-bold text-gray-900 line-clamp-1">
+            <h3
+              className="text-3xl tracking-wider text-gray-900 line-clamp-1"
+              style={FONT_HEADING}
+            >
               {academy.name}
             </h3>
             <CheckCircleIcon
@@ -1842,6 +1887,7 @@ function AcademyCard({
               className="flex-1 px-3 py-2.5 text-white text-sm font-semibold rounded-xl transition shadow-md"
               style={{
                 background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                ...FONT_INHERIT,
               }}
               aria-label={`Contact ${academy.name}`}
             >
@@ -1855,7 +1901,10 @@ function AcademyCard({
         ref={dialogRef}
         className="rounded-3xl shadow-2xl p-8 w-[calc(100%-2rem)] max-w-md backdrop:bg-black/50 border-0"
       >
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">
+        <h3
+          className="text-4xl tracking-wider text-gray-900 mb-2"
+          style={FONT_HEADING}
+        >
           📩 Contact {academy.name}
         </h3>
 
@@ -1878,6 +1927,7 @@ function AcademyCard({
               type="text"
               name="visitorName"
               required
+              style={FONT_INHERIT}
               className="w-full mt-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
@@ -1894,6 +1944,7 @@ function AcademyCard({
               type="email"
               name="visitorEmail"
               required
+              style={FONT_INHERIT}
               className="w-full mt-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
@@ -1910,6 +1961,7 @@ function AcademyCard({
               name="message"
               rows={3}
               required
+              style={FONT_INHERIT}
               className="w-full mt-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               placeholder="I want to enroll my child..."
             />
@@ -1918,6 +1970,7 @@ function AcademyCard({
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
+              style={FONT_INHERIT}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition"
             >
               Send
@@ -1926,6 +1979,7 @@ function AcademyCard({
             <button
               type="button"
               onClick={closeDialog}
+              style={FONT_INHERIT}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-3 rounded-xl transition"
             >
               Cancel
@@ -2021,9 +2075,10 @@ function PlatformSection() {
             </span>
             <h2
               id="platform-heading"
-              className="text-3xl md:text-5xl font-bold text-gray-900 mt-3 leading-tight"
+              className="text-5xl md:text-7xl tracking-wider text-gray-900 mt-3 leading-[0.95]"
+              style={FONT_HEADING}
             >
-              Your academy, your team, your learning community.
+              Your academy, your team, your community.
             </h2>
             <p className="mt-5 text-lg text-gray-600 leading-relaxed">
               Manage the day-to-day work of an academy while giving teachers
@@ -2040,7 +2095,12 @@ function PlatformSection() {
                     className="h-7 w-7 text-emerald-600 mb-3"
                     aria-hidden="true"
                   />
-                  <h3 className="font-bold text-gray-900">{title}</h3>
+                  <h3
+                    className="text-2xl tracking-wider text-gray-900"
+                    style={FONT_HEADING}
+                  >
+                    {title}
+                  </h3>
                   <p className="text-sm text-gray-500 mt-1 leading-relaxed">
                     {desc}
                   </p>
@@ -2056,7 +2116,10 @@ function PlatformSection() {
               <div className="rounded-2xl bg-gray-900 border border-white/10 overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                   <div>
-                    <p className="text-white font-semibold">
+                    <p
+                      className="text-white text-2xl tracking-wider"
+                      style={FONT_HEADING}
+                    >
                       Academy Workspace
                     </p>
                     <p className="text-xs text-gray-400">
@@ -2142,7 +2205,8 @@ function KnowledgeNetwork() {
 
         <h2
           id="network-heading"
-          className="text-3xl md:text-5xl font-bold text-gray-900 mt-5"
+          className="text-5xl md:text-7xl tracking-wider text-gray-900 mt-5 leading-[0.95]"
+          style={FONT_HEADING}
         >
           A growing network for knowledge
         </h2>
@@ -2164,7 +2228,12 @@ function KnowledgeNetwork() {
                 transition={{ delay: index * 0.08 }}
                 className="bg-white rounded-2xl border border-emerald-100 p-5 shadow-sm"
               >
-                <p className="font-bold text-gray-900">{item}</p>
+                <p
+                  className="text-2xl tracking-wider text-gray-900"
+                  style={FONT_HEADING}
+                >
+                  {item}
+                </p>
                 <p className="text-xs text-gray-500 mt-1">
                   Connect, learn and grow
                 </p>
@@ -2200,7 +2269,8 @@ function CTASection({
 
         <h2
           id="cta-heading"
-          className="text-3xl md:text-5xl font-bold text-white mt-5"
+          className="text-5xl md:text-7xl tracking-wider text-white mt-5 leading-[0.95]"
+          style={FONT_HEADING}
         >
           Ready to Start Your Islamic Academy?
         </h2>
@@ -2326,6 +2396,7 @@ export default function HomeClient({
           <p className="text-sm mt-1">{academiesError || statsError}</p>
           <button
             onClick={() => window.location.reload()}
+            style={FONT_INHERIT}
             className="mt-4 px-6 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
           >
             Retry
@@ -2336,7 +2407,7 @@ export default function HomeClient({
   }
 
   return (
-    <main className="bg-white overflow-hidden">
+    <main className="bg-white overflow-hidden" style={FONT_BODY}>
       <InteractiveHero
         user={user}
         userRoles={userRoles}
@@ -2368,7 +2439,8 @@ export default function HomeClient({
             </span>
             <h2
               id="academies-heading"
-              className="text-3xl md:text-4xl font-bold text-gray-900 mt-2"
+              className="text-5xl md:text-6xl tracking-wider text-gray-900 mt-2"
+              style={FONT_HEADING}
             >
               🏫 Featured Islamic Academies
             </h2>

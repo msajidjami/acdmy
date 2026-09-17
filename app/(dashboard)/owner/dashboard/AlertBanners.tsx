@@ -9,16 +9,37 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 
+/* ============================================================
+   FONT HELPERS
+   ============================================================ */
+
+const FONT_HEADING = {
+  fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
+} as const;
+
+const FONT_BODY = {
+  fontFamily: 'var(--font-sora), Sora, sans-serif',
+} as const;
+
+const FONT_INHERIT = { fontFamily: 'inherit' } as const;
+
+/* ============================================================
+   TYPES
+   ============================================================ */
+
 type AlertType = 'success' | 'deleted' | 'error' | 'warning';
 
 interface Props {
   type: AlertType;
   title: string;
   message: string;
-  /** URL param key to remove on dismiss (e.g. "success", "deleted") */
   paramKey?: string;
   autoDismissMs?: number;
 }
+
+/* ============================================================
+   STYLES
+   ============================================================ */
 
 const STYLES: Record<
   AlertType,
@@ -60,6 +81,10 @@ const STYLES: Record<
   },
 };
 
+/* ============================================================
+   COMPONENT
+   ============================================================ */
+
 export default function AlertBanner({
   type,
   title,
@@ -79,7 +104,6 @@ export default function AlertBanner({
     router.replace(q ? `?${q}` : '?', { scroll: false });
   };
 
-  // Auto dismiss
   useEffect(() => {
     if (!autoDismissMs || !paramKey) return;
     const t = setTimeout(dismiss, autoDismissMs);
@@ -97,15 +121,22 @@ export default function AlertBanner({
   return (
     <div
       className={`p-4 rounded-2xl border flex items-start gap-3 shadow-sm ${s.wrapper}`}
+      style={FONT_BODY}
     >
       <Icon className={`h-6 w-6 shrink-0 mt-0.5 ${s.icon}`} />
       <div className="min-w-0 flex-1">
-        <p className={`font-semibold ${s.title}`}>{title}</p>
+        <p
+          className={`text-lg tracking-wider ${s.title}`}
+          style={FONT_HEADING}
+        >
+          {title}
+        </p>
         <p className={`text-sm mt-0.5 ${s.text}`}>{message}</p>
       </div>
       <button
         type="button"
         onClick={dismiss}
+        style={FONT_INHERIT}
         className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center transition ${s.button}`}
         aria-label="Dismiss"
       >
