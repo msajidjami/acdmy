@@ -2,16 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
-  BookOpen,
   User,
   Shield,
   Menu,
   X,
   Mail,
   Compass,
-  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -52,7 +51,7 @@ export default function Navbar() {
   }, []);
 
   /* ============================================================
-     FETCH UNREAD COUNT (useCallback)
+     FETCH UNREAD COUNT
      ============================================================ */
 
   const fetchUnreadCount = useCallback(async () => {
@@ -79,7 +78,7 @@ export default function Navbar() {
   }, [isAdmin]);
 
   /* ============================================================
-     POLLING — صرف admin کے لیے، اور tab visible ہونے پر
+     POLLING — صرف admin کے لیے
      ============================================================ */
 
   useEffect(() => {
@@ -91,7 +90,6 @@ export default function Navbar() {
     void fetchUnreadCount();
 
     const interval = setInterval(() => {
-      // صرف visible tab پر polling
       if (document.visibilityState === 'visible') {
         void fetchUnreadCount();
       }
@@ -122,7 +120,6 @@ export default function Navbar() {
       /* ignore */
     }
 
-    // ✅ صرف token cookie صاف کریں (باقی cookies محفوظ رہیں)
     document.cookie =
       'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
 
@@ -136,7 +133,7 @@ export default function Navbar() {
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   /* ============================================================
-     NAV LINKS DATA
+     NAV LINKS
      ============================================================ */
 
   const navLinks = [
@@ -154,21 +151,24 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-lg shadow-lg z-50 border-b border-slate-200">
-      <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
+      <div className="container mx-auto px-4 sm:px-6 py-2 sm:py-3 flex justify-between items-center">
 
         {/* ============================================
-            LOGO
+            ✅ LOGO (Image)
         ============================================ */}
         <Link
           href="/"
-          className="flex items-center gap-2 sm:gap-3 hover:opacity-90 transition-opacity min-w-0"
+          className="flex items-center hover:opacity-90 transition-opacity min-w-0 shrink-0"
+          aria-label="ilmora786 — Home"
         >
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-teal-600 to-emerald-500 rounded-xl flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
-            <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-          </div>
-          <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-teal-700 to-emerald-600 bg-clip-text text-transparent truncate">
-            ilmora786
-          </h1>
+          <Image
+            src="/logo.png"
+            alt="ilmora786 — Online Academy Hub"
+            width={260}
+            height={68}
+            priority
+            className="h-13 sm:h-14 w-auto object-contain"
+          />
         </Link>
 
         {/* ============================================
@@ -176,7 +176,6 @@ export default function Navbar() {
         ============================================ */}
         <div className="hidden lg:flex items-center gap-6 xl:gap-8">
 
-          {/* Links */}
           {navLinks.map((link) => {
             const Icon = link.icon;
             return (
@@ -191,7 +190,7 @@ export default function Navbar() {
             );
           })}
 
-          {/* Admin Messages Link */}
+          {/* Admin Messages */}
           {isAdmin && (
             <Link
               href="/admin/messages"

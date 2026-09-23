@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import  connectDB  from '@/app/lib/dbConnect';
+import connectDB from '@/app/lib/dbConnect';
 import { ClassTranscript } from '@/models/ClassTranscript';
 import Assignment from '@/models/Assignment';
-import Academy from '@/models/Academy'; // اپنے راستے کے مطابق
+import Academy from '@/models/Academy';
 import Teacher from '@/models/Teacher';
 import Student from '@/models/Student';
 import Course from '@/models/Course';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,16 +27,24 @@ export async function POST(req: NextRequest) {
       assignmentId,
       endedAt: null,
     });
-    if (existing) return NextResponse.json({ id: String(existing._id) });
+    if (existing) {
+      return NextResponse.json({ id: String(existing._id) });
+    }
 
     const assignment = await Assignment.findById(assignmentId).lean<any>();
     if (!assignment) {
-      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Assignment not found' },
+        { status: 404 }
+      );
     }
 
     const academy = await Academy.findById(assignment.academyId).lean<any>();
     if (!academy) {
-      return NextResponse.json({ error: 'Academy not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Academy not found' },
+        { status: 404 }
+      );
     }
 
     const [teacher, student, course] = await Promise.all([
@@ -45,7 +56,7 @@ export async function POST(req: NextRequest) {
     const doc = await ClassTranscript.create({
       assignmentId: assignment._id,
       academyId: assignment.academyId,
-      ownerId: academy.ownerId || academy.owner || academy.userId, // اپنے Academy schema کے مطابق
+      ownerId: academy.ownerId || academy.owner || academy.userId,
       teacherId: assignment.teacherId,
       studentId: assignment.studentId,
       courseId: assignment.courseId,
@@ -62,6 +73,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: String(doc._id) });
   } catch (err: any) {
     console.error('[Transcript POST]', err);
-    return NextResponse.json({ error: err?.message || 'Failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || 'Failed' },
+      { status: 500 }
+    );
   }
 }

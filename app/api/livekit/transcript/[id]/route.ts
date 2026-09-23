@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connectDB  from '@/app/lib/dbConnect';
+import connectDB from '@/app/lib/dbConnect';
 import { ClassTranscript } from '@/models/ClassTranscript';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+/* ✅ Next.js 15 — params اب Promise ہیں */
+
+/* ============================================================
+   PATCH — نیا message شامل کریں (اور flags اگر ہوں)
+   ============================================================ */
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
+    const { id } = await params;
+
     const { speakerRole, speakerName, text, flags = [] } = await req.json();
-    if (!text) return NextResponse.json({ error: 'text required' }, { status: 400 });
+
+    if (!text) {
+      return NextResponse.json(
+        { error: 'text required' },
+        { status: 400 }
+      );
+    }
 
     const message = {
       speakerRole,
@@ -17,7 +34,9 @@ export async function PATCH(
       text,
       isFinal: true,
       timestamp: new Date(),
-      flagCategories: Array.isArray(flags) ? flags.map((f: any) => f.category) : [],
+      flagCategories: Array.isArray(flags)
+        ? flags.map((f: any) => f.category)
+        : [],
     };
 
     const flagDocs = Array.isArray(flags)
@@ -32,24 +51,36 @@ export async function PATCH(
       : [];
 
     const update: any = { $push: { messages: message } };
-    if (flagDocs.length) update.$push.flags = { $each: flagDocs };
+    if (flagDocs.length) {
+      update.$push.flags = { $each: flagDocs };
+    }
 
-    await ClassTranscript.updateOne({ _id: params.id }, update);
+    await ClassTranscript.updateOne({ _id: id }, update);
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || 'Failed' },
+      { status: 500 }
+    );
   }
 }
 
+/* ============================================================
+   PUT — سیشن ختم کریں (endedAt سیٹ کریں)
+   ============================================================ */
+
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
+    const { id } = await params;
+
     const body = await req.json().catch(() => ({}));
+
     await ClassTranscript.updateOne(
-      { _id: params.id, endedAt: null },
+      { _id: id, endedAt: null },
       {
         $set: {
           endedAt: new Date(),
@@ -57,8 +88,12 @@ export async function PUT(
         },
       }
     );
+
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || 'Failed' },
+      { status: 500 }
+    );
   }
 }
