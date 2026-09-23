@@ -23,6 +23,7 @@ import {
   Banknote,
   Wallet,
   ClipboardList,
+  ShieldAlert,
 } from 'lucide-react';
 
 /* ============================================================
@@ -81,6 +82,7 @@ const contentNavItems: NavItem[] = [
 ];
 
 const systemNavItems: NavItem[] = [
+  { name: 'Class Transcripts', href: '/owner/transcripts', icon: ShieldAlert },
   { name: 'Messages', href: '/owner/messages', icon: MessageSquare },
   { name: 'Inquiries', href: '/owner/inquiries', icon: Inbox },
   { name: 'Billing', href: '/owner/billing', icon: Sparkles },
@@ -155,6 +157,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
         pathname.startsWith('/owner/payments/')
       );
     }
+    if (href === '/owner/transcripts') {
+      return (
+        pathname === '/owner/transcripts' ||
+        pathname.startsWith('/owner/transcripts/')
+      );
+    }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
@@ -162,6 +170,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const renderNavItem = (item: NavItem, onClick?: () => void) => {
     const active = isActive(item.href);
     const Icon = item.icon;
+    const isTranscript = item.href === '/owner/transcripts';
 
     return (
       <Link
@@ -173,13 +182,19 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           text-sm font-medium transition-all duration-200
           ${
             active
-              ? 'bg-emerald-50 text-emerald-700 shadow-sm'
+              ? isTranscript
+                ? 'bg-red-50 text-red-700 shadow-sm'
+                : 'bg-emerald-50 text-emerald-700 shadow-sm'
               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
           }
         `}
       >
         {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-emerald-600 rounded-r-full" />
+          <span
+            className={`absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full ${
+              isTranscript ? 'bg-red-600' : 'bg-emerald-600'
+            }`}
+          />
         )}
 
         <span
@@ -187,7 +202,9 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
             flex items-center justify-center h-8 w-8 rounded-lg transition-colors
             ${
               active
-                ? 'bg-emerald-100 text-emerald-600'
+                ? isTranscript
+                  ? 'bg-red-100 text-red-600'
+                  : 'bg-emerald-100 text-emerald-600'
                 : 'bg-slate-100 text-slate-500 group-hover:bg-white group-hover:text-emerald-600'
             }
           `}
@@ -203,7 +220,13 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           </span>
         )}
 
-        {active && <ChevronRight className="h-4 w-4 text-emerald-500" />}
+        {active && (
+          <ChevronRight
+            className={`h-4 w-4 ${
+              isTranscript ? 'text-red-500' : 'text-emerald-500'
+            }`}
+          />
+        )}
       </Link>
     );
   };

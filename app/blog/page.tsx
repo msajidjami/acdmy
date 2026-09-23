@@ -76,11 +76,17 @@ function relativeTime(d: Date | string) {
   }
 }
 
-/* زبان کے مطابق title/excerpt font class */
 function langFont(language: string, kind: 'title' | 'excerpt' = 'title') {
   if (language === 'ur') return 'font-urdu';
   if (language === 'ar') return 'font-arabic';
   return kind === 'title' ? 'font-serif' : '';
+}
+
+/* ✅ Urdu slug کے لیے safe href */
+function articleHref(slug: string): string {
+  if (!slug) return '/blog';
+  // Next.js Link خود encode کرتا ہے لیکن صریح encode سے یقینی بناتے ہیں
+  return `/blog/${encodeURIComponent(slug)}`;
 }
 
 /* ============================================================
@@ -148,12 +154,12 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
   /* ---------- Algorithmic sort ---------- */
   const sorted = sortByScore(rawArticles as any, profile);
 
-  /* ---------- Pagination (after sort) ---------- */
+  /* ---------- Pagination ---------- */
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const start = (page - 1) * PAGE_SIZE;
   const articles = sorted.slice(start, start + PAGE_SIZE);
 
-  /* ---------- Personalized vs generic header ---------- */
+  /* ---------- Personalized header ---------- */
   const isPersonalized =
     Object.keys(profile.categories).length > 0 ||
     Object.keys(profile.languages).length > 0;
@@ -166,21 +172,20 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
     Object.entries(profile.languages).sort((a, b) => b[1] - a[1])[0]?.[0] ||
     null;
 
-  /* filters کے ساتھ کوئی بھی سرگرمی */
   const hasActiveFilters =
     category !== 'all' || language !== 'all' || q.length > 0;
 
   return (
-    <div className="min-h-screen  bg-gradient-to-b from-white via-slate-50/40 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50/40 to-white">
       {/* ============================================
-          🔍 SEARCH BAR — سب سے اوپر (Sticky)
+          🔍 SEARCH BAR — Sticky
       ============================================ */}
-<section className="sticky top-20 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+      <section className="sticky top-20 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3">
           <form className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             {/* Search input */}
             <div className="relative flex-1">
-              <Search className="absolute left-3  top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 name="q"
@@ -190,7 +195,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               />
             </div>
 
-            {/* Category dropdown */}
+            {/* Category */}
             <select
               name="category"
               defaultValue={category}
@@ -204,7 +209,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               ))}
             </select>
 
-            {/* Language dropdown */}
+            {/* Language */}
             <select
               name="language"
               defaultValue={language}
@@ -224,7 +229,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               Search
             </button>
 
-            {/* Clear (اگر filter لگا ہو) */}
+            {/* Clear */}
             {hasActiveFilters && (
               <Link
                 href="/blog"
@@ -235,7 +240,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             )}
           </form>
 
-          {/* Quick language pills */}
+          {/* Quick pills */}
           <div className="mt-2.5 flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Quick:
@@ -284,9 +289,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
         </div>
       </section>
 
-      {/* ============================================
-          HERO
-      ============================================ */}
+      {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-violet-200/30 rounded-full blur-3xl" />
@@ -340,9 +343,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
         </div>
       </section>
 
-      {/* ============================================
-          TRENDING NOW
-      ============================================ */}
+      {/* TRENDING */}
       {trendingRaw.length > 0 && !hasActiveFilters && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-12">
           <div className="flex items-center gap-2 mb-5">
@@ -369,9 +370,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
         </section>
       )}
 
-      {/* ============================================
-          LATEST (صرف تب جب personalized نہیں)
-      ============================================ */}
+      {/* LATEST */}
       {!isPersonalized && latestRaw.length > 0 && !hasActiveFilters && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-12">
           <div className="flex items-center gap-2 mb-5">
@@ -391,11 +390,8 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
         </section>
       )}
 
-      {/* ============================================
-          MAIN GRID
-      ============================================ */}
+      {/* MAIN GRID */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-16">
-        {/* Section header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-emerald-600" />
@@ -440,9 +436,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
           </div>
         )}
 
-        {/* ============================================
-            PAGINATION
-        ============================================ */}
+        {/* PAGINATION */}
         {totalPages > 1 && (
           <div className="mt-12 flex items-center justify-center gap-2">
             {page > 1 && (
@@ -507,8 +501,6 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
    COMPONENTS
    ============================================================ */
 
-/* ---------- Article Card (main grid) ---------- */
-
 function ArticleCard({
   article,
 }: {
@@ -518,15 +510,13 @@ function ArticleCard({
   const lang = article.language as string;
   const fontTitle = langFont(lang, 'title');
   const fontExcerpt = langFont(lang, 'excerpt');
-
   const views = article.uniqueViews || article.views || 0;
 
   return (
     <Link
-      href={`/blog/${article.slug}`}
+      href={articleHref(article.slug)}
       className="group rounded-2xl bg-white border border-slate-200 overflow-hidden hover:border-emerald-300 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
     >
-      {/* Thumbnail */}
       <div className="aspect-video bg-gradient-to-br from-emerald-100 to-teal-100 relative overflow-hidden">
         {article.thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -541,7 +531,6 @@ function ArticleCard({
           </div>
         )}
 
-        {/* Badges */}
         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
           <span className="px-2 py-0.5 rounded-full bg-white/95 backdrop-blur text-emerald-700 text-[10px] font-bold uppercase tracking-wider shadow-sm">
             {article.category}
@@ -551,7 +540,6 @@ function ArticleCard({
           </span>
         </div>
 
-        {/* Views badge */}
         <div className="absolute bottom-2.5 right-2.5">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur text-white text-[10px] font-bold">
             <Eye className="h-3 w-3" />
@@ -560,7 +548,6 @@ function ArticleCard({
         </div>
       </div>
 
-      {/* Body */}
       <div className="p-4 flex-1 flex flex-col">
         <h3
           className={`font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2 group-hover:text-emerald-700 transition ${fontTitle}`}
@@ -576,7 +563,6 @@ function ArticleCard({
           {article.excerpt}
         </p>
 
-        {/* Meta */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
@@ -602,15 +588,13 @@ function ArticleCard({
   );
 }
 
-/* ---------- Trending Card (بڑا) ---------- */
-
 function TrendingCard({ article, rank }: { article: any; rank: number }) {
   const lang = article.language as string;
   const views = article.uniqueViews || article.views || 0;
 
   return (
     <Link
-      href={`/blog/${article.slug}`}
+      href={articleHref(article.slug)}
       className="group relative rounded-2xl bg-white border border-slate-200 overflow-hidden hover:border-orange-300 hover:shadow-xl transition-all duration-300"
     >
       <div className="aspect-[16/9] bg-gradient-to-br from-orange-100 to-red-100 relative overflow-hidden">
@@ -627,14 +611,12 @@ function TrendingCard({ article, rank }: { article: any; rank: number }) {
           </div>
         )}
 
-        {/* Rank badge */}
         <div className="absolute top-3 left-3">
           <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 text-white text-sm font-bold shadow-lg">
             {rank}
           </span>
         </div>
 
-        {/* Views */}
         <div className="absolute bottom-3 right-3">
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-900/85 backdrop-blur text-white text-xs font-bold">
             <Flame className="h-3.5 w-3.5 text-orange-400" />
@@ -667,15 +649,13 @@ function TrendingCard({ article, rank }: { article: any; rank: number }) {
   );
 }
 
-/* ---------- Compact Card (latest) ---------- */
-
 function CompactCard({ article }: { article: any }) {
   const lang = article.language as string;
   const views = article.uniqueViews || article.views || 0;
 
   return (
     <Link
-      href={`/blog/${article.slug}`}
+      href={articleHref(article.slug)}
       className="group flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-300 hover:shadow-md transition"
     >
       <div className="h-16 w-24 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 shrink-0 overflow-hidden">
@@ -719,8 +699,6 @@ function CompactCard({ article }: { article: any }) {
     </Link>
   );
 }
-
-/* ---------- Pagination Link ---------- */
 
 function PagLink({
   page,

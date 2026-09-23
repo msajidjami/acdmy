@@ -39,6 +39,7 @@
     "react-icons": "^5.5.0",
     "react-pdf": "^10.4.1",
     "react-router-dom": "^6.30.6",
+    "roughjs": "^4.6.6",
     "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },
