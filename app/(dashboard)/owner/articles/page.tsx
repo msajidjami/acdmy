@@ -11,11 +11,13 @@ import {
   XCircle,
   AlertTriangle,
   Calendar,
+  Pencil,
 } from 'lucide-react';
 
 import connectDB from '@/app/lib/dbConnect';
 import Article from '@/models/Article';
 import ApproveButton from './ApproveButton';
+import DeleteButton from './DeleteButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,7 +187,7 @@ export default async function MyArticlesPage() {
                   </div>
 
                   {/* ✅ Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     {a.status === 'published' && (
                       <Link
                         href={`/blog/${a.slug}`}
@@ -196,6 +198,18 @@ export default async function MyArticlesPage() {
                         View
                       </Link>
                     )}
+
+                    {/* ✏️ Edit */}
+                    <Link
+                      href={`/owner/articles/${a.slug}/edit`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </Link>
+
+                    {/* 🗑️ Delete */}
+                    <DeleteButton slug={a.slug} title={a.title} />
 
                     {/* ✅ Approve/Reject for pending */}
                     {a.status === 'pending' && (

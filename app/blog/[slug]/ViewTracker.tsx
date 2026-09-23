@@ -14,6 +14,17 @@ type Props = {
   language: string;
 };
 
+/* ✅ Urdu/Arabic slug کے لیے safe encode */
+function safeEncode(s: string): string {
+  try {
+    // پہلے decode کریں تاکہ double-encode نہ ہو
+    const decoded = decodeURIComponent(s);
+    return encodeURIComponent(decoded);
+  } catch {
+    return encodeURIComponent(s);
+  }
+}
+
 export default function ViewTracker({ slug, category, language }: Props) {
   const tracked = useRef(false);
 
@@ -27,7 +38,8 @@ export default function ViewTracker({ slug, category, language }: Props) {
 
     /* ---------- 1. Unique view track (API) ---------- */
     if (!alreadyInSession) {
-      fetch(`/api/articles/${slug}/view`, {
+      const encodedSlug = safeEncode(slug);
+      fetch(`/api/articles/${encodedSlug}/view`, {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store',
@@ -52,7 +64,6 @@ export default function ViewTracker({ slug, category, language }: Props) {
       const updated = updateProfile(profile, { category, language, slug });
       const serialized = serializeProfile(updated);
 
-      // 6 ماہ کے لیے save کریں
       const maxAge = 60 * 60 * 24 * 180;
       document.cookie = `${PROFILE_COOKIE}=${serialized}; path=/; max-age=${maxAge}; SameSite=Lax`;
     } catch {

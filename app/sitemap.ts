@@ -8,6 +8,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'daily',
       priority: 1,
     },
+    {
+      url: 'https://www.quranandislamic.com/explore',
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
     // آپ اپنے دیگر صفحات کے لنکس یہاں مزید ایڈ کر سکتے ہیں
     {
       url: 'https://www.quranandislamic.com/courses',
@@ -16,7 +22,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
-      url: 'https://www.quranandislamic.com/articles',
+      url: 'https://www.quranandislamic.com/blog',
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.8,

@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
 import {
   ArrowLeft,
   Calendar,
@@ -9,6 +11,8 @@ import {
   Sparkles,
   TrendingUp,
   BookOpen,
+  AlertTriangle,
+  EyeOff,
 } from 'lucide-react';
 
 import connectDB from '@/app/lib/dbConnect';
@@ -22,19 +26,105 @@ type Props = {
 };
 
 /* ============================================================
+   HELPERS
+   ============================================================ */
+
+function safeDecode(slug: string): string {
+  try {
+    return decodeURIComponent(slug);
+  } catch {
+    return slug;
+  }
+}
+
+/* ✅ Unicode normalization — NFC/NFD فرق ختم کرتا ہے */
+function normalize(s: string): string {
+  try {
+    return s.normalize('NFC').trim();
+  } catch {
+    return s.trim();
+  }
+}
+
+/* ✅ Owner check — لاگ ان ہو تو userId واپس */
+async function getOwnerId(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+    if (!token) return null;
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return null;
+    const decoded = jwt.verify(token, secret) as { userId?: string };
+    return decoded.userId ? String(decoded.userId) : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ✅ Multi-strategy article lookup */
+async function findArticle(rawSlug: string, ownerId: string | null) {
+  const decoded = safeDecode(rawSlug);
+  const candidates = Array.from(
+    new Set([decoded, rawSlug, normalize(decoded), normalize(rawSlug)])
+  );
+
+  const select =
+    'title slug excerpt content language category author authorName views uniqueViews tags thumbnail seo publishedAt createdAt status authorId aiScore aiStatus';
+
+  // 1️⃣ published article (سب کے لیے)
+  for (const s of candidates) {
+    const a = await Article.findOne({ slug: s, status: 'published' })
+      .select(select)
+      .lean();
+    if (a) return { article: a, isOwnerPreview: false };
+  }
+
+  // 2️⃣ case-insensitive regex fallback
+  for (const s of candidates) {
+    try {
+      const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const a = await Article.findOne({
+        slug: { $regex: `^${escaped}$`, $options: 'i' },
+        status: 'published',
+      })
+        .select(select)
+        .lean();
+      if (a) return { article: a, isOwnerPreview: false };
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3️⃣ اگر owner لاگ ان ہے تو اپنی غیر-published article دکھائیں
+  if (ownerId) {
+    for (const s of candidates) {
+      const a = await Article.findOne({ slug: s, authorId: ownerId })
+        .select(select)
+        .lean();
+      if (a) return { article: a, isOwnerPreview: true };
+    }
+  }
+
+  return null;
+}
+
+/* ============================================================
    METADATA
    ============================================================ */
 
 export async function generateMetadata({ params }: Props) {
   try {
-    const { slug } = await params;
+    const { slug: rawSlug } = await params;
     await connectDB();
-    const a = await Article.findOne({ slug, status: 'published' })
-      .select('title excerpt seo')
-      .lean();
 
-    if (!a) return { title: 'Article not found | ilmora786' };
+    const ownerId = await getOwnerId();
+    const result = await findArticle(rawSlug, ownerId);
 
+    if (!result?.article) {
+      return { title: 'Article not found | ilmora786' };
+    }
+
+    const a = result.article as any;
     return {
       title: a.seo?.metaTitle || `${a.title} | ilmora786`,
       description:
@@ -46,7 +136,7 @@ export async function generateMetadata({ params }: Props) {
 }
 
 /* ============================================================
-   HELPERS
+   CONSTANTS
    ============================================================ */
 
 const LANG_LABEL: Record<string, string> = {
@@ -97,18 +187,14 @@ function readTime(c: string) {
 
 function shouldShowExcerpt(excerpt: string, content: string): boolean {
   if (!excerpt || !content) return false;
-
   const plainContent = content
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-
   const cleanExcerpt = excerpt.replace(/…$/, '').trim().toLowerCase();
-
   if (plainContent.startsWith(cleanExcerpt.slice(0, 80))) return false;
   if (plainContent.includes(cleanExcerpt.slice(0, 80))) return false;
-
   return true;
 }
 
@@ -148,14 +234,7 @@ function langFont(language: string, kind: 'title' | 'excerpt' = 'title') {
 }
 
 /* ============================================================
-   ✅ RELATED ARTICLES SCORING ENGINE
-   Similarity score based on:
-   - Same category (+50)
-   - Same language (+25)
-   - Same author (+15)
-   - Matching tags (+10 per tag, max 30)
-   - Recency boost (+10)
-   - Popularity boost (log scale, max 15)
+   RELATED ARTICLES SCORING
    ============================================================ */
 
 type LeanArticle = {
@@ -175,79 +254,53 @@ type LeanArticle = {
   createdAt: Date | string;
 };
 
-function scoreSimilarity(
-  candidate: LeanArticle,
-  current: LeanArticle
-): number {
+function scoreSimilarity(c: LeanArticle, cur: LeanArticle): number {
   let score = 0;
-
-  /* Category match — سب سے اہم */
-  if (candidate.category === current.category) score += 50;
-
-  /* Language match */
-  if (candidate.language === current.language) score += 25;
-
-  /* Author match */
-  const candAuthor = candidate.authorName || candidate.author || '';
-  const currAuthor = current.authorName || current.author || '';
-  if (candAuthor && candAuthor === currAuthor) score += 15;
-
-  /* Tags overlap */
-  const candTags = new Set((candidate.tags || []).map((t) => t.toLowerCase()));
-  const currTags = new Set((current.tags || []).map((t) => t.toLowerCase()));
-  let tagMatches = 0;
-  for (const t of candTags) {
-    if (currTags.has(t)) tagMatches++;
-  }
-  score += Math.min(30, tagMatches * 10);
-
-  /* Recency — 30 دن کی half-life */
+  if (c.category === cur.category) score += 50;
+  if (c.language === cur.language) score += 25;
+  const cA = c.authorName || c.author || '';
+  const curA = cur.authorName || cur.author || '';
+  if (cA && cA === curA) score += 15;
+  const cT = new Set((c.tags || []).map((t) => t.toLowerCase()));
+  const curT = new Set((cur.tags || []).map((t) => t.toLowerCase()));
+  let tm = 0;
+  for (const t of cT) if (curT.has(t)) tm++;
+  score += Math.min(30, tm * 10);
   const daysOld =
     (Date.now() -
-      new Date(candidate.publishedAt || candidate.createdAt).getTime()) /
+      new Date(c.publishedAt || c.createdAt).getTime()) /
     (1000 * 60 * 60 * 24);
-  const recency = Math.max(0, 1 - daysOld / 30);
-  score += recency * 10;
-
-  /* Popularity — log scale */
-  const views = candidate.uniqueViews || candidate.views || 0;
-  const popularity = Math.min(1, Math.log10(views + 1) / 3);
-  score += popularity * 15;
-
+  score += Math.max(0, 1 - daysOld / 30) * 10;
+  const views = c.uniqueViews || c.views || 0;
+  score += Math.min(1, Math.log10(views + 1) / 3) * 15;
   return score;
 }
 
 function getRelatedArticles(
   current: LeanArticle,
   pool: LeanArticle[],
-  limit: number = 6
+  limit = 6
 ): LeanArticle[] {
   const scored = pool
     .filter((a) => a.slug !== current.slug)
     .map((a) => ({ article: a, score: scoreSimilarity(a, current) }))
-    .filter((x) => x.score > 20) // کم از کم کچھ relevance ہو
+    .filter((x) => x.score > 20)
     .sort((a, b) => b.score - a.score);
 
-  /* ✅ Diversity: same category ایک ساتھ زیادہ نہ آئے */
   const result: LeanArticle[] = [];
-  const categoryCount: Record<string, number> = {};
-  const languageCount: Record<string, number> = {};
+  const catCount: Record<string, number> = {};
+  const langCount: Record<string, number> = {};
 
   for (const { article } of scored) {
     if (result.length >= limit) break;
-
-    const catLimit = categoryCount[article.category] || 0;
-    const langLimit = languageCount[article.language] || 0;
-
-    // ایک category سے max 3، ایک زبان سے max 4
-    if (catLimit >= 3) continue;
-    if (langLimit >= 4) continue;
-
+    const c = catCount[article.category] || 0;
+    const l = langCount[article.language] || 0;
+    if (c >= 3) continue;
+    if (l >= 4) continue;
     result.push(article);
-    categoryCount[article.category] = catLimit + 1;
-    languageCount[article.language] = langLimit + 1;
+    catCount[article.category] = c + 1;
+    langCount[article.language] = l + 1;
   }
-
   return result;
 }
 
@@ -256,22 +309,22 @@ function getRelatedArticles(
    ============================================================ */
 
 export default async function ArticlePage({ params }: Props) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
 
   await connectDB();
 
-  const article = await Article.findOne({ slug, status: 'published' })
-    .select(
-      'title slug excerpt content language category author authorName views uniqueViews tags thumbnail seo publishedAt createdAt'
-    )
-    .lean();
+  const ownerId = await getOwnerId();
+  const result = await findArticle(rawSlug, ownerId);
 
-  if (!article) notFound();
+  if (!result?.article) notFound();
 
-  /* ✅ Related articles کے لیے candidate pool */
+  const article: any = result.article;
+  const isOwnerPreview = result.isOwnerPreview;
+
+  /* Related pool — صرف published */
   const relatedPool = await Article.find({
     status: 'published',
-    slug: { $ne: slug },
+    slug: { $ne: article.slug },
     $or: [
       { category: article.category },
       { language: article.language },
@@ -307,11 +360,50 @@ export default async function ArticlePage({ params }: Props) {
         isRtl ? 'lang-rtl' : ''
       }`}
     >
-      <ViewTracker
-        slug={slug}
-        category={article.category}
-        language={article.language}
-      />
+      {/* ✅ صرف published پر views track کریں */}
+      {!isOwnerPreview && (
+        <ViewTracker
+          slug={article.slug}
+          category={article.category}
+          language={article.language}
+        />
+      )}
+
+      {/* ⚠️ Owner Preview Banner */}
+      {isOwnerPreview && (
+        <div className="bg-amber-50 border-b-2 border-amber-200">
+          <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+              <EyeOff className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-900">
+                Preview Mode — Not Published
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                یہ article ابھی{' '}
+                <strong>
+                  {article.status === 'pending'
+                    ? 'review کے زیرِ التوا'
+                    : article.status === 'rejected'
+                    ? 'مسترد شدہ'
+                    : article.status}
+                </strong>{' '}
+                ہے۔ صرف آپ (مالک) اسے دیکھ سکتے ہیں۔
+                {typeof article.aiScore === 'number' && (
+                  <> AI Score: <strong>{article.aiScore}/100</strong></>
+                )}
+              </p>
+            </div>
+            <Link
+              href="/owner/articles"
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition"
+            >
+              Manage
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Back */}
       <div className="mx-auto max-w-3xl px-4 pt-8">
@@ -324,9 +416,7 @@ export default async function ArticlePage({ params }: Props) {
         </Link>
       </div>
 
-      {/* ============================================
-          HEADER
-      ============================================ */}
+      {/* HEADER */}
       <header className="mx-auto max-w-3xl px-4 pt-8 pb-6">
         <div
           className={`flex items-center gap-2 flex-wrap ${
@@ -340,6 +430,12 @@ export default async function ArticlePage({ params }: Props) {
             <Globe className="h-3 w-3" />
             {LANG_LABEL[article.language] || article.language}
           </span>
+          {isOwnerPreview && article.status === 'pending' && (
+            <span className="px-3 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-700 text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Pending
+            </span>
+          )}
         </div>
 
         <h1
@@ -406,9 +502,7 @@ export default async function ArticlePage({ params }: Props) {
         </div>
       </header>
 
-      {/* ============================================
-          THUMBNAIL
-      ============================================ */}
+      {/* THUMBNAIL */}
       {article.thumbnail && (
         <div className="mx-auto max-w-4xl px-4 pb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -420,9 +514,7 @@ export default async function ArticlePage({ params }: Props) {
         </div>
       )}
 
-      {/* ============================================
-          CONTENT
-      ============================================ */}
+      {/* CONTENT */}
       <div className="mx-auto max-w-3xl px-4 pb-16">
         <div
           className={`prose prose-lg prose-slate max-w-none ${styles.bodyClass}`}
@@ -461,13 +553,10 @@ export default async function ArticlePage({ params }: Props) {
         )}
       </div>
 
-      {/* ============================================
-          ✅ RELATED ARTICLES
-      ============================================ */}
+      {/* RELATED */}
       {relatedArticles.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 pb-16">
           <div className="border-t border-slate-200 pt-10">
-            {/* Header */}
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/30">
@@ -482,9 +571,6 @@ export default async function ArticlePage({ params }: Props) {
                     ? 'آپ کے لیے مزید مضامین'
                     : 'More articles for you'}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
-                  {isRtl ? 'تجویز کردہ' : 'Recommended'}
-                </span>
               </div>
 
               <Link
@@ -498,7 +584,6 @@ export default async function ArticlePage({ params }: Props) {
               </Link>
             </div>
 
-            {/* Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {relatedArticles.map((a) => (
                 <RelatedCard key={String(a._id)} article={a} />
@@ -508,9 +593,7 @@ export default async function ArticlePage({ params }: Props) {
         </section>
       )}
 
-      {/* ============================================
-          BOTTOM NAV
-      ============================================ */}
+      {/* BOTTOM NAV */}
       <div className="mx-auto max-w-3xl px-4 pb-16">
         <Link
           href="/blog"
@@ -525,7 +608,7 @@ export default async function ArticlePage({ params }: Props) {
 }
 
 /* ============================================================
-   ✅ RELATED CARD COMPONENT
+   RELATED CARD
    ============================================================ */
 
 function RelatedCard({ article }: { article: LeanArticle }) {
@@ -537,10 +620,9 @@ function RelatedCard({ article }: { article: LeanArticle }) {
 
   return (
     <Link
-      href={`/blog/${article.slug}`}
+      href={`/blog/${encodeURIComponent(article.slug)}`}
       className="group rounded-2xl bg-white border border-slate-200 overflow-hidden hover:border-emerald-300 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
     >
-      {/* Thumbnail */}
       <div className="aspect-video bg-gradient-to-br from-emerald-100 to-teal-100 relative overflow-hidden">
         {article.thumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -555,7 +637,6 @@ function RelatedCard({ article }: { article: LeanArticle }) {
           </div>
         )}
 
-        {/* Badges */}
         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
           <span className="px-2 py-0.5 rounded-full bg-white/95 backdrop-blur text-emerald-700 text-[10px] font-bold uppercase tracking-wider shadow-sm">
             {article.category}
@@ -565,7 +646,6 @@ function RelatedCard({ article }: { article: LeanArticle }) {
           </span>
         </div>
 
-        {/* Views */}
         <div className="absolute bottom-2.5 right-2.5">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur text-white text-[10px] font-bold">
             <Eye className="h-3 w-3" />
@@ -574,7 +654,6 @@ function RelatedCard({ article }: { article: LeanArticle }) {
         </div>
       </div>
 
-      {/* Body */}
       <div className="p-4 flex-1 flex flex-col">
         <h3
           className={`font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2 group-hover:text-emerald-700 transition ${fontTitle}`}
@@ -592,7 +671,6 @@ function RelatedCard({ article }: { article: LeanArticle }) {
           </p>
         )}
 
-        {/* Meta */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
