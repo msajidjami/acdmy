@@ -10,7 +10,7 @@ import { ClassTranscript } from '@/models/ClassTranscript';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function PUT(
+export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -31,8 +31,12 @@ export async function PUT(
     const { id } = await params;
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const body = await req.json().catch(() => ({}));
-    const durationSec = Math.max(0, Number(body?.durationSec) || 0);
+    const body = await req.json();
+    const { speakerRole, speakerName, text, isFinal } = body || {};
+
+    if (!text || typeof text !== 'string') {
+      return NextResponse.json({ error: 'text required' }, { status: 400 });
+    }
 
     await connectDB();
 
@@ -44,19 +48,33 @@ export async function PUT(
 
     if (!teacher) return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
 
+    const doc: any = await ClassTranscript.findOne({
+      _id: id,
+      teacherId: teacher._id,
+      endedAt: null,
+    }).lean();
+
+    if (!doc) return NextResponse.json({ error: 'Active session not found' }, { status: 404 });
+
     await ClassTranscript.updateOne(
-      { _id: id, teacherId: teacher._id, endedAt: null },
+      { _id: id },
       {
-        $set: {
-          endedAt: new Date(),
-          durationSec,
+        $push: {
+          messages: {
+            speakerRole: speakerRole === 'student' ? 'student' : 'teacher',
+            speakerName: String(speakerName || 'Unknown'),
+            text: String(text).slice(0, 2000),
+            isFinal: isFinal !== false,
+            timestamp: new Date(),
+            flagCategories: [],
+          },
         },
       }
     );
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error('[PUT /api/livekit/transcript/[id]]', err);
+    console.error('[POST /api/livekit/transcript/[id]/message]', err);
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
   }
 }

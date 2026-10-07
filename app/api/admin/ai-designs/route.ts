@@ -38,7 +38,7 @@ export interface UploadedImageResult {
 }
 
 /* ============================================================
-   Helper 1 — Generic buffer upload (پہلے سے موجود)
+   Helper 1 — Generic buffer upload
    ============================================================ */
 
 export async function uploadToCloudinary(
@@ -91,7 +91,7 @@ export async function uploadToCloudinary(
 }
 
 /* ============================================================
-   Helper 2 — uploadImageBuffer  ✅ یہ missing تھا
+   Helper 2 — Buffer upload (AI Design routes کے لیے)
    ============================================================ */
 
 export async function uploadImageBuffer(
@@ -117,7 +117,7 @@ export async function uploadImageBuffer(
 }
 
 /* ============================================================
-   Helper 3 — deleteImage  ✅ یہ بھی missing تھا
+   Helper 3 — Cloudinary delete
    ============================================================ */
 
 export async function deleteImage(publicId: string): Promise<void> {

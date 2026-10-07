@@ -15,455 +15,222 @@ import ClassesView from './ClassesView';
 
 export const dynamic = 'force-dynamic';
 
-/* ============================================================
-   CONSTANTS
-   ============================================================ */
-
 const DAY_ORDER = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
 ];
 
-/* ============================================================
-   HELPERS
-   ============================================================ */
+type PlanReason =
+  | 'active' | 'no-subscription' | 'pending' | 'expired' | 'unpaid' | 'no-academy';
 
-function normalizeEmail(value: unknown): string {
-  return String(value || '').trim().toLowerCase();
+function normalizeEmail(v: unknown): string {
+  return String(v || '').trim().toLowerCase();
 }
 
 function sortDays(days: string[]): string[] {
-  return [
-    ...new Set(days.map((day) => String(day || '').trim()).filter(Boolean)),
-  ].sort((a, b) => {
-    const indexA = DAY_ORDER.indexOf(a);
-    const indexB = DAY_ORDER.indexOf(b);
-
-    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-    if (indexA === -1) return 1;
-    if (indexB === -1) return -1;
-
-    return indexA - indexB;
-  });
+  return [...new Set(days.map((d) => String(d || '').trim()).filter(Boolean))].sort(
+    (a, b) => {
+      const ai = DAY_ORDER.indexOf(a);
+      const bi = DAY_ORDER.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+  );
 }
 
-function getClassKey(assignment: any): string {
-  return [
-    String(assignment.studentId || ''),
-    String(assignment.courseId || ''),
-    String(assignment.teacherId || ''),
-    String(assignment.startTime || ''),
-    String(assignment.endTime || ''),
-    'Asia/Karachi',
-  ].join('|');
+function getClassKey(a: any): string {
+  return [a.studentId, a.courseId, a.teacherId, a.startTime, a.endTime, 'Asia/Karachi']
+    .map((v) => String(v || ''))
+    .join('|');
 }
 
-/* ============================================================
-   ✅ PLAN CHECK — MULTIPLE SUBSCRIPTIONS SUPPORT
-   ============================================================
-   اگر academy کے پاس ایک سے زیادہ subscriptions ہوں اور
-   کوئی بھی active ہو → plan چل رہا ہے۔
-   ============================================================ */
-
-type PlanReason =
-  | 'active'
-  | 'no-subscription'
-  | 'pending'
-  | 'expired'
-  | 'unpaid'
-  | 'no-academy';
-
-type PlanCheckResult = {
-  hasPlan: boolean;
-  reason: PlanReason;
-};
-
-async function checkAcademyPlan(
-  academyId: unknown
-): Promise<PlanCheckResult> {
-  if (!academyId) {
-    return { hasPlan: false, reason: 'no-academy' };
-  }
-
+async function checkAcademyPlan(academyId: unknown) {
+  if (!academyId) return { hasPlan: false, reason: 'no-academy' as PlanReason };
   const now = new Date();
 
-  /* ============================================================
-     ✅ 1. کوئی بھی ACTIVE subscription ڈھونڈیں
-     (پرانی ہو یا نئی — اگر active ہے تو plan چل رہا ہے)
-     ============================================================ */
-  const activeSubscription = await Subscription.findOne({
+  const active = await Subscription.findOne({
     academyId,
-    $or: [
-      { paymentStatus: 'paid' },
-      { status: 'active' },
-      { status: 'trial' },
-    ],
+    $or: [{ paymentStatus: 'paid' }, { status: 'active' }, { status: 'trial' }],
     $and: [
-      {
-        $or: [
-          { endDate: { $gte: now } },
-          { endDate: null },
-          { endDate: { $exists: false } },
-        ],
-      },
+      { $or: [{ endDate: { $gte: now } }, { endDate: null }, { endDate: { $exists: false } }] },
     ],
-  })
-    .sort({ createdAt: -1 })
-    .lean();
+  }).sort({ createdAt: -1 }).lean();
 
-  if (activeSubscription) {
-    return { hasPlan: true, reason: 'active' };
-  }
+  if (active) return { hasPlan: true, reason: 'active' as PlanReason };
 
-  /* ============================================================
-     ✅ 2. کوئی active نہیں → latest subscription کا reason بتائیں
-     ============================================================ */
-  const latest = await Subscription.findOne({ academyId })
-    .sort({ createdAt: -1 })
-    .lean();
+  const latest: any = await Subscription.findOne({ academyId })
+    .sort({ createdAt: -1 }).lean();
 
-  if (!latest) {
-    return { hasPlan: false, reason: 'no-subscription' };
-  }
+  if (!latest) return { hasPlan: false, reason: 'no-subscription' as PlanReason };
 
-  const status = String((latest as any).status || '').toLowerCase();
-  const endDate = (latest as any).endDate
-    ? new Date((latest as any).endDate)
-    : null;
+  const status = String(latest.status || '').toLowerCase();
+  const endDate = latest.endDate ? new Date(latest.endDate) : null;
 
-  /* Expired */
-  if (endDate && endDate.getTime() < now.getTime()) {
-    return { hasPlan: false, reason: 'expired' };
-  }
-
-  /* Cancelled */
-  if (status === 'cancelled') {
-    return { hasPlan: false, reason: 'expired' };
-  }
-
-  /* Pending */
-  if (status === 'pending') {
-    return { hasPlan: false, reason: 'pending' };
-  }
-
-  /* باقی — unpaid */
-  return { hasPlan: false, reason: 'unpaid' };
+  if (endDate && endDate.getTime() < now.getTime()) return { hasPlan: false, reason: 'expired' as PlanReason };
+  if (status === 'cancelled') return { hasPlan: false, reason: 'expired' as PlanReason };
+  if (status === 'pending') return { hasPlan: false, reason: 'pending' as PlanReason };
+  return { hasPlan: false, reason: 'unpaid' as PlanReason };
 }
 
-/* ============================================================
-   ✅ TEACHER LOOKUP — email + userId fallback
-   ============================================================ */
-
-async function findTeacherForUser(
-  userId: unknown,
-  userEmail: string
-): Promise<any | null> {
-  /* Try 1: userId */
+async function findTeacher(userId: unknown, email: string) {
   if (userId) {
-    try {
-      const byUserId = await Teacher.findOne({
-        $or: [{ userId }, { user: userId }],
-      })
-        .select('_id name email academyId active')
-        .lean();
-
-      if (byUserId) return byUserId;
-    } catch {
-      // silent
-    }
+    const t = await Teacher.findOne({ $or: [{ userId }, { user: userId }] })
+      .select('_id name email academyId active').lean();
+    if (t) return t;
   }
-
-  /* Try 2: email */
-  if (userEmail) {
-    const byEmail = await Teacher.findOne({ email: userEmail })
-      .select('_id name email academyId active')
-      .lean();
-
-    if (byEmail) return byEmail;
+  if (email) {
+    const t = await Teacher.findOne({ email })
+      .select('_id name email academyId active').lean();
+    if (t) return t;
   }
-
   return null;
 }
-
-/* ============================================================
-   ✅ SCHEDULE FETCHER
-   ============================================================ */
 
 async function getTeacherSchedule() {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
-
   if (!token) redirect('/login');
 
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret) throw new Error('JWT_SECRET is not configured');
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not configured');
 
   let decoded: any;
   try {
-    decoded = jwt.verify(token, jwtSecret);
+    decoded = jwt.verify(token, secret);
   } catch {
     redirect('/login');
   }
-
   if (!decoded?.userId) redirect('/login');
 
   await connectDB();
 
-  const user = await User.findById(decoded.userId)
-    .select('name email role')
-    .lean();
-
+  const user: any = await User.findById(decoded.userId).select('name email').lean();
   if (!user) redirect('/login');
 
-  const userEmail = normalizeEmail((user as any).email);
+  const email = normalizeEmail(user.email);
+  const teacher: any = await findTeacher(decoded.userId, email);
 
-  /* ---------- Teacher Lookup ---------- */
-  const teacher = await findTeacherForUser(decoded.userId, userEmail);
+  const fallback = {
+    teacherName: String(user.name || 'Teacher'),
+    teacherEmail: email,
+    rows: [] as any[],
+    hasPlan: false,
+    academyName: '',
+    planReason: 'no-academy' as PlanReason,
+  };
 
-  /* ---------- No Teacher Record ---------- */
-  if (!teacher) {
+  if (!teacher || teacher.active === false || !teacher.academyId) return fallback;
+
+  const academy: any = await Academy.findById(teacher.academyId)
+    .select('name slug').lean();
+  if (!academy) return fallback;
+
+  const plan = await checkAcademyPlan(teacher.academyId);
+  if (!plan.hasPlan) {
     return {
-      teacherName: String((user as any).name || 'Teacher'),
-      teacherEmail: userEmail,
-      rows: [],
-      hasPlan: false,
-      academyName: '',
-      planReason: 'no-academy' as PlanReason,
+      ...fallback,
+      teacherName: String(teacher.name || user.name || 'Teacher'),
+      academyName: String(academy.name || ''),
+      planReason: plan.reason,
     };
   }
 
-  /* ---------- Not Active ---------- */
-  if ((teacher as any).active === false) {
-    return {
-      teacherName: String(
-        (teacher as any).name || (user as any).name || 'Teacher'
-      ),
-      teacherEmail: userEmail,
-      rows: [],
-      hasPlan: false,
-      academyName: '',
-      planReason: 'no-academy' as PlanReason,
-    };
-  }
-
-  /* ---------- No Academy ---------- */
-  if (!(teacher as any).academyId) {
-    return {
-      teacherName: String(
-        (teacher as any).name || (user as any).name || 'Teacher'
-      ),
-      teacherEmail: userEmail,
-      rows: [],
-      hasPlan: false,
-      academyName: '',
-      planReason: 'no-academy' as PlanReason,
-    };
-  }
-
-  /* ---------- Academy ---------- */
-  const academy = await Academy.findById((teacher as any).academyId)
-    .select('name slug')
-    .lean();
-
-  if (!academy) {
-    return {
-      teacherName: String(
-        (teacher as any).name || (user as any).name || 'Teacher'
-      ),
-      teacherEmail: userEmail,
-      rows: [],
-      hasPlan: false,
-      academyName: '',
-      planReason: 'no-academy' as PlanReason,
-    };
-  }
-
-  /* ---------- Plan Check ---------- */
-  const planResult = await checkAcademyPlan((teacher as any).academyId);
-
-  if (!planResult.hasPlan) {
-    return {
-      teacherName: String(
-        (teacher as any).name || (user as any).name || 'Teacher'
-      ),
-      teacherEmail: userEmail,
-      rows: [],
-      hasPlan: false,
-      academyName: String((academy as any).name || ''),
-      planReason: planResult.reason,
-    };
-  }
-
-  /* ---------- Fetch Classes (active plan) ---------- */
-  const assignments = await Assignment.find({
-    academyId: (teacher as any).academyId,
-    teacherId: (teacher as any)._id,
+  const assignments: any[] = await Assignment.find({
+    academyId: teacher.academyId,
+    teacherId: teacher._id,
     status: { $ne: 'cancelled' },
   })
-    .select(
-      [
-        'studentId',
-        'teacherId',
-        'courseId',
-        'daysOfWeek',
-        'startTime',
-        'endTime',
-        'status',
-        'notes',
-        'livekitRoomName',
-        'livekitHostIdentity',
-        'livekitProvider',
-      ].join(' ')
-    )
+    .select('studentId teacherId courseId daysOfWeek startTime endTime status notes livekitRoomName livekitHostIdentity livekitProvider')
     .sort({ startTime: 1, createdAt: 1 })
     .lean();
 
-  const studentIds = [
-    ...new Set(
-      assignments
-        .map((item: any) => item.studentId)
-        .filter(Boolean)
-        .map((id: any) => String(id))
-    ),
-  ];
-
-  const courseIds = [
-    ...new Set(
-      assignments
-        .map((item: any) => item.courseId)
-        .filter(Boolean)
-        .map((id: any) => String(id))
-    ),
-  ];
+  const studentIds = [...new Set(assignments.map((a) => a.studentId).filter(Boolean).map(String))];
+  const courseIds = [...new Set(assignments.map((a) => a.courseId).filter(Boolean).map(String))];
 
   const [students, courses] = await Promise.all([
     studentIds.length
-      ? Student.find({
-          _id: { $in: studentIds },
-          academyId: (teacher as any).academyId,
-        })
-          .select('name fatherName')
-          .lean()
+      ? Student.find({ _id: { $in: studentIds }, academyId: teacher.academyId })
+          .select('name fatherName').lean()
       : Promise.resolve([]),
-
     courseIds.length
-      ? Course.find({
-          _id: { $in: courseIds },
-          academyId: (teacher as any).academyId,
-        })
-          .select('name title')
-          .lean()
+      ? Course.find({ _id: { $in: courseIds }, academyId: teacher.academyId })
+          .select('name title totalPages').lean()
       : Promise.resolve([]),
   ]);
 
   const studentMap = new Map(
-    students.map((student: any) => [
-      String(student._id),
-      {
-        name: String(student.name || 'Student'),
-        fatherName: String(student.fatherName || ''),
-      },
-    ])
+    students.map((s: any) => [String(s._id), {
+      name: String(s.name || 'Student'),
+      fatherName: String(s.fatherName || ''),
+    }])
   );
-
   const courseMap = new Map(
-    courses.map((course: any) => [
-      String(course._id),
-      String(course.name || course.title || 'Course'),
-    ])
+    courses.map((c: any) => [String(c._id), {
+      name: String(c.name || c.title || 'Course'),
+      totalPages: Number(c.totalPages || 0),
+    }])
   );
 
-  /* ---------- Merge Same Class ---------- */
-  const mergedClasses = new Map<string, any>();
+  const merged = new Map<string, any>();
 
-  for (const assignment of assignments as any[]) {
-    const classKey = getClassKey(assignment);
-
-    const student = studentMap.get(String(assignment.studentId));
-    const courseName = courseMap.get(String(assignment.courseId)) || 'Course';
-
-    const assignmentDays = Array.isArray(assignment.daysOfWeek)
-      ? assignment.daysOfWeek
-      : [];
-
-    const existing = mergedClasses.get(classKey);
+  for (const a of assignments) {
+    const key = getClassKey(a);
+    const student = studentMap.get(String(a.studentId));
+    const course = courseMap.get(String(a.courseId));
+    const courseName = course?.name || 'Course';
+    const days = Array.isArray(a.daysOfWeek) ? a.daysOfWeek : [];
+    const existing = merged.get(key);
 
     if (!existing) {
-      mergedClasses.set(classKey, {
-        _id: String(assignment._id),
+      merged.set(key, {
+        _id: String(a._id),
         studentName: student?.name || 'Student',
         fatherName: student?.fatherName || '',
         courseName,
-        daysOfWeek: [...assignmentDays.map((day: any) => String(day))],
-        startTime: String(assignment.startTime || ''),
-        endTime: String(assignment.endTime || ''),
-        status: String(assignment.status || 'scheduled'),
-        notes: String(assignment.notes || ''),
-        livekitRoomName: String(assignment.livekitRoomName || ''),
-        livekitHostIdentity: String(assignment.livekitHostIdentity || ''),
-        livekitProvider: String(assignment.livekitProvider || 'none'),
+        courseId: String(a.courseId || ''),
+        totalPages: course?.totalPages || 0,
+        daysOfWeek: days.map(String),
+        startTime: String(a.startTime || ''),
+        endTime: String(a.endTime || ''),
+        status: String(a.status || 'scheduled'),
+        notes: String(a.notes || ''),
+        livekitRoomName: String(a.livekitRoomName || ''),
+        livekitHostIdentity: String(a.livekitHostIdentity || ''),
+        livekitProvider: String(a.livekitProvider || 'none'),
       });
       continue;
     }
 
-    existing.daysOfWeek.push(...assignmentDays.map((day: any) => String(day)));
-
-    if (!existing.livekitRoomName && assignment.livekitRoomName) {
-      existing.livekitRoomName = String(assignment.livekitRoomName || '');
-      existing.livekitHostIdentity = String(
-        assignment.livekitHostIdentity || ''
-      );
-      existing.livekitProvider = String(
-        assignment.livekitProvider || 'livekit'
-      );
+    existing.daysOfWeek.push(...days.map(String));
+    if (!existing.livekitRoomName && a.livekitRoomName) {
+      existing.livekitRoomName = String(a.livekitRoomName || '');
+      existing.livekitHostIdentity = String(a.livekitHostIdentity || '');
+      existing.livekitProvider = String(a.livekitProvider || 'livekit');
     }
-
-    if (!existing.notes && assignment.notes) {
-      existing.notes = String(assignment.notes);
-    }
-
-    if (assignment.status === 'ongoing') {
-      existing.status = 'ongoing';
-    }
+    if (!existing.notes && a.notes) existing.notes = String(a.notes);
+    if (a.status === 'ongoing') existing.status = 'ongoing';
   }
 
-  const rows = Array.from(mergedClasses.values()).map((row) => ({
-    ...row,
-    daysOfWeek: sortDays(row.daysOfWeek),
+  const rows = Array.from(merged.values()).map((r) => ({
+    ...r,
+    daysOfWeek: sortDays(r.daysOfWeek),
   }));
-
   rows.sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
 
   return {
-    teacherName: String(
-      (teacher as any).name || (user as any).name || 'Teacher'
-    ),
-    teacherEmail: userEmail,
+    teacherName: String(teacher.name || user.name || 'Teacher'),
+    teacherEmail: email,
     rows,
     hasPlan: true,
-    academyName: String((academy as any).name || ''),
+    academyName: String(academy.name || ''),
     planReason: 'active' as PlanReason,
   };
 }
 
-/* ============================================================
-   PAGE
-   ============================================================ */
-
 export default async function TeacherClassesPage() {
-  const {
-    teacherName,
-    teacherEmail,
-    rows,
-    hasPlan,
-    academyName,
-    planReason,
-  } = await getTeacherSchedule();
+  const { teacherName, teacherEmail, rows, hasPlan, academyName, planReason } =
+    await getTeacherSchedule();
 
   return (
     <ClassesView
