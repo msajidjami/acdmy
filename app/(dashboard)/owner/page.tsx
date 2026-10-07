@@ -6,24 +6,30 @@ import connectDB from '@/app/lib/dbConnect';
 import Academy from '@/models/Academy';
 import Inquiry from '@/models/Inquiry';
 import Teacher from '@/models/Teacher';
-import { 
-  BuildingOfficeIcon, 
-  UserGroupIcon, 
+import {
+  BuildingOfficeIcon,
+  UserGroupIcon,
   EnvelopeIcon,
   PlusCircleIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ArrowRightIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+
+/* ============================================================
+   DATA FETCH
+   ============================================================ */
 
 async function getOwnerData(userId: string) {
   await connectDB();
+
   const academy = await Academy.findOne({ ownerId: userId });
   if (!academy) return { academy: null, inquiries: [], teacherCount: 0 };
 
-  const inquiries = await Inquiry.find({ academyId: academy._id })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  const teacherCount = await Teacher.countDocuments({ academyId: academy._id });
+  const [inquiries, teacherCount] = await Promise.all([
+    Inquiry.find({ academyId: academy._id }).sort({ createdAt: -1 }).lean(),
+    Teacher.countDocuments({ academyId: academy._id }),
+  ]);
 
   return { academy, inquiries, teacherCount };
 }
@@ -32,6 +38,10 @@ interface SearchParams {
   success?: string;
   deleted?: string;
 }
+
+/* ============================================================
+   PAGE
+   ============================================================ */
 
 export default async function OwnerDashboardPage({
   searchParams,
@@ -58,238 +68,226 @@ export default async function OwnerDashboardPage({
   const success = searchParams.success === 'true';
   const deleted = searchParams.deleted === 'true';
 
+  const pendingCount = inquiries.filter((i: any) => i.status === 'pending').length;
+  const recentInquiries = inquiries.slice(0, 5);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-      {/* ✅ Success Message */}
+    <div className="space-y-6">
+      {/* =========================================
+          ALERTS
+      ========================================= */}
       {success && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-800 shadow-sm">
-          <CheckCircleIcon className="h-6 w-6 text-emerald-600 flex-shrink-0" />
-          <div>
-            <p className="font-semibold">Success!</p>
-            <p className="text-sm text-emerald-700">
-              {academy ? 'Your academy has been updated successfully!' : 'Your academy has been created successfully!'}
+        <div className="flex items-start gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+          <CheckCircleIcon className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-emerald-900 text-sm">Success</p>
+            <p className="text-sm text-emerald-700 mt-0.5">
+              {academy
+                ? 'Your academy has been updated.'
+                : 'Your academy has been created.'}
             </p>
           </div>
-          <button
-            onClick={() => {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('success');
-              window.history.replaceState({}, '', url.toString());
-              window.location.reload();
-            }}
-            className="ml-auto text-emerald-600 hover:text-emerald-800 text-sm font-medium"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* 🗑️ Deleted Message */}
-      {deleted && (
-        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800 shadow-sm">
-          <svg className="h-6 w-6 text-rose-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          <div>
-            <p className="font-semibold">Deleted!</p>
-            <p className="text-sm text-rose-700">Your academy has been deleted.</p>
-          </div>
-          <button
-            onClick={() => {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('deleted');
-              window.history.replaceState({}, '', url.toString());
-              window.location.reload();
-            }}
-            className="ml-auto text-rose-600 hover:text-rose-800 text-sm font-medium"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Owner Dashboard Content */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl lg:text-4xl font-bold text-slate-800">
-            🎯 Owner Dashboard
-          </h1>
-          <p className="text-slate-500 mt-1 text-sm lg:text-base">
-            Manage your Islamic academy, teachers, and student inquiries
-          </p>
-        </div>
-        {!academy && (
           <Link
-            href="/owner/academy"
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white text-sm font-semibold rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all duration-200 whitespace-nowrap"
+            href="/owner/dashboard"
+            className="text-emerald-600 hover:text-emerald-800 shrink-0"
+            aria-label="Dismiss"
           >
-            <PlusCircleIcon className="h-5 w-5" />
-            Create Academy
+            <XMarkIcon className="h-5 w-5" />
           </Link>
-        )}
+        </div>
+      )}
+
+      {deleted && (
+        <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+          <XMarkIcon className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-rose-900 text-sm">Deleted</p>
+            <p className="text-sm text-rose-700 mt-0.5">
+              Your academy has been deleted.
+            </p>
+          </div>
+          <Link
+            href="/owner/dashboard"
+            className="text-rose-600 hover:text-rose-800 shrink-0"
+            aria-label="Dismiss"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </Link>
+        </div>
+      )}
+
+      {/* =========================================
+          WELCOME
+      ========================================= */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+          Welcome back
+        </h1>
+        <p className="text-slate-500 mt-1 text-sm">
+          {academy
+            ? `Here's what's happening at ${academy.name}`
+            : 'Get started by creating your academy'}
+        </p>
       </div>
 
-      {/* Academy Summary */}
+      {/* =========================================
+          NO ACADEMY YET
+      ========================================= */}
       {!academy ? (
-        <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-emerald-200 shadow-sm">
-          <div className="text-6xl mb-4">🏛️</div>
-          <h3 className="text-2xl font-bold text-slate-800">No Academy Yet</h3>
-          <p className="text-slate-500 mt-2 max-w-md mx-auto">
-            You haven't created an academy yet. Start by creating your Islamic academy and inviting teachers.
+        <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-slate-200">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center">
+            <BuildingOfficeIcon className="h-7 w-7 text-emerald-600" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mt-4">
+            No academy yet
+          </h2>
+          <p className="text-slate-500 mt-2 max-w-sm mx-auto text-sm">
+            Create your academy to start adding teachers and receiving student
+            inquiries.
           </p>
           <Link
             href="/owner/academy"
-            className="inline-block mt-6 px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white font-semibold rounded-2xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 transition"
+            className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
-            + Create Your Academy
+            <PlusCircleIcon className="h-4 w-4" />
+            Create Academy
           </Link>
         </div>
       ) : (
         <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all duration-200 hover:border-emerald-200 group">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-100 rounded-xl group-hover:bg-emerald-200 transition">
-                  <BuildingOfficeIcon className="h-6 w-6 text-emerald-600" />
+          {/* =========================================
+              STAT CARDS
+          ========================================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            {/* Academy */}
+            <Link
+              href="/owner/academy"
+              className="group bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <BuildingOfficeIcon className="h-5 w-5 text-emerald-600" />
                 </div>
-                <div>
-                  <p className="text-sm text-slate-500">Your Academy</p>
-                  <p className="text-xl font-bold text-slate-800 truncate">{academy.name}</p>
-                </div>
+                <ArrowRightIcon className="h-4 w-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="text-xs px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full font-medium">
-                  Active
-                </span>
-                <Link
-                  href="/owner/academy"
-                  className="text-xs text-emerald-600 hover:underline font-medium"
-                >
-                  Edit →
-                </Link>
-              </div>
-            </div>
+              <p className="text-xs text-slate-500 mt-3">Academy</p>
+              <p className="text-base font-semibold text-slate-900 truncate mt-0.5">
+                {academy.name}
+              </p>
+            </Link>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all duration-200 hover:border-blue-200 group">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition">
-                  <UserGroupIcon className="h-6 w-6 text-blue-600" />
+            {/* Teachers */}
+            <Link
+              href="/owner/teachers"
+              className="group bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <UserGroupIcon className="h-5 w-5 text-blue-600" />
                 </div>
-                <div>
-                  <p className="text-sm text-slate-500">Teachers</p>
-                  <p className="text-xl font-bold text-slate-800">{teacherCount}</p>
-                </div>
+                <ArrowRightIcon className="h-4 w-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
               </div>
-              <Link
-                href="/owner/teachers"
-                className="mt-3 text-sm text-indigo-600 hover:underline font-medium inline-block"
-              >
-                Manage Teachers →
-              </Link>
-            </div>
+              <p className="text-xs text-slate-500 mt-3">Teachers</p>
+              <p className="text-base font-semibold text-slate-900 mt-0.5">
+                {teacherCount}
+              </p>
+            </Link>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all duration-200 hover:border-amber-200 group">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-100 rounded-xl group-hover:bg-amber-200 transition">
-                  <EnvelopeIcon className="h-6 w-6 text-amber-600" />
+            {/* Pending Inquiries */}
+            <Link
+              href="/owner/inquiries"
+              className="group bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-amber-300 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                  <EnvelopeIcon className="h-5 w-5 text-amber-600" />
                 </div>
-                <div>
-                  <p className="text-sm text-slate-500">Inquiries</p>
-                  <p className="text-xl font-bold text-slate-800">
-                    {inquiries.filter((i: any) => i.status === 'pending').length}
-                  </p>
-                </div>
+                <ArrowRightIcon className="h-4 w-4 text-slate-300 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all" />
               </div>
-              <Link
-                href="/owner/inquiries"
-                className="mt-3 text-sm text-amber-600 hover:underline font-medium inline-block"
-              >
-                View All →
-              </Link>
-            </div>
+              <p className="text-xs text-slate-500 mt-3">Pending Inquiries</p>
+              <p className="text-base font-semibold text-slate-900 mt-0.5">
+                {pendingCount}
+              </p>
+            </Link>
           </div>
 
-          {/* Recent Inquiries */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-              <h2 className="font-semibold text-slate-800">📬 Recent Inquiries</h2>
+          {/* =========================================
+              RECENT INQUIRIES
+          ========================================= */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h2 className="font-semibold text-slate-900">
+                  Recent Inquiries
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Latest messages from your website
+                </p>
+              </div>
               {inquiries.length > 0 && (
-                <Link href="/owner/inquiries" className="text-sm text-emerald-600 hover:underline font-medium">
-                  View all →
+                <Link
+                  href="/owner/inquiries"
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
+                >
+                  View all
                 </Link>
               )}
             </div>
-            {inquiries.length > 0 ? (
+
+            {recentInquiries.length > 0 ? (
               <ul className="divide-y divide-slate-100">
-                {inquiries.slice(0, 5).map((inquiry: any) => (
-                  <li key={inquiry._id} className="p-5 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800">{inquiry.visitorName}</p>
-                      <p className="text-sm text-slate-500 truncate">{inquiry.message}</p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {new Date(inquiry.createdAt).toLocaleDateString('en-US', { 
-                          year: 'numeric', 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </p>
+                {recentInquiries.map((inquiry: any) => (
+                  <li
+                    key={inquiry._id}
+                    className="px-5 py-4 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-slate-900 text-sm truncate">
+                            {inquiry.visitorName}
+                          </p>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${
+                              inquiry.status === 'pending'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            {inquiry.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-500 line-clamp-2 mt-1">
+                          {inquiry.message}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1.5">
+                          {new Date(inquiry.createdAt).toLocaleDateString(
+                            'en-US',
+                            {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            }
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${
-                      inquiry.status === 'pending'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {inquiry.status}
-                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="p-8 text-center text-slate-400">No inquiries yet.</p>
+              <div className="py-12 text-center">
+                <div className="mx-auto h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                  <EnvelopeIcon className="h-6 w-6 text-slate-400" />
+                </div>
+                <p className="text-sm text-slate-500 mt-3">
+                  No inquiries yet
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Messages from your website will appear here
+                </p>
+              </div>
             )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link
-              href="/owner/academy"
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-200 flex items-center gap-4 group hover:border-emerald-200"
-            >
-              <div className="p-2.5 bg-emerald-100 rounded-xl group-hover:bg-emerald-200 transition">
-                <BuildingOfficeIcon className="h-6 w-6 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800">Edit Academy</h3>
-                <p className="text-sm text-slate-500">Update your academy details</p>
-              </div>
-            </Link>
-
-            <Link
-              href="/owner/teachers"
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-200 flex items-center gap-4 group hover:border-blue-200"
-            >
-              <div className="p-2.5 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition">
-                <UserGroupIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800">Manage Teachers</h3>
-                <p className="text-sm text-slate-500">Add or remove teachers</p>
-              </div>
-            </Link>
-
-            <Link
-              href="/owner/inquiries"
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-200 flex items-center gap-4 group hover:border-amber-200"
-            >
-              <div className="p-2.5 bg-amber-100 rounded-xl group-hover:bg-amber-200 transition">
-                <EnvelopeIcon className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-800">View Inquiries</h3>
-                <p className="text-sm text-slate-500">Check all messages</p>
-              </div>
-            </Link>
           </div>
         </>
       )}

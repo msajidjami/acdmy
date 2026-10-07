@@ -1,4 +1,4 @@
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from "cloudinary";
 
 /* ============================================================
    Cloudinary Configuration
@@ -14,7 +14,7 @@ cloudinary.config({
 export default cloudinary;
 
 /* ============================================================
-   Helper — Buffer سے Cloudinary پر upload
+   Types
    ============================================================ */
 
 export interface UploadResult {
@@ -24,21 +24,35 @@ export interface UploadResult {
   height?: number;
   format?: string;
   size: number;
-  resourceType: 'image' | 'video' | 'raw';
+  resourceType: "image" | "video" | "raw";
 }
+
+export interface UploadedImageResult {
+  secure_url: string;
+  public_id: string;
+  width: number;
+  height: number;
+  format: string;
+  bytes: number;
+  resource_type: string;
+}
+
+/* ============================================================
+   Helper 1 — Generic buffer upload (پہلے سے موجود)
+   ============================================================ */
 
 export async function uploadToCloudinary(
   buffer: Buffer,
   options: {
     folder?: string;
-    resourceType?: 'image' | 'video' | 'raw';
+    resourceType?: "image" | "video" | "raw";
     transformation?: any[];
     publicId?: string;
   } = {}
 ): Promise<UploadResult> {
   const {
-    folder = 'uploads',
-    resourceType = 'image',
+    folder = "uploads",
+    resourceType = "image",
     transformation,
     publicId,
   } = options;
@@ -49,19 +63,14 @@ export async function uploadToCloudinary(
       resource_type: resourceType,
     };
 
-    if (transformation) {
-      uploadOptions.transformation = transformation;
-    }
-
-    if (publicId) {
-      uploadOptions.public_id = publicId;
-    }
+    if (transformation) uploadOptions.transformation = transformation;
+    if (publicId) uploadOptions.public_id = publicId;
 
     const uploadStream = cloudinary.uploader.upload_stream(
       uploadOptions,
       (error, result) => {
         if (error || !result) {
-          reject(error || new Error('Upload failed'));
+          reject(error || new Error("Upload failed"));
           return;
         }
 
@@ -72,14 +81,46 @@ export async function uploadToCloudinary(
           height: result.height,
           format: result.format,
           size: result.bytes,
-          resourceType: result.resource_type as
-            | 'image'
-            | 'video'
-            | 'raw',
+          resourceType: result.resource_type as "image" | "video" | "raw",
         });
       }
     );
 
     uploadStream.end(buffer);
   });
+}
+
+/* ============================================================
+   Helper 2 — uploadImageBuffer  ✅ یہ missing تھا
+   ============================================================ */
+
+export async function uploadImageBuffer(
+  buffer: Buffer,
+  options: { folder?: string } = {}
+): Promise<UploadedImageResult> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: options.folder ?? "uploads",
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error || !result) {
+          return reject(error ?? new Error("Cloudinary upload failed."));
+        }
+        resolve(result as UploadedImageResult);
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+}
+
+/* ============================================================
+   Helper 3 — deleteImage  ✅ یہ بھی missing تھا
+   ============================================================ */
+
+export async function deleteImage(publicId: string): Promise<void> {
+  if (!publicId) return;
+  await cloudinary.uploader.destroy(publicId);
 }

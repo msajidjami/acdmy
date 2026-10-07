@@ -1,53 +1,20 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-  Room,
-  RoomEvent,
-  ConnectionState,
-  Track,
-  createLocalTracks,
-  type LocalTrack,
-  type RemoteParticipant,
-  type RemoteTrack,
-  type Participant,
+  Room, RoomEvent, ConnectionState, Track, createLocalTracks,
+  type LocalTrack, type RemoteParticipant, type RemoteTrack, type Participant,
 } from 'livekit-client';
 
 import {
-  Mic,
-  MicOff,
-  Video as VideoIcon,
-  VideoOff,
-  MonitorUp,
-  MonitorOff,
-  PhoneOff,
-  Users,
-  Code2,
-  Palette,
-  Loader2,
-  AlertTriangle,
-  Maximize2,
-  Minimize2,
-  Copy,
-  Check,
-  WifiOff,
-  UserCircle2,
-  Volume2,
-  ShieldCheck,
-  Sparkles,
-  Zap,
-  Eye,
-  EyeOff,
-  Share2,
-  AudioLines,
-  Waves,
+  Mic, MicOff, Video as VideoIcon, VideoOff,
+  MonitorUp, MonitorOff, PhoneOff, Users,
+  Code2, Palette, Loader2, AlertTriangle,
+  Maximize2, Minimize2, WifiOff, UserCircle2, Volume2,
+  AudioLines, Zap, Eye, EyeOff, Share2, X,
+  Pencil, Highlighter, ArrowRight, Square, Circle,
+  Eraser, Trash2, Undo2, MousePointer2, Sparkles,
 } from 'lucide-react';
 
 import CodeEditorOverlay from '@/app/components/teacher/CodeEditorOverlay';
@@ -55,42 +22,36 @@ import DesignStudioOverlay from '@/app/components/teacher/DesignStudioOverlay';
 import STEMBoardOverlay from '@/app/components/teacher/boards/STEMBoardOverlay';
 
 import {
-  type WhiteboardKind,
-  type WhiteboardMessage,
-  type CodeBoardState,
-  type DesignBoardState,
-  type STEMBoardState,
-  WHITEBOARD_TOPIC,
-  encodeMessage,
+  type WhiteboardKind, type WhiteboardMessage,
+  type CodeBoardState, type DesignBoardState, type STEMBoardState,
+  WHITEBOARD_TOPIC, encodeMessage,
 } from '@/app/lib/livekit/whiteboardChannel';
 
-/* 🕵️ Silent transcript hook — کوئی UI نہیں */
+import {
+  ANNOTATION_TOPIC,
+  encodeAnnotation,
+  drawAnnotationStroke,
+  drawLaser,
+  type AnnotationMessage,
+  type AnnotationPoint,
+  type AnnotationStroke,
+  type AnnotationTool,
+} from '@/app/lib/livekit/annotationChannel';
+
 import { useSilentTranscript } from '@/app/hooks/useSilentTranscript';
 
-/* ============================================================ */
-/* ✅ TYPE-SAFE WRAPPERS — onStateChange prop کے لیے            */
-/* ============================================================ */
-
+/* ---------- Type-safe wrappers ---------- */
 type BoardProps<T> = {
   onClose: () => void;
   onStateChange?: (state: T) => void;
 };
 
-const CodeEditor = CodeEditorOverlay as unknown as React.ComponentType<
-  BoardProps<CodeBoardState>
->;
-const STEMBoard = STEMBoardOverlay as unknown as React.ComponentType<
-  BoardProps<STEMBoardState>
->;
-const DesignBoard = DesignStudioOverlay as unknown as React.ComponentType<
-  BoardProps<DesignBoardState>
->;
-
-/* ============================================================ */
-/* TYPES                                                        */
-/* ============================================================ */
+const CodeEditor = CodeEditorOverlay as unknown as React.ComponentType<BoardProps<CodeBoardState>>;
+const STEMBoard = STEMBoardOverlay as unknown as React.ComponentType<BoardProps<STEMBoardState>>;
+const DesignBoard = DesignStudioOverlay as unknown as React.ComponentType<BoardProps<DesignBoardState>>;
 
 type WhiteboardMode = null | WhiteboardKind;
+type AnnotTool = 'pointer' | AnnotationTool;
 
 interface Props {
   assignmentId: string;
@@ -103,6 +64,7 @@ interface Props {
   courseId: string;
   totalPages: number;
   pagesCompletedSoFar: number;
+  autoConnect?: boolean;
 }
 
 interface ParticipantInfo {
@@ -114,31 +76,31 @@ interface ParticipantInfo {
   isSpeaking: boolean;
 }
 
-/* ============================================================ */
-/* NOISE CANCELLATION HELPER (Krisp)                            */
-/* ============================================================ */
+const ANNOT_TOOLS: { id: AnnotTool; icon: any; label: string }[] = [
+  { id: 'pointer', icon: MousePointer2, label: 'Pointer' },
+  { id: 'laser', icon: Sparkles, label: 'Laser' },
+  { id: 'pen', icon: Pencil, label: 'Pen' },
+  { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
+  { id: 'arrow', icon: ArrowRight, label: 'Arrow' },
+  { id: 'rect', icon: Square, label: 'Rectangle' },
+  { id: 'circle', icon: Circle, label: 'Circle' },
+  { id: 'eraser', icon: Eraser, label: 'Eraser' },
+];
 
+const ANNOT_COLORS = ['#ef4444', '#facc15', '#22c55e', '#3b82f6', '#ffffff', '#a855f7'];
+
+/* ---------- Noise cancellation ---------- */
 async function applyKrispNoiseFilter(track: LocalTrack): Promise<boolean> {
   try {
-    const mod: any = await import('@livekit/krisp-noise-filter').catch(
-      () => null
-    );
-
-    if (!mod || !mod.KrispNoiseFilter) {
-      console.warn(
-        '[LiveKit] Krisp noise filter not installed. Falling back to browser noise suppression.'
-      );
-      return false;
-    }
-
+    const mod: any = await import('@livekit/krisp-noise-filter').catch(() => null);
+    if (!mod || !mod.KrispNoiseFilter) return false;
     const filter = new mod.KrispNoiseFilter();
     if (typeof (track as any).setProcessor === 'function') {
       await (track as any).setProcessor(filter);
       return true;
     }
     return false;
-  } catch (err) {
-    console.warn('[LiveKit] Krisp error:', err);
+  } catch {
     return false;
   }
 }
@@ -150,109 +112,107 @@ async function removeProcessor(track: LocalTrack): Promise<void> {
     } else if (typeof (track as any).setProcessor === 'function') {
       await (track as any).setProcessor(undefined);
     }
-  } catch (err) {
-    console.warn('[LiveKit] removeProcessor error:', err);
+  } catch {
+    /* ignore */
   }
 }
 
-/* ============================================================ */
-/* MAIN COMPONENT                                               */
-/* ============================================================ */
+function newStrokeId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
 
+/* ============================================================ */
 export default function TeacherLiveKitClassroomLoader({
-  assignmentId,
-  roomName,
-  hostIdentity,
-  teacherName,
-  teacherEmail,
-  courseName,
-  studentName,
-  courseId,
-  totalPages,
-  pagesCompletedSoFar,
+  assignmentId, roomName, teacherName,
+  courseName, studentName,
+  autoConnect = false,
 }: Props) {
-  /* ---------- Connection ---------- */
   const [room, setRoom] = useState<Room | null>(null);
-  const [connectionState, setConnectionState] = useState<ConnectionState>(
-    ConnectionState.Disconnected
-  );
+  const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
 
-  /* ---------- Media ---------- */
   const [micEnabled, setMicEnabled] = useState(false);
   const [camEnabled, setCamEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
-
-  /* ---------- ✅ Noise Cancellation ---------- */
   const [noiseCancellation, setNoiseCancellation] = useState(true);
-  const [krispAvailable, setKrispAvailable] = useState(true);
 
-  /* ---------- Participants ---------- */
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [activeSpeaker, setActiveSpeaker] = useState('');
 
-  /* ---------- UI ---------- */
   const [whiteboard, setWhiteboard] = useState<WhiteboardMode>(null);
   const [showParticipants, setShowParticipants] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [copiedRoom, setCopiedRoom] = useState(false);
-
-  /* ---------- Whiteboard Sharing ---------- */
   const [isSharingWhiteboard, setIsSharingWhiteboard] = useState(false);
   const [studentCount, setStudentCount] = useState(0);
+  const [boardsSheetOpen, setBoardsSheetOpen] = useState(false);
 
-  /* ---------- Refs ---------- */
+  const [annotOpen, setAnnotOpen] = useState(false);
+  const [annotTool, setAnnotTool] = useState<AnnotTool>('pen');
+  const [annotColor, setAnnotColor] = useState('#ef4444');
+  const [annotWidth, setAnnotWidth] = useState(3);
+  const [, setAnnotTick] = useState(0);
+
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localTracksRef = useRef<LocalTrack[]>([]);
-  const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(
-    new Map()
-  );
-  const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(
-    new Map()
-  );
+  const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const roomRef = useRef<Room | null>(null);
 
-  // Latest state of each whiteboard
-  const boardStatesRef = useRef<Record<WhiteboardKind, any>>({
-    code: {},
-    design: {},
-    stem: {},
-  });
+  /* ✅ Connection guards — refs, not state */
+  const isConnectingRef = useRef(false);
+  const sessionIdRef = useRef(0);
 
-  // Throttle broadcast per board
-  const lastBroadcastRef = useRef<Record<WhiteboardKind, number>>({
-    code: 0,
-    design: 0,
-    stem: 0,
-  });
-
-  // Latest isSharing & whiteboard in refs for callbacks
+  const boardStatesRef = useRef<Record<WhiteboardKind, any>>({ code: {}, design: {}, stem: {} });
+  const lastBroadcastRef = useRef<Record<WhiteboardKind, number>>({ code: 0, design: 0, stem: 0 });
   const isSharingRef = useRef(false);
   const whiteboardRef = useRef<WhiteboardMode>(null);
   const noiseCancelRef = useRef(true);
 
-  /* ---------- 🕵️ Silent Transcript Refs (ٹیچر کو پتہ نہیں) ---------- */
   const transcriptSessionIdRef = useRef<string | null>(null);
   const classStartRef = useRef<number>(0);
 
+  const annotCanvasRef = useRef<HTMLCanvasElement>(null);
+  const annotStrokesRef = useRef<AnnotationStroke[]>([]);
+  const annotCurrentRef = useRef<AnnotationStroke | null>(null);
+  const annotLaserRef = useRef<{ point: AnnotationPoint; at: number } | null>(null);
+  const annotLastLaserPubRef = useRef(0);
+  const annotDrawingRef = useRef(false);
+  const annotColorRef = useRef('#ef4444');
+
+  useEffect(() => { isSharingRef.current = isSharingWhiteboard; }, [isSharingWhiteboard]);
+  useEffect(() => { whiteboardRef.current = whiteboard; }, [whiteboard]);
+  useEffect(() => { noiseCancelRef.current = noiseCancellation; }, [noiseCancellation]);
+  useEffect(() => { annotColorRef.current = annotColor; }, [annotColor]);
+
+  /* ✅ Attach local video after room is set (avoids race with ref) */
   useEffect(() => {
-    isSharingRef.current = isSharingWhiteboard;
-  }, [isSharingWhiteboard]);
+    if (!room) return;
+    const localVideoTrack = localTracksRef.current.find(
+      (t) => t.kind === Track.Kind.Video
+    );
+    if (localVideoTrack && localVideoRef.current) {
+      try {
+        localVideoTrack.attach(localVideoRef.current);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [room, camEnabled]);
 
+  /* ✅ Cleanup on tab close */
   useEffect(() => {
-    whiteboardRef.current = whiteboard;
-  }, [whiteboard]);
+    const handler = () => {
+      if (roomRef.current) {
+        try { roomRef.current.disconnect(); } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
-  useEffect(() => {
-    noiseCancelRef.current = noiseCancellation;
-  }, [noiseCancellation]);
-
-  /* ============================================================ */
-  /* 🕵️ SILENT TRANSCRIPT — Session Create                       */
-  /* ============================================================ */
-
+  /* ---------- Transcript ---------- */
   const ensureTranscriptSession = useCallback(async (): Promise<string | null> => {
     if (transcriptSessionIdRef.current) return transcriptSessionIdRef.current;
     try {
@@ -265,16 +225,14 @@ export default function TeacherLiveKitClassroomLoader({
       });
       if (!res.ok) return null;
       const data = await res.json();
-      const id = data?.id;
-      if (!id) return null;
-      transcriptSessionIdRef.current = id;
-      return id;
+      if (!data?.id) return null;
+      transcriptSessionIdRef.current = data.id;
+      return data.id;
     } catch {
       return null;
     }
   }, [assignmentId, roomName]);
 
-  /* 🕵️ مکمل خاموش — کوئی UI، کوئی toast، کوئی انڈیکیٹر نہیں */
   useSilentTranscript({
     sessionIdRef: transcriptSessionIdRef,
     enabled: connectionState === ConnectionState.Connected,
@@ -284,89 +242,53 @@ export default function TeacherLiveKitClassroomLoader({
     ensureSession: ensureTranscriptSession,
   });
 
-  /* ============================================================ */
-  /* PUBLISH WHITEBOARD MESSAGE                                   */
-  /* ============================================================ */
+  /* ---------- Whiteboard publishing ---------- */
+  const publishWhiteboardMessage = useCallback(async (message: WhiteboardMessage) => {
+    const r = roomRef.current;
+    if (!r) return;
+    try {
+      const payload = new Uint8Array(encodeMessage(message));
+      await r.localParticipant.publishData(payload, { reliable: true, topic: WHITEBOARD_TOPIC });
+    } catch (err) {
+      console.warn('[WB] publish failed:', err);
+    }
+  }, []);
 
-  const publishWhiteboardMessage = useCallback(
-    async (message: WhiteboardMessage) => {
-      const r = roomRef.current;
-      if (!r) return;
-
-      try {
-        const encoded = encodeMessage(message);
-        const payload = new Uint8Array(encoded);
-
-        await r.localParticipant.publishData(payload, {
-          reliable: true,
-          topic: WHITEBOARD_TOPIC,
-        });
-      } catch (err) {
-        console.warn('[WB] publish failed:', err);
-      }
-    },
-    []
-  );
-
-  /* ============================================================ */
-  /* OPEN / CLOSE / STATE CHANGE                                  */
-  /* ============================================================ */
-
-  const openWhiteboard = useCallback(
-    (board: WhiteboardKind) => {
-      setWhiteboard(board);
-
-      if (isSharingRef.current) {
-        publishWhiteboardMessage({
-          type: 'wb-open',
-          board,
-          state: boardStatesRef.current[board] || {},
-          senderName: teacherName,
-        });
-      }
-    },
-    [publishWhiteboardMessage, teacherName]
-  );
+  const openWhiteboard = useCallback((board: WhiteboardKind) => {
+    setWhiteboard(board);
+    setBoardsSheetOpen(false);
+    if (isSharingRef.current) {
+      publishWhiteboardMessage({
+        type: 'wb-open',
+        board,
+        state: boardStatesRef.current[board] || {},
+        senderName: teacherName,
+      });
+    }
+  }, [publishWhiteboardMessage, teacherName]);
 
   const closeWhiteboard = useCallback(() => {
     const current = whiteboardRef.current;
     setWhiteboard(null);
-
     if (current && isSharingRef.current) {
       publishWhiteboardMessage({ type: 'wb-close', board: current });
     }
   }, [publishWhiteboardMessage]);
 
-  const handleBoardStateChange = useCallback(
-    (board: WhiteboardKind, state: any) => {
-      boardStatesRef.current[board] = state;
-
-      if (!isSharingRef.current || whiteboardRef.current !== board) return;
-
-      const now = Date.now();
-      const minInterval = board === 'design' ? 66 : 200;
-      if (now - lastBroadcastRef.current[board] < minInterval) return;
-      lastBroadcastRef.current[board] = now;
-
-      publishWhiteboardMessage({
-        type: 'wb-state',
-        board,
-        state,
-      });
-    },
-    [publishWhiteboardMessage]
-  );
-
-  /* ============================================================ */
-  /* TOGGLE SHARING                                               */
-  /* ============================================================ */
+  const handleBoardStateChange = useCallback((board: WhiteboardKind, state: any) => {
+    boardStatesRef.current[board] = state;
+    if (!isSharingRef.current || whiteboardRef.current !== board) return;
+    const now = Date.now();
+    const minInterval = board === 'design' ? 66 : 200;
+    if (now - lastBroadcastRef.current[board] < minInterval) return;
+    lastBroadcastRef.current[board] = now;
+    publishWhiteboardMessage({ type: 'wb-state', board, state });
+  }, [publishWhiteboardMessage]);
 
   const toggleWhiteboardSharing = useCallback(async () => {
     const next = !isSharingRef.current;
     setIsSharingWhiteboard(next);
-
     const currentBoard = whiteboardRef.current;
-
     if (next && currentBoard) {
       await publishWhiteboardMessage({
         type: 'wb-open',
@@ -375,57 +297,232 @@ export default function TeacherLiveKitClassroomLoader({
         senderName: teacherName,
       });
     } else if (!next && currentBoard) {
-      await publishWhiteboardMessage({
-        type: 'wb-close',
-        board: currentBoard,
-      });
+      await publishWhiteboardMessage({ type: 'wb-close', board: currentBoard });
     }
   }, [publishWhiteboardMessage, teacherName]);
 
-  /* ============================================================ */
-  /* ✅ TOGGLE NOISE CANCELLATION                                 */
-  /* ============================================================ */
+  /* ---------- Annotation publishing ---------- */
+  const publishAnnotation = useCallback((msg: AnnotationMessage) => {
+    const r = roomRef.current;
+    if (!r) return;
+    try {
+      const payload = new Uint8Array(encodeAnnotation(msg));
+      r.localParticipant.publishData(payload, {
+        reliable: true,
+        topic: ANNOTATION_TOPIC,
+      });
+    } catch (err) {
+      console.warn('[annotation] publish failed:', err);
+    }
+  }, []);
 
-  const toggleNoiseCancellation = useCallback(async () => {
-    const audioTrack = localTracksRef.current.find(
-      (t) => t.kind === Track.Kind.Audio
-    );
-    if (!audioTrack) {
-      setError('Microphone track is not available yet.');
-      setTimeout(() => setError(''), 3000);
+  /* ---------- Annotation canvas redraw ---------- */
+  const redrawAnnotation = useCallback(() => {
+    const canvas = annotCanvasRef.current;
+    const container = videoContainerRef.current;
+    if (!canvas || !container) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (
+      canvas.width !== Math.floor(w * dpr) ||
+      canvas.height !== Math.floor(h * dpr)
+    ) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    for (const s of annotStrokesRef.current) {
+      drawAnnotationStroke(ctx, s, w, h);
+    }
+    if (annotCurrentRef.current) {
+      drawAnnotationStroke(ctx, annotCurrentRef.current, w, h);
+    }
+
+    const laser = annotLaserRef.current;
+    if (laser && Date.now() - laser.at < 1200) {
+      drawLaser(ctx, laser.point, annotColorRef.current, w, h, 26);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!annotOpen) return;
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+      redrawAnnotation();
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return () => { running = false; };
+  }, [annotOpen, redrawAnnotation]);
+
+  useEffect(() => {
+    if (!annotOpen) return;
+    const onResize = () => redrawAnnotation();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setAnnotOpen(false); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (annotStrokesRef.current.length > 0) {
+          annotStrokesRef.current = annotStrokesRef.current.slice(0, -1);
+          publishAnnotation({ type: 'undo' });
+          setAnnotTick((n) => n + 1);
+        }
+      }
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= ANNOT_TOOLS.length) {
+        setAnnotTool(ANNOT_TOOLS[num - 1].id);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [annotOpen, redrawAnnotation, publishAnnotation]);
+
+  const annotGetPoint = (e: React.PointerEvent): AnnotationPoint | null => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    };
+  };
+
+  const annotUndo = () => {
+    if (annotStrokesRef.current.length === 0) return;
+    annotStrokesRef.current = annotStrokesRef.current.slice(0, -1);
+    publishAnnotation({ type: 'undo' });
+    setAnnotTick((n) => n + 1);
+  };
+
+  const annotClear = () => {
+    annotStrokesRef.current = [];
+    annotCurrentRef.current = null;
+    annotLaserRef.current = null;
+    publishAnnotation({ type: 'clear' });
+    setAnnotTick((n) => n + 1);
+  };
+
+  const annotOnPointerDown = (e: React.PointerEvent) => {
+    if (annotTool === 'pointer') return;
+    const p = annotGetPoint(e);
+    if (!p) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+    if (annotTool === 'laser') {
+      annotLaserRef.current = { point: p, at: Date.now() };
+      publishAnnotation({ type: 'laser', point: p, color: annotColor });
       return;
     }
 
-    const next = !noiseCancellation;
+    annotDrawingRef.current = true;
+    annotCurrentRef.current = {
+      id: newStrokeId(),
+      tool: annotTool,
+      color: annotColor,
+      width:
+        annotTool === 'highlighter'
+          ? 6
+          : annotTool === 'eraser'
+          ? 24
+          : annotWidth,
+      points: [p],
+    };
+  };
 
+  const annotOnPointerMove = (e: React.PointerEvent) => {
+    const p = annotGetPoint(e);
+    if (!p) return;
+
+    if (annotTool === 'laser') {
+      annotLaserRef.current = { point: p, at: Date.now() };
+      const now = Date.now();
+      if (now - annotLastLaserPubRef.current > 40) {
+        annotLastLaserPubRef.current = now;
+        publishAnnotation({ type: 'laser', point: p, color: annotColor });
+      }
+      return;
+    }
+
+    if (!annotDrawingRef.current || !annotCurrentRef.current) return;
+    const pts = annotCurrentRef.current.points;
+    const last = pts[pts.length - 1];
+    const dx = p.x - last.x;
+    const dy = p.y - last.y;
+    if (dx * dx + dy * dy < 0.00002) return;
+    pts.push(p);
+  };
+
+  const annotOnPointerUp = () => {
+    if (annotTool === 'laser') return;
+    if (!annotDrawingRef.current) return;
+    annotDrawingRef.current = false;
+
+    const stroke = annotCurrentRef.current;
+    annotCurrentRef.current = null;
+    if (!stroke || stroke.points.length === 0) return;
+
+    const pathTool =
+      stroke.tool === 'pen' ||
+      stroke.tool === 'highlighter' ||
+      stroke.tool === 'eraser';
+    if (pathTool && stroke.points.length < 2) return;
+
+    annotStrokesRef.current = [...annotStrokesRef.current, stroke];
+    publishAnnotation({ type: 'add', stroke });
+    setAnnotTick((n) => n + 1);
+  };
+
+  /* ---------- Noise cancellation toggle ---------- */
+  const toggleNoiseCancellation = useCallback(async () => {
+    const audioTrack = localTracksRef.current.find((t) => t.kind === Track.Kind.Audio);
+    if (!audioTrack) return;
+    const next = !noiseCancellation;
     try {
       if (next) {
-        const ok = await applyKrispNoiseFilter(audioTrack);
-        if (!ok) {
-          setKrispAvailable(false);
-        }
+        await applyKrispNoiseFilter(audioTrack);
         setNoiseCancellation(true);
       } else {
         await removeProcessor(audioTrack);
         setNoiseCancellation(false);
       }
-    } catch (err) {
-      console.error('[LiveKit] toggleNoiseCancellation error:', err);
+    } catch {
       setNoiseCancellation(next);
     }
   }, [noiseCancellation]);
 
-  /* ============================================================ */
-  /* CONNECT TO LIVEKIT ROOM                                      */
-  /* ============================================================ */
-
+  /* ============================================================
+     ✅ CONNECT — bulletproof version
+     ============================================================ */
   const connectToRoom = useCallback(async () => {
+    // ✅ Guard against double-connect (refs are synchronous)
     if (roomRef.current) return;
+    if (isConnectingRef.current) return;
 
+    isConnectingRef.current = true;
     setIsConnecting(true);
     setError('');
 
+    const mySession = ++sessionIdRef.current;
+    const isCurrent = () => sessionIdRef.current === mySession;
+
+    let newRoom: Room | null = null;
+    let tracks: LocalTrack[] = [];
+
     try {
+      /* ---------- 1. Fetch token ---------- */
       const tokenRes = await fetch('/api/livekit/teacher-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -434,47 +531,39 @@ export default function TeacherLiveKitClassroomLoader({
         body: JSON.stringify({ assignmentId, roomName }),
       });
 
+      if (!isCurrent()) return;
+
       if (!tokenRes.ok) {
         const data = await tokenRes.json().catch(() => ({}));
-        throw new Error(
-          data?.error || `Token request failed (HTTP ${tokenRes.status})`
-        );
+        throw new Error(data?.error || `Token request failed (${tokenRes.status})`);
       }
 
       const { token, url } = await tokenRes.json();
+      if (!token || !url) throw new Error('Server did not return token or URL');
 
-      if (!token || !url) {
-        throw new Error('Server did not return token or URL');
-      }
+      if (!isCurrent()) return;
 
-      const newRoom = new Room({
+      /* ---------- 2. Create room ---------- */
+      newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
-        videoCaptureDefaults: { resolution: { width: 1280, height: 720 } },
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
       });
 
-      roomRef.current = newRoom;
-
-      const refreshParticipants = () => {
+      /* ---------- 3. Participant refresh ---------- */
+      const refresh = () => {
+        if (!newRoom || roomRef.current !== newRoom) return;
         const list: ParticipantInfo[] = [];
 
         const local = newRoom.localParticipant;
         if (local) {
+          const camPub = local.getTrackPublication(Track.Source.Camera);
+          const micPub = local.getTrackPublication(Track.Source.Microphone);
           list.push({
             identity: local.identity,
             name: local.name || teacherName || 'You',
             isLocal: true,
-            hasVideo: Boolean(
-              local.getTrackPublication(Track.Source.Camera)?.track
-            ),
-            hasAudio: Boolean(
-              local.getTrackPublication(Track.Source.Microphone)?.track
-            ),
+            hasVideo: Boolean(camPub?.track && !camPub.isMuted),
+            hasAudio: Boolean(micPub?.track && !micPub.isMuted),
             isSpeaking: local.isSpeaking,
           });
         }
@@ -482,16 +571,14 @@ export default function TeacherLiveKitClassroomLoader({
         let count = 0;
         newRoom.remoteParticipants.forEach((p: RemoteParticipant) => {
           count++;
+          const camPub = p.getTrackPublication(Track.Source.Camera);
+          const micPub = p.getTrackPublication(Track.Source.Microphone);
           list.push({
             identity: p.identity,
             name: p.name || p.identity,
             isLocal: false,
-            hasVideo: Boolean(
-              p.getTrackPublication(Track.Source.Camera)?.isSubscribed
-            ),
-            hasAudio: Boolean(
-              p.getTrackPublication(Track.Source.Microphone)?.isSubscribed
-            ),
+            hasVideo: Boolean(camPub?.isSubscribed && !camPub.isMuted),
+            hasAudio: Boolean(micPub?.isSubscribed && !micPub.isMuted),
             isSpeaking: p.isSpeaking,
           });
         });
@@ -500,24 +587,32 @@ export default function TeacherLiveKitClassroomLoader({
         setStudentCount(count);
       };
 
+      /* ---------- 4. Attach listeners (all with session check) ---------- */
       newRoom
         .on(RoomEvent.Connected, () => {
+          if (!isCurrent()) return;
           setConnectionState(ConnectionState.Connected);
-          refreshParticipants();
+          refresh();
         })
         .on(RoomEvent.Disconnected, () => {
+          if (!isCurrent()) return;
           setConnectionState(ConnectionState.Disconnected);
-          roomRef.current = null;
-          setRoom(null);
+          if (roomRef.current === newRoom) {
+            roomRef.current = null;
+            setRoom(null);
+          }
         })
         .on(RoomEvent.Reconnecting, () => {
+          if (!isCurrent()) return;
           setConnectionState(ConnectionState.Reconnecting);
         })
         .on(RoomEvent.Reconnected, () => {
+          if (!isCurrent()) return;
           setConnectionState(ConnectionState.Connected);
         })
         .on(RoomEvent.ParticipantConnected, () => {
-          refreshParticipants();
+          if (!isCurrent()) return;
+          refresh();
           if (isSharingRef.current && whiteboardRef.current) {
             publishWhiteboardMessage({
               type: 'wb-open',
@@ -526,82 +621,79 @@ export default function TeacherLiveKitClassroomLoader({
               senderName: teacherName,
             });
           }
+          if (annotStrokesRef.current.length > 0) {
+            publishAnnotation({ type: 'resync', strokes: annotStrokesRef.current });
+          }
         })
         .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
-          const vidEl = remoteVideoElementsRef.current.get(p.identity);
-          if (vidEl) {
-            vidEl.remove();
-            remoteVideoElementsRef.current.delete(p.identity);
-          }
-          const audEl = remoteAudioElementsRef.current.get(p.identity);
-          if (audEl) {
-            audEl.remove();
-            remoteAudioElementsRef.current.delete(p.identity);
-          }
-          refreshParticipants();
+          if (!isCurrent()) return;
+          const v = remoteVideoElementsRef.current.get(p.identity);
+          if (v) { v.remove(); remoteVideoElementsRef.current.delete(p.identity); }
+          const a = remoteAudioElementsRef.current.get(p.identity);
+          if (a) { a.remove(); remoteAudioElementsRef.current.delete(p.identity); }
+          refresh();
         })
-        .on(
-          RoomEvent.TrackSubscribed,
-          (track: RemoteTrack, _pub, participant) => {
-            if (track.kind === Track.Kind.Video) {
-              const el = document.createElement('video');
-              el.autoplay = true;
-              el.playsInline = true;
-              el.muted = false;
-              el.className = 'w-full h-full object-cover';
-              track.attach(el);
-              remoteVideoElementsRef.current.set(participant.identity, el);
-            } else if (track.kind === Track.Kind.Audio) {
-              const el = document.createElement('audio');
-              el.autoplay = true;
-              track.attach(el);
-              remoteAudioElementsRef.current.set(participant.identity, el);
-              document.body.appendChild(el);
-            }
-            refreshParticipants();
+        .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant) => {
+          if (!isCurrent()) return;
+          if (track.kind === Track.Kind.Video) {
+            const el = document.createElement('video');
+            el.autoplay = true;
+            el.playsInline = true;
+            el.muted = false;
+            el.className = 'w-full h-full object-cover';
+            track.attach(el);
+            remoteVideoElementsRef.current.set(participant.identity, el);
+          } else if (track.kind === Track.Kind.Audio) {
+            const el = document.createElement('audio');
+            el.autoplay = true;
+            track.attach(el);
+            remoteAudioElementsRef.current.set(participant.identity, el);
+            document.body.appendChild(el);
           }
-        )
-        .on(
-          RoomEvent.TrackUnsubscribed,
-          (track: RemoteTrack, _pub, participant) => {
-            track.detach();
-            if (track.kind === Track.Kind.Video) {
-              const el = remoteVideoElementsRef.current.get(
-                participant.identity
-              );
-              if (el) {
-                el.remove();
-                remoteVideoElementsRef.current.delete(participant.identity);
-              }
-            } else if (track.kind === Track.Kind.Audio) {
-              const el = remoteAudioElementsRef.current.get(
-                participant.identity
-              );
-              if (el) {
-                el.remove();
-                remoteAudioElementsRef.current.delete(participant.identity);
-              }
-            }
-            refreshParticipants();
+          refresh();
+        })
+        .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, _pub, participant) => {
+          if (!isCurrent()) return;
+          track.detach();
+          if (track.kind === Track.Kind.Video) {
+            const el = remoteVideoElementsRef.current.get(participant.identity);
+            if (el) { el.remove(); remoteVideoElementsRef.current.delete(participant.identity); }
+          } else if (track.kind === Track.Kind.Audio) {
+            const el = remoteAudioElementsRef.current.get(participant.identity);
+            if (el) { el.remove(); remoteAudioElementsRef.current.delete(participant.identity); }
           }
-        )
-        .on(RoomEvent.TrackMuted, () => refreshParticipants())
-        .on(RoomEvent.TrackUnmuted, () => refreshParticipants())
-        .on(RoomEvent.LocalTrackPublished, () => refreshParticipants())
-        .on(RoomEvent.LocalTrackUnpublished, () => refreshParticipants())
+          refresh();
+        })
+        .on(RoomEvent.TrackMuted, () => { if (isCurrent()) refresh(); })
+        .on(RoomEvent.TrackUnmuted, () => { if (isCurrent()) refresh(); })
+        .on(RoomEvent.LocalTrackPublished, () => { if (isCurrent()) refresh(); })
+        .on(RoomEvent.LocalTrackUnpublished, () => { if (isCurrent()) refresh(); })
         .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-          if (speakers.length > 0) {
-            setActiveSpeaker(speakers[0].identity);
-          } else {
-            setActiveSpeaker('');
-          }
+          if (!isCurrent()) return;
+          setActiveSpeaker(speakers.length > 0 ? speakers[0].identity : '');
         });
 
+      /* ---------- 5. Connect ---------- */
       await newRoom.connect(url, token);
 
-      let tracks: LocalTrack[] = [];
+      if (!isCurrent()) {
+        try { await newRoom.disconnect(); } catch { /* ignore */ }
+        return;
+      }
+
+      /* ---------- 6. Set room ref NOW (before tracks) ---------- */
+      roomRef.current = newRoom;
+
+      /* ---------- 7. Create local tracks ---------- */
       try {
-        tracks = await createLocalTracks({ audio: true, video: true });
+        tracks = await createLocalTracks({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: { resolution: { width: 1280, height: 720 } },
+        });
       } catch {
         try {
           tracks = await createLocalTracks({ audio: true, video: false });
@@ -610,25 +702,23 @@ export default function TeacherLiveKitClassroomLoader({
         }
       }
 
+      if (!isCurrent()) {
+        tracks.forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
+        return;
+      }
+
       localTracksRef.current = tracks;
 
+      /* ---------- 8. Apply noise filter ---------- */
       if (noiseCancelRef.current) {
         const audioTrack = tracks.find((t) => t.kind === Track.Kind.Audio);
         if (audioTrack) {
           const ok = await applyKrispNoiseFilter(audioTrack);
-          setKrispAvailable(ok);
           if (!ok) setNoiseCancellation(false);
         }
       }
 
-      for (const t of tracks) {
-        try {
-          await t.mute();
-        } catch {
-          /* ignore */
-        }
-      }
-
+      /* ---------- 9. ✅ Publish FIRST (tracks are enabled) ---------- */
       for (const t of tracks) {
         try {
           await newRoom.localParticipant.publishTrack(t);
@@ -637,101 +727,121 @@ export default function TeacherLiveKitClassroomLoader({
         }
       }
 
-      const localVideoTrack = tracks.find(
-        (t) => t.kind === Track.Kind.Video
-      );
-      if (localVideoTrack && localVideoRef.current) {
-        localVideoTrack.attach(localVideoRef.current);
+      /* ---------- 10. ✅ THEN mute ---------- */
+      for (const t of tracks) {
+        try { await t.mute(); } catch { /* ignore */ }
       }
 
+      /* ---------- 11. Attach local video ---------- */
+      const localVideoTrack = tracks.find((t) => t.kind === Track.Kind.Video);
+      if (localVideoTrack && localVideoRef.current) {
+        try { localVideoTrack.attach(localVideoRef.current); } catch { /* ignore */ }
+      }
+
+      /* ---------- 12. Set final state ---------- */
       setMicEnabled(false);
       setCamEnabled(false);
       setRoom(newRoom);
-      refreshParticipants();
+      refresh();
 
-      /* 🕵️ خاموش: class timing شروع کریں + transcript session بنائیں */
       classStartRef.current = Date.now();
       void ensureTranscriptSession();
     } catch (err: any) {
       console.error('[LiveKit] Connection error:', err);
-      setError(err?.message || 'Failed to connect to LiveKit room');
-      setConnectionState(ConnectionState.Disconnected);
-      roomRef.current = null;
+      if (isCurrent()) {
+        setError(err?.message || 'Failed to connect');
+        setConnectionState(ConnectionState.Disconnected);
+      }
+      if (newRoom) {
+        try { await newRoom.disconnect(); } catch { /* ignore */ }
+      }
+      if (roomRef.current === newRoom) roomRef.current = null;
     } finally {
-      setIsConnecting(false);
+      if (isCurrent()) {
+        isConnectingRef.current = false;
+        setIsConnecting(false);
+      }
     }
   }, [
-    assignmentId,
-    roomName,
-    teacherName,
-    publishWhiteboardMessage,
-    ensureTranscriptSession,
+    assignmentId, roomName, teacherName,
+    publishWhiteboardMessage, publishAnnotation, ensureTranscriptSession,
   ]);
 
-  /* ============================================================ */
-  /* DISCONNECT                                                   */
-  /* ============================================================ */
+  /* ---------- Auto-connect ---------- */
+  useEffect(() => {
+    if (!autoConnect) return;
+    if (roomRef.current) return;
+    if (isConnectingRef.current) return;
+    void connectToRoom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
+  /* ============================================================
+     ✅ DISCONNECT — clean up first, then kill everything
+     ============================================================ */
   const disconnect = useCallback(async () => {
-    try {
-      /* 🕵️ خاموش: transcript سیشن بند کریں */
-      if (transcriptSessionIdRef.current) {
-        const durationSec = classStartRef.current
-          ? Math.floor((Date.now() - classStartRef.current) / 1000)
-          : 0;
-        const sid = transcriptSessionIdRef.current;
-        transcriptSessionIdRef.current = null;
+    const r = roomRef.current;
 
+    // ✅ Invalidate any pending connect operations FIRST
+    roomRef.current = null;
+    sessionIdRef.current += 1;
+
+    // ---------- Close transcript session ----------
+    if (transcriptSessionIdRef.current) {
+      const durationSec = classStartRef.current
+        ? Math.floor((Date.now() - classStartRef.current) / 1000)
+        : 0;
+      const sid = transcriptSessionIdRef.current;
+      transcriptSessionIdRef.current = null;
+      try {
         fetch(`/api/livekit/transcript/${sid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ durationSec }),
           keepalive: true,
         }).catch(() => {});
-      }
-
-      localTracksRef.current.forEach((t) => {
-        try {
-          t.stop();
-          t.detach();
-        } catch {
-          /* ignore */
-        }
-      });
-      localTracksRef.current = [];
-
-      remoteVideoElementsRef.current.forEach((el) => el.remove());
-      remoteVideoElementsRef.current.clear();
-      remoteAudioElementsRef.current.forEach((el) => el.remove());
-      remoteAudioElementsRef.current.clear();
-
-      if (roomRef.current) {
-        await roomRef.current.disconnect();
-      }
-      roomRef.current = null;
-
-      setRoom(null);
-      setParticipants([]);
-      setConnectionState(ConnectionState.Disconnected);
-      setMicEnabled(false);
-      setCamEnabled(false);
-      setScreenSharing(false);
-      setActiveSpeaker('');
-      setWhiteboard(null);
-      setIsSharingWhiteboard(false);
-      setStudentCount(0);
-    } catch (err) {
-      console.error('[LiveKit] Disconnect error:', err);
+      } catch { /* ignore */ }
     }
+
+    // ---------- Stop local tracks ----------
+    localTracksRef.current.forEach((t) => {
+      try { t.stop(); t.detach(); } catch { /* ignore */ }
+    });
+    localTracksRef.current = [];
+
+    // ---------- Remove remote media elements ----------
+    remoteVideoElementsRef.current.forEach((el) => el.remove());
+    remoteVideoElementsRef.current.clear();
+    remoteAudioElementsRef.current.forEach((el) => el.remove());
+    remoteAudioElementsRef.current.clear();
+
+    // ---------- Disconnect room ----------
+    if (r) {
+      try { await r.disconnect(); } catch { /* ignore */ }
+    }
+
+    // ---------- Reset all state ----------
+    setRoom(null);
+    setParticipants([]);
+    setConnectionState(ConnectionState.Disconnected);
+    setMicEnabled(false);
+    setCamEnabled(false);
+    setScreenSharing(false);
+    setActiveSpeaker('');
+    setWhiteboard(null);
+    setIsSharingWhiteboard(false);
+    setStudentCount(0);
+    setAnnotOpen(false);
+    annotStrokesRef.current = [];
   }, []);
 
-  /* ============================================================ */
-  /* CLEANUP                                                      */
-  /* ============================================================ */
-
+  /* ---------- Component unmount cleanup ---------- */
   useEffect(() => {
     return () => {
-      /* 🕵️ خاموش: اگر یوزر tab بند کر دے تو session بند ہو */
+      const r = roomRef.current;
+      roomRef.current = null;
+      sessionIdRef.current += 1;
+
       if (transcriptSessionIdRef.current) {
         const durationSec = classStartRef.current
           ? Math.floor((Date.now() - classStartRef.current) / 1000)
@@ -745,74 +855,38 @@ export default function TeacherLiveKitClassroomLoader({
             body: JSON.stringify({ durationSec }),
             keepalive: true,
           }).catch(() => {});
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
       }
 
-      localTracksRef.current.forEach((t) => {
-        try {
-          t.stop();
-        } catch {
-          /* ignore */
-        }
-      });
+      localTracksRef.current.forEach((t) => { try { t.stop(); } catch { /* ignore */ } });
       localTracksRef.current = [];
-
       remoteVideoElementsRef.current.forEach((el) => el.remove());
       remoteVideoElementsRef.current.clear();
       remoteAudioElementsRef.current.forEach((el) => el.remove());
       remoteAudioElementsRef.current.clear();
-
-      if (roomRef.current) {
-        roomRef.current.disconnect().catch(() => {});
-        roomRef.current = null;
-      }
+      if (r) { try { r.disconnect(); } catch { /* ignore */ } }
     };
   }, []);
 
-  /* ============================================================ */
-  /* MEDIA TOGGLES                                                */
-  /* ============================================================ */
-
+  /* ---------- Media toggles ---------- */
   const toggleMic = useCallback(async () => {
     if (!roomRef.current) return;
-    const audioTrack = localTracksRef.current.find(
-      (t) => t.kind === Track.Kind.Audio
-    );
-    if (!audioTrack) return;
-
+    const t = localTracksRef.current.find((x) => x.kind === Track.Kind.Audio);
+    if (!t) return;
     try {
-      if (micEnabled) {
-        await audioTrack.mute();
-        setMicEnabled(false);
-      } else {
-        await audioTrack.unmute();
-        setMicEnabled(true);
-      }
-    } catch (err) {
-      console.error('[LiveKit] toggleMic error:', err);
-    }
+      if (micEnabled) { await t.mute(); setMicEnabled(false); }
+      else { await t.unmute(); setMicEnabled(true); }
+    } catch (e) { console.error('[mic toggle]', e); }
   }, [micEnabled]);
 
   const toggleCam = useCallback(async () => {
     if (!roomRef.current) return;
-    const videoTrack = localTracksRef.current.find(
-      (t) => t.kind === Track.Kind.Video
-    );
-    if (!videoTrack) return;
-
+    const t = localTracksRef.current.find((x) => x.kind === Track.Kind.Video);
+    if (!t) return;
     try {
-      if (camEnabled) {
-        await videoTrack.mute();
-        setCamEnabled(false);
-      } else {
-        await videoTrack.unmute();
-        setCamEnabled(true);
-      }
-    } catch (err) {
-      console.error('[LiveKit] toggleCam error:', err);
-    }
+      if (camEnabled) { await t.mute(); setCamEnabled(false); }
+      else { await t.unmute(); setCamEnabled(true); }
+    } catch (e) { console.error('[cam toggle]', e); }
   }, [camEnabled]);
 
   const toggleScreenShare = useCallback(async () => {
@@ -826,17 +900,12 @@ export default function TeacherLiveKitClassroomLoader({
         setScreenSharing(true);
       }
     } catch (err: any) {
-      console.error('[LiveKit] Screen share error:', err);
       if (err?.name !== 'NotAllowedError') {
         setError('Screen sharing failed. Please allow screen access.');
         setTimeout(() => setError(''), 4000);
       }
     }
   }, [screenSharing]);
-
-  /* ============================================================ */
-  /* FULLSCREEN                                                   */
-  /* ============================================================ */
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -847,9 +916,7 @@ export default function TeacherLiveKitClassroomLoader({
         await document.exitFullscreen();
         setIsFullscreen(false);
       }
-    } catch (err) {
-      console.error('[LiveKit] Fullscreen error:', err);
-    }
+    } catch (e) { console.error(e); }
   }, []);
 
   useEffect(() => {
@@ -857,24 +924,6 @@ export default function TeacherLiveKitClassroomLoader({
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
-
-  /* ============================================================ */
-  /* COPY ROOM                                                    */
-  /* ============================================================ */
-
-  const copyRoomName = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(roomName);
-      setCopiedRoom(true);
-      setTimeout(() => setCopiedRoom(false), 1500);
-    } catch {
-      /* ignore */
-    }
-  }, [roomName]);
-
-  /* ============================================================ */
-  /* DERIVED                                                      */
-  /* ============================================================ */
 
   const remoteParticipants = useMemo(
     () => participants.filter((p) => !p.isLocal),
@@ -884,260 +933,148 @@ export default function TeacherLiveKitClassroomLoader({
   const connected = connectionState === ConnectionState.Connected;
   const reconnecting = connectionState === ConnectionState.Reconnecting;
 
-  /* ============================================================ */
-  /* RENDER — CONNECTING                                          */
-  /* ============================================================ */
-
+  /* ============================================================
+     RENDER — Connecting
+     ============================================================ */
   if (isConnecting) {
     return (
-      <div className="rounded-3xl bg-white border border-slate-200 shadow-sm p-12">
-        <div className="text-center max-w-md mx-auto">
-          <div className="mx-auto mb-5 h-20 w-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Loader2 className="h-10 w-10 text-white animate-spin" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-900">
-            Connecting to LiveKit Classroom
-          </h3>
-          <p className="text-sm text-slate-500 mt-2">
-            Setting up your camera and microphone.
-          </p>
+      <div className="flex items-center justify-center min-h-[60vh] p-6">
+        <div className="text-center">
+          <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mx-auto" />
+          <h3 className="mt-4 text-base font-semibold text-white">Joining class...</h3>
+          <p className="text-xs text-white/50 mt-1">Setting up camera and microphone</p>
         </div>
       </div>
     );
   }
 
-  /* ============================================================ */
-  /* RENDER — ERROR                                               */
-  /* ============================================================ */
-
+  /* ============================================================
+     RENDER — Error
+     ============================================================ */
   if (error && !room) {
     return (
-      <div className="rounded-3xl bg-white border border-slate-200 shadow-sm p-8 sm:p-12">
-        <div className="text-center max-w-md mx-auto">
-          <div className="mx-auto mb-5 h-16 w-16 rounded-2xl bg-rose-100 flex items-center justify-center">
-            <AlertTriangle className="h-8 w-8 text-rose-600" />
-          </div>
-          <h3 className="text-lg font-bold text-slate-900">
-            Could not connect
-          </h3>
-          <p className="text-sm text-slate-500 mt-2 break-words">{error}</p>
+      <div className="flex items-center justify-center min-h-[60vh] p-6">
+        <div className="max-w-sm text-center">
+          <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto" />
+          <h3 className="mt-4 text-base font-semibold text-white">Could not connect</h3>
+          <p className="text-xs text-white/60 mt-2 break-words">{error}</p>
           <button
             type="button"
-            onClick={() => {
-              setError('');
-              connectToRoom();
-            }}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:from-indigo-700 hover:to-purple-700"
+            onClick={() => { setError(''); void connectToRoom(); }}
+            className="mt-5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition"
           >
-            Try Again
+            Try again
           </button>
         </div>
       </div>
     );
   }
 
-  /* ============================================================ */
-  /* RENDER — READY TO JOIN                                       */
-  /* ============================================================ */
-
+  /* ============================================================
+     RENDER — Ready
+     ============================================================ */
   if (!room) {
     return (
-      <div className="rounded-3xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 sm:p-8 lg:p-10">
-          <div className="text-center max-w-lg mx-auto">
-            <div className="mx-auto mb-5 h-20 w-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <VideoIcon className="h-10 w-10 text-white" />
-            </div>
-
-            <h3 className="text-2xl font-bold text-slate-900">
-              Ready to Start Class?
-            </h3>
-            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-              You are joining as the{' '}
-              <strong className="text-slate-700">Host</strong>. Your camera
-              and microphone will start muted.
-            </p>
-
-            <div className="mt-6 rounded-2xl bg-slate-50 border border-slate-200 p-4 text-left">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Room Name
-                </span>
-                <button
-                  type="button"
-                  onClick={copyRoomName}
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 transition"
-                >
-                  {copiedRoom ? (
-                    <>
-                      <Check className="h-3 w-3" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      Copy
-                    </>
-                  )}
-                </button>
-              </div>
-              <p className="font-mono text-xs text-slate-700 break-all">
-                {roomName}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={connectToRoom}
-              disabled={isConnecting}
-              className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-6 py-4 text-base font-bold text-white shadow-lg shadow-emerald-500/30 transition disabled:opacity-60 active:scale-[0.99]"
-            >
-              <VideoIcon className="h-5 w-5" />
-              Start LiveKit Class
-            </button>
-
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-slate-400">
-              <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                Live-only · No recording
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                Encrypted transport
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <AudioLines className="h-3.5 w-3.5 text-violet-500" />
-                AI Noise Cancellation
-              </span>
-            </div>
-          </div>
+      <div className="flex items-center justify-center min-h-[60vh] p-6">
+        <div className="max-w-sm text-center">
+          <VideoIcon className="h-12 w-12 text-emerald-500 mx-auto" />
+          <h3 className="mt-4 text-lg font-semibold text-white">Ready to start?</h3>
+          <p className="text-sm text-white/60 mt-1">
+            You&apos;ll join as host. Camera and mic start muted.
+          </p>
+          <button
+            type="button"
+            onClick={() => void connectToRoom()}
+            className="mt-5 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition"
+          >
+            <VideoIcon className="h-4 w-4" />
+            Start class
+          </button>
         </div>
       </div>
     );
   }
 
-  /* ============================================================ */
-  /* RENDER — CONNECTED CLASSROOM                                 */
-  /* ============================================================ */
-
+  /* ============================================================
+     RENDER — Connected
+     ============================================================ */
   return (
     <>
-      <div className="rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden">
-        {/* ============ TOP BAR ============ */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-950/80 border-b border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center gap-2 shrink-0">
-              {connected ? (
-                <>
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                  </span>
-                  <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider hidden sm:inline">
-                    Live
-                  </span>
-                </>
-              ) : reconnecting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 text-amber-400 animate-spin" />
-                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider hidden sm:inline">
-                    Reconnecting
-                  </span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="h-3.5 w-3.5 text-rose-400" />
-                  <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider hidden sm:inline">
-                    Offline
-                  </span>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-bold text-white/90 truncate">
-                {courseName}
+      <div className="rounded-none sm:rounded-2xl bg-slate-900 overflow-hidden sm:border sm:border-slate-800 sm:shadow-2xl">
+        {/* TOP BAR */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-950/80 border-b border-white/10">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {connected ? (
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
-              <span className="text-white/30 hidden sm:inline">·</span>
-              <span className="text-xs text-white/50 truncate hidden sm:inline">
-                {studentName}
-              </span>
-            </div>
+            ) : reconnecting ? (
+              <Loader2 className="h-3.5 w-3.5 text-amber-400 animate-spin shrink-0" />
+            ) : (
+              <WifiOff className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+            )}
 
-            {noiseCancellation && (
-              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/40 text-violet-300 text-[10px] font-bold uppercase tracking-wider">
-                <AudioLines className="h-2.5 w-2.5" />
-                AI Noise OFF
+            <span className="text-xs font-semibold text-white/90 truncate">{courseName}</span>
+            <span className="text-white/30 hidden sm:inline">·</span>
+            <span className="text-xs text-white/50 truncate hidden sm:inline">{studentName}</span>
+
+            {annotOpen && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase">
+                <Pencil className="h-3 w-3" />
+                <span className="hidden sm:inline">Drawing</span>
               </span>
             )}
 
             {isSharingWhiteboard && whiteboard && (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wider">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
-                </span>
-                Sharing {whiteboard.toUpperCase()}
+              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/40 text-violet-200 text-[10px] font-bold uppercase">
+                Sharing {whiteboard}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => setShowParticipants((v) => !v)}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition ${
-                showParticipants
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10'
+              className={`inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-bold transition ${
+                showParticipants ? 'bg-indigo-600 text-white' : 'bg-white/5 text-white/70 hover:bg-white/10'
               }`}
-              title="Toggle participants"
             >
               <Users className="h-3.5 w-3.5" />
-              {participants.length}
+              <span>{participants.length}</span>
             </button>
 
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white/5 text-white/70 hover:bg-white/10 transition"
-              title="Toggle fullscreen"
+              className="hidden sm:inline-flex items-center justify-center h-8 w-8 rounded-lg bg-white/5 text-white/70 hover:bg-white/10 transition"
             >
-              {isFullscreen ? (
-                <Minimize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize2 className="h-3.5 w-3.5" />
-              )}
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
 
-        {/* ============ VIDEO AREA ============ */}
+        {/* VIDEO AREA */}
         <div
           ref={videoContainerRef}
-          className="relative bg-slate-950 aspect-video max-h-[70vh] overflow-hidden"
+          className="relative bg-slate-950 aspect-video max-h-[60vh] sm:max-h-[70vh] overflow-hidden"
         >
           <div
-            className={`absolute inset-0 p-2 grid gap-2 ${
-              remoteParticipants.length <= 1
-                ? 'grid-cols-1'
-                : remoteParticipants.length <= 4
-                ? 'grid-cols-2'
-                : 'grid-cols-2 md:grid-cols-3'
+            className={`absolute inset-0 p-1.5 sm:p-2 grid gap-1.5 sm:gap-2 ${
+              remoteParticipants.length <= 1 ? 'grid-cols-1'
+              : remoteParticipants.length <= 4 ? 'grid-cols-2'
+              : 'grid-cols-2 md:grid-cols-3'
             }`}
           >
             {remoteParticipants.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <div className="mx-auto mb-4 h-20 w-20 rounded-full bg-white/5 border-2 border-dashed border-white/20 flex items-center justify-center">
-                    <UserCircle2 className="h-10 w-10 text-white/30" />
+                  <div className="mx-auto mb-3 h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-white/5 border-2 border-dashed border-white/20 flex items-center justify-center">
+                    <UserCircle2 className="h-8 w-8 sm:h-10 sm:w-10 text-white/30" />
                   </div>
-                  <p className="text-white/70 text-sm font-semibold">
-                    Waiting for student to join...
-                  </p>
-                  <p className="text-white/30 text-xs mt-1">
-                    Room is live and ready
-                  </p>
+                  <p className="text-white/70 text-sm font-semibold">Waiting for student...</p>
+                  <p className="text-white/30 text-xs mt-1">Room is live</p>
                 </div>
               </div>
             ) : (
@@ -1153,7 +1090,7 @@ export default function TeacherLiveKitClassroomLoader({
           </div>
 
           {/* Local PiP */}
-          <div className="absolute bottom-4 right-4 w-32 sm:w-48 lg:w-56 aspect-video rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-800 z-10">
+          <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 w-24 sm:w-40 lg:w-56 aspect-video rounded-lg sm:rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-800 z-10">
             <video
               ref={localVideoRef}
               autoPlay
@@ -1164,249 +1101,275 @@ export default function TeacherLiveKitClassroomLoader({
             />
             {!camEnabled && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-                <div className="text-center">
-                  <VideoOff className="h-8 w-8 text-white/30 mx-auto" />
-                  <p className="text-[10px] text-white/40 mt-1 font-semibold">
-                    Camera off
-                  </p>
-                </div>
+                <VideoOff className="h-5 w-5 sm:h-8 sm:w-8 text-white/30 mx-auto" />
               </div>
             )}
             {!micEnabled && (
-              <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-rose-600 flex items-center justify-center shadow-lg">
-                <MicOff className="h-3 w-3 text-white" />
+              <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-rose-600 flex items-center justify-center">
+                <MicOff className="h-2.5 w-2.5 text-white" />
               </div>
             )}
-            <div className="absolute bottom-1.5 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-white">You (Host)</p>
+            <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm">
+              <p className="text-[9px] sm:text-[10px] font-bold text-white">You</p>
             </div>
           </div>
+
+          {/* ANNOTATION LAYER */}
+          {annotOpen && connected && (
+            <div className="absolute inset-0 z-20" style={{ touchAction: 'none' }}>
+              <canvas
+                ref={annotCanvasRef}
+                className="absolute inset-0 w-full h-full touch-none select-none"
+                style={{ cursor: annotTool === 'pointer' ? 'default' : 'crosshair' }}
+                onPointerDown={annotOnPointerDown}
+                onPointerMove={annotOnPointerMove}
+                onPointerUp={annotOnPointerUp}
+                onPointerCancel={annotOnPointerUp}
+              />
+
+              <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/85 backdrop-blur-md text-white/80 text-[10px] font-medium px-2.5 py-1 rounded-full border border-white/10 hidden sm:block">
+                Draw on the screen — students see it live
+              </div>
+
+              <div className="absolute top-1 sm:top-2 inset-x-1 sm:inset-x-2 flex flex-col items-center gap-1 sm:gap-1.5">
+                <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl px-1.5 py-1 flex items-center gap-0.5 max-w-full overflow-x-auto">
+                  {ANNOT_TOOLS.map((t) => {
+                    const Icon = t.icon;
+                    const active = annotTool === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setAnnotTool(t.id)}
+                        title={t.label}
+                        className={[
+                          'shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg transition active:scale-95',
+                          active ? 'bg-emerald-500 text-white shadow-md' : 'text-white/70 hover:bg-white/10',
+                        ].join(' ')}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
+
+                  <div className="shrink-0 w-px h-5 bg-white/10 mx-0.5" />
+
+                  <button
+                    type="button"
+                    onClick={annotUndo}
+                    disabled={annotStrokesRef.current.length === 0}
+                    className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg text-white/70 hover:bg-white/10 disabled:opacity-30 transition"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={annotClear}
+                    disabled={annotStrokesRef.current.length === 0}
+                    className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg text-white/70 hover:bg-white/10 disabled:opacity-30 transition"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAnnotOpen(false)}
+                    className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="bg-slate-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl px-1.5 py-1 flex items-center gap-1">
+                  {ANNOT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setAnnotColor(c)}
+                      aria-label={`Color ${c}`}
+                      className={[
+                        'h-6 w-6 rounded-full border-2 transition',
+                        annotColor === c ? 'border-white scale-110' : 'border-white/20',
+                      ].join(' ')}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ============ CONTROL BAR ============ */}
-        <div className="flex items-center justify-center gap-2 px-4 py-4 bg-slate-950/80 border-t border-white/10 flex-wrap">
-          {/* Mic */}
-          <button
-            type="button"
-            onClick={toggleMic}
-            className={`inline-flex items-center justify-center h-12 w-12 rounded-full transition active:scale-95 ${
-              micEnabled
-                ? 'bg-white/10 text-white hover:bg-white/20'
-                : 'bg-rose-600 text-white hover:bg-rose-700'
-            }`}
-            title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-          >
-            {micEnabled ? (
-              <Mic className="h-5 w-5" />
-            ) : (
-              <MicOff className="h-5 w-5" />
-            )}
-          </button>
+        {/* CONTROL BAR */}
+        <div className="bg-slate-950/80 border-t border-white/10">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 py-2 sm:py-4">
+            <CtrlBtn onClick={toggleMic} on={micEnabled} danger={!micEnabled} title={micEnabled ? 'Mute' : 'Unmute'}>
+              {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+            </CtrlBtn>
 
-          {/* Noise Cancellation Toggle */}
-          <button
-            type="button"
-            onClick={toggleNoiseCancellation}
-            className={`inline-flex items-center justify-center h-12 w-12 rounded-full transition active:scale-95 relative ${
-              noiseCancellation
-                ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white hover:from-violet-400 hover:to-purple-500 ring-2 ring-violet-400/40'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
-            }`}
-            title={
-              noiseCancellation
-                ? `AI Noise Cancellation ON${!krispAvailable ? ' (browser mode)' : ''}`
-                : 'Enable AI Noise Cancellation'
-            }
-          >
-            <AudioLines className="h-5 w-5" />
-            {noiseCancellation && (
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-500 border-2 border-slate-950" />
-            )}
-          </button>
+            <CtrlBtn onClick={toggleNoiseCancellation} on={noiseCancellation} accent="violet" title="Noise cancel">
+              <AudioLines className="h-5 w-5" />
+            </CtrlBtn>
 
-          {/* Camera */}
-          <button
-            type="button"
-            onClick={toggleCam}
-            className={`inline-flex items-center justify-center h-12 w-12 rounded-full transition active:scale-95 ${
-              camEnabled
-                ? 'bg-white/10 text-white hover:bg-white/20'
-                : 'bg-rose-600 text-white hover:bg-rose-700'
-            }`}
-            title={camEnabled ? 'Turn off camera' : 'Turn on camera'}
-          >
-            {camEnabled ? (
-              <VideoIcon className="h-5 w-5" />
-            ) : (
-              <VideoOff className="h-5 w-5" />
-            )}
-          </button>
+            <CtrlBtn onClick={toggleCam} on={camEnabled} danger={!camEnabled} title={camEnabled ? 'Cam off' : 'Cam on'}>
+              {camEnabled ? <VideoIcon className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+            </CtrlBtn>
 
-          {/* Screen share */}
-          <button
-            type="button"
-            onClick={toggleScreenShare}
-            className={`inline-flex items-center justify-center h-12 w-12 rounded-full transition active:scale-95 ${
-              screenSharing
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-white/10 text-white hover:bg-white/20'
-            }`}
-            title={screenSharing ? 'Stop sharing' : 'Share screen'}
-          >
-            {screenSharing ? (
-              <MonitorOff className="h-5 w-5" />
-            ) : (
-              <MonitorUp className="h-5 w-5" />
-            )}
-          </button>
+            <CtrlBtn onClick={toggleScreenShare} on={screenSharing} accent="emerald" title="Screen share">
+              {screenSharing ? <MonitorOff className="h-5 w-5" /> : <MonitorUp className="h-5 w-5" />}
+            </CtrlBtn>
 
-          <div className="w-px h-8 bg-white/10 mx-1" />
+            <button
+              type="button"
+              onClick={() => setAnnotOpen((v) => !v)}
+              className={[
+                'inline-flex items-center justify-center h-11 w-11 sm:h-12 sm:w-12 rounded-full transition active:scale-95',
+                annotOpen
+                  ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white ring-2 ring-amber-300/50'
+                  : 'bg-white/10 text-white/80 hover:bg-white/20',
+              ].join(' ')}
+              title={annotOpen ? 'Close brush' : 'Draw / Annotate'}
+            >
+              <Pencil className="h-5 w-5" />
+            </button>
 
-          {/* SHARE TOGGLE */}
-          <button
-            type="button"
-            onClick={toggleWhiteboardSharing}
-            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full text-xs font-bold shadow-lg transition active:scale-95 ${
-              isSharingWhiteboard
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white ring-2 ring-emerald-400/50'
-                : 'bg-white/10 text-white/80 hover:bg-white/20 border border-white/20'
-            }`}
-            title={
-              isSharingWhiteboard
-                ? 'Stop sharing whiteboard with students'
-                : 'Share whiteboard with students'
-            }
-          >
-            {isSharingWhiteboard ? (
-              <>
-                <Eye className="h-4 w-4" />
-                <span className="hidden sm:inline">Sharing ON</span>
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-4 w-4" />
-                <span className="hidden sm:inline">Share Board</span>
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => setBoardsSheetOpen(true)}
+              className="sm:hidden inline-flex items-center justify-center h-11 w-11 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white transition active:scale-95"
+            >
+              <Palette className="h-5 w-5" />
+            </button>
 
-          <div className="w-px h-8 bg-white/10 mx-1" />
+            <div className="hidden sm:flex items-center gap-1.5">
+              <div className="w-px h-7 bg-white/10 mx-0.5" />
 
-          {/* Code */}
-          <button
-            type="button"
-            onClick={() => openWhiteboard('code')}
-            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 transition active:scale-95 ${
-              whiteboard === 'code' ? 'ring-2 ring-sky-400/60' : ''
-            }`}
-            title="Open Code Editor"
-          >
-            <Code2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Code</span>
-          </button>
-
-          {/* STEM */}
-          <button
-            type="button"
-            onClick={() => openWhiteboard('stem')}
-            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-bold shadow-lg shadow-violet-500/20 transition active:scale-95 ${
-              whiteboard === 'stem' ? 'ring-2 ring-violet-400/60' : ''
-            }`}
-            title="Open STEM Board"
-          >
-            <Zap className="h-4 w-4" />
-            <span className="hidden sm:inline">STEM</span>
-          </button>
-
-          {/* Design */}
-          <button
-            type="button"
-            onClick={() => openWhiteboard('design')}
-            className={`inline-flex items-center gap-2 h-12 px-4 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/20 transition active:scale-95 ${
-              whiteboard === 'design' ? 'ring-2 ring-fuchsia-400/60' : ''
-            }`}
-            title="Open Design Studio"
-          >
-            <Palette className="h-4 w-4" />
-            <span className="hidden sm:inline">Design</span>
-          </button>
-
-          <div className="w-px h-8 bg-white/10 mx-1" />
-
-          {/* End class */}
-          <button
-            type="button"
-            onClick={disconnect}
-            className="inline-flex items-center gap-2 h-12 px-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-500/30 transition active:scale-95"
-            title="End class"
-          >
-            <PhoneOff className="h-4 w-4" />
-            <span className="hidden sm:inline">End Class</span>
-          </button>
-        </div>
-
-        {/* Bottom status strip */}
-        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-950/60 border-t border-white/5 text-[10px]">
-          <div className="flex items-center gap-2 text-white/50">
-            <AudioLines
-              className={`h-3 w-3 ${
-                noiseCancellation ? 'text-violet-400' : 'text-white/30'
-              }`}
-            />
-            <span className="font-semibold">
-              AI Noise Cancellation:{' '}
-              <span
-                className={
-                  noiseCancellation ? 'text-violet-300' : 'text-white/40'
-                }
+              <button
+                type="button"
+                onClick={toggleWhiteboardSharing}
+                className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-full text-xs font-bold transition active:scale-95 ${
+                  isSharingWhiteboard
+                    ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/50'
+                    : 'bg-white/10 text-white/80 hover:bg-white/20 border border-white/20'
+                }`}
               >
-                {noiseCancellation
-                  ? krispAvailable
-                    ? 'Active (Krisp)'
-                    : 'Active (Browser)'
-                  : 'Off'}
-              </span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-white/40">
-            <Waves className="h-3 w-3" />
-            <span>Echo & background noise reduced</span>
+                {isSharingWhiteboard ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {isSharingWhiteboard ? 'Sharing' : 'Share'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openWhiteboard('code')}
+                className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold transition active:scale-95 ${whiteboard === 'code' ? 'ring-2 ring-sky-400/60' : ''}`}
+              >
+                <Code2 className="h-4 w-4" />
+                Code
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openWhiteboard('stem')}
+                className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-xs font-bold transition active:scale-95 ${whiteboard === 'stem' ? 'ring-2 ring-violet-400/60' : ''}`}
+              >
+                <Zap className="h-4 w-4" />
+                STEM
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openWhiteboard('design')}
+                className={`inline-flex items-center gap-1.5 h-11 px-3.5 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-bold transition active:scale-95 ${whiteboard === 'design' ? 'ring-2 ring-fuchsia-400/60' : ''}`}
+              >
+                <Palette className="h-4 w-4" />
+                Design
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              className="ml-auto sm:ml-2 inline-flex items-center justify-center gap-1.5 h-11 px-3 sm:px-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-lg shadow-rose-500/30 transition active:scale-95"
+            >
+              <PhoneOff className="h-4 w-4" />
+              <span className="hidden sm:inline">End</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ============ PARTICIPANTS PANEL ============ */}
+      {/* MOBILE BOARDS SHEET */}
+      {boardsSheetOpen && (
+        <div className="sm:hidden fixed inset-0 z-[110]">
+          <div
+            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+            onClick={() => setBoardsSheetOpen(false)}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="pt-3 pb-2 flex justify-center">
+              <div className="h-1.5 w-12 rounded-full bg-slate-300" />
+            </div>
+            <div className="px-4 pb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-slate-900">Boards</h3>
+                <button
+                  type="button"
+                  onClick={() => setBoardsSheetOpen(false)}
+                  className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center"
+                >
+                  <X className="h-4 w-4 text-slate-600" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={toggleWhiteboardSharing}
+                className={`w-full mb-3 inline-flex items-center justify-between gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition ${
+                  isSharingWhiteboard ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                <span className="inline-flex items-center gap-2">
+                  {isSharingWhiteboard ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  {isSharingWhiteboard ? 'Sharing with students' : 'Not shared'}
+                </span>
+                <span className="text-xs opacity-70">{isSharingWhiteboard ? 'ON' : 'OFF'}</span>
+              </button>
+              <div className="grid grid-cols-3 gap-2">
+                <BoardBtn color="from-sky-500 to-blue-600" icon={<Code2 className="h-5 w-5" />} label="Code" onClick={() => openWhiteboard('code')} />
+                <BoardBtn color="from-violet-500 to-fuchsia-600" icon={<Zap className="h-5 w-5" />} label="STEM" onClick={() => openWhiteboard('stem')} />
+                <BoardBtn color="from-fuchsia-500 to-pink-600" icon={<Palette className="h-5 w-5" />} label="Design" onClick={() => openWhiteboard('design')} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PARTICIPANTS PANEL */}
       {showParticipants && (
-        <div className="fixed top-20 right-4 z-[100] w-72 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed sm:top-20 sm:right-4 top-0 right-0 left-0 sm:left-auto z-[105] sm:w-72 bg-slate-900 border border-white/10 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-indigo-400" />
-              <span className="text-sm font-bold text-white">
-                Participants ({participants.length})
-              </span>
+              <span className="text-sm font-bold text-white">Participants ({participants.length})</span>
             </div>
             <button
               type="button"
               onClick={() => setShowParticipants(false)}
-              className="text-white/40 hover:text-white/80 transition"
+              className="text-white/40 hover:text-white/80 transition h-8 w-8 flex items-center justify-center"
             >
-              ✕
+              <X className="h-4 w-4" />
             </button>
           </div>
-
-          <div className="p-2 space-y-1 max-h-80 overflow-y-auto">
+          <div className="p-2 space-y-1 max-h-[60vh] overflow-y-auto">
             {participants.map((p) => (
-              <div
-                key={p.identity}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition"
-              >
+              <div key={p.identity} className="flex items-center gap-2 px-3 py-2 rounded-lg">
                 <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                   {p.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-white truncate">
-                    {p.name}
-                  </p>
+                  <p className="text-xs font-bold text-white truncate">{p.name}</p>
                   <p className="text-[10px] text-white/40 truncate">
                     {p.isLocal ? 'Host · You' : 'Student'}
                   </p>
@@ -1423,63 +1386,106 @@ export default function TeacherLiveKitClassroomLoader({
         </div>
       )}
 
-      {/* ============ ERROR TOAST ============ */}
+      {/* ERROR TOAST */}
       {error && room && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-md">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-md mx-4">
           <div className="bg-rose-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-            <div className="text-sm font-semibold">{error}</div>
+            <div className="text-sm font-semibold flex-1">{error}</div>
             <button
               type="button"
               onClick={() => setError('')}
               className="text-white/80 hover:text-white shrink-0"
             >
-              ✕
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* ============ SHARING INDICATOR ============ */}
+      {/* SHARING INDICATOR */}
       {isSharingWhiteboard && whiteboard && (
-        <div className="fixed bottom-4 left-4 z-[100] flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-600 text-white shadow-2xl text-xs font-bold">
+        <div className="fixed bottom-24 sm:bottom-4 left-1/2 sm:left-4 -translate-x-1/2 sm:translate-x-0 z-[100] flex items-center gap-2 px-3 py-2 rounded-full bg-emerald-600 text-white shadow-2xl text-xs font-bold">
           <Share2 className="h-3.5 w-3.5" />
-          Sharing {whiteboard.toUpperCase()} with {studentCount} student
-          {studentCount !== 1 ? 's' : ''}
+          Sharing {whiteboard} · {studentCount} student{studentCount !== 1 ? 's' : ''}
         </div>
       )}
 
-      {/* ============ WHITEBOARDS ============ */}
+      {/* WHITEBOARDS */}
       {whiteboard === 'code' && (
-        <CodeEditor
-          onClose={closeWhiteboard}
-          onStateChange={(state) => handleBoardStateChange('code', state)}
-        />
+        <CodeEditor onClose={closeWhiteboard} onStateChange={(s) => handleBoardStateChange('code', s)} />
       )}
       {whiteboard === 'stem' && (
-        <STEMBoard
-          onClose={closeWhiteboard}
-          onStateChange={(state) => handleBoardStateChange('stem', state)}
-        />
+        <STEMBoard onClose={closeWhiteboard} onStateChange={(s) => handleBoardStateChange('stem', s)} />
       )}
       {whiteboard === 'design' && (
-        <DesignBoard
-          onClose={closeWhiteboard}
-          onStateChange={(state) => handleBoardStateChange('design', state)}
-        />
+        <DesignBoard onClose={closeWhiteboard} onStateChange={(s) => handleBoardStateChange('design', s)} />
       )}
     </>
   );
 }
 
 /* ============================================================ */
-/* REMOTE VIDEO TILE                                            */
+/* Small components                                             */
 /* ============================================================ */
 
+function CtrlBtn({
+  children, onClick, on, danger, accent, title,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  on: boolean;
+  danger?: boolean;
+  accent?: 'violet' | 'emerald';
+  title: string;
+}) {
+  const accentClasses =
+    accent === 'violet'
+      ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white ring-2 ring-violet-400/40'
+      : accent === 'emerald'
+      ? 'bg-emerald-600 text-white'
+      : '';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`inline-flex items-center justify-center h-11 w-11 sm:h-12 sm:w-12 rounded-full transition active:scale-95 ${
+        danger
+          ? 'bg-rose-600 text-white hover:bg-rose-700'
+          : on && accentClasses
+          ? accentClasses
+          : on
+          ? 'bg-white/10 text-white hover:bg-white/20'
+          : 'bg-white/10 text-white/70 hover:bg-white/20'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BoardBtn({
+  color, icon, label, onClick,
+}: {
+  color: string; icon: React.ReactNode; label: string; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl bg-gradient-to-br ${color} text-white text-xs font-bold transition active:scale-95 shadow-lg`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 function RemoteVideoTile({
-  participant,
-  videoEl,
-  isActiveSpeaker,
+  participant, videoEl, isActiveSpeaker,
 }: {
   participant: ParticipantInfo;
   videoEl?: HTMLVideoElement;
@@ -1490,7 +1496,6 @@ function RemoteVideoTile({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
     if (videoEl) {
       container.innerHTML = '';
       videoEl.className = 'w-full h-full object-cover';
@@ -1503,10 +1508,8 @@ function RemoteVideoTile({
 
   return (
     <div
-      className={`relative bg-slate-800 rounded-xl overflow-hidden transition-all duration-300 ${
-        isActiveSpeaker
-          ? 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20'
-          : 'ring-1 ring-white/5'
+      className={`relative bg-slate-800 rounded-lg sm:rounded-xl overflow-hidden transition-all duration-300 ${
+        isActiveSpeaker ? 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20' : 'ring-1 ring-white/5'
       }`}
     >
       <div ref={containerRef} className="w-full h-full" />
@@ -1514,31 +1517,26 @@ function RemoteVideoTile({
       {!videoEl && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold shadow-2xl mx-auto">
+            <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold shadow-2xl mx-auto">
               {participant.name.slice(0, 2).toUpperCase()}
             </div>
-            <p className="text-white/40 text-[11px] font-semibold mt-3">
+            <p className="text-white/40 text-[10px] sm:text-[11px] font-semibold mt-2 sm:mt-3">
               Camera off
             </p>
           </div>
         </div>
       )}
 
-      <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm flex items-center gap-2">
-        <p className="text-xs font-bold text-white">{participant.name}</p>
+      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-black/60 backdrop-blur-sm flex items-center gap-1.5">
+        <p className="text-[10px] sm:text-xs font-bold text-white">{participant.name}</p>
         {isActiveSpeaker && (
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-bold text-emerald-400">
-              Speaking
-            </span>
-          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
         )}
       </div>
 
       {!participant.hasAudio && (
-        <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-rose-600 flex items-center justify-center shadow-lg">
-          <MicOff className="h-3 w-3 text-white" />
+        <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 h-5 w-5 sm:h-6 sm:w-6 rounded-full bg-rose-600 flex items-center justify-center shadow-lg">
+          <MicOff className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
         </div>
       )}
     </div>
