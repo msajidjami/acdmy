@@ -1,6 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================================
+# See https://help.github.com/articles/ignoring-files/
+# ============================================================
 
-# dependencies
+# ---------- Dependencies ----------
 /node_modules
 /.pnp
 .pnp.*
@@ -9,33 +11,114 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.pnpm-store/
 
-# testing
+# ---------- Testing ----------
 /coverage
 
-# next.js
+# ---------- Next.js ----------
 /.next/
 /out/
+next-env.d.ts
+*.tsbuildinfo
 
-# production
+# ---------- Production ----------
 /build
+/dist
 
-# misc
-.DS_Store
+# ---------- Vercel ----------
+.vercel
+
+# ---------- Environment files ----------
+.env
+.env*.local
+.env.production
+.env.development
+.env.test
+.env*.backup
+
+# ---------- Secrets ----------
+/secrets/
+*-adminsdk-*.json
+*firebase-adminsdk*.json
+service-account*.json
 *.pem
+*.key
+*.p12
+*.pfx
 
-# debug
+# ---------- Project export ----------
+project-export.txt
+project-core.txt
+file-index.txt
+*-export.txt
+*-export-*.txt
+auth-part*.txt
+
+# ---------- Logs ----------
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
+*.log
+logs/
 
-# env files (can opt-in for committing if needed)
-.env*
+# ---------- OS / Editor ----------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
 
-# vercel
-.vercel
+# ---------- Capacitor / Android ----------
+/android/app/build/
+/android/build/
+/android/.gradle/
+/android/local.properties
+/android/app/src/main/assets/public/
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+/android/app/src/main/assets/capacitor.config.ts
+/android/capacitor-cordova-android-plugins/
+/android/app/release/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+/capacitor.config.json.bak
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ---------- Capacitor iOS (اگر آپ iOS بھی رکھتے ہیں) ----------
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/App/public/
+/ios/App/App/capacitor.config.json
+/ios/App/App/capacitor.config.ts
+/ios/App/Podfile.lock
+
+# ---------- Cloudinary / Uploads ----------
+/uploads/
+/tmp/
+/public/uploads/
+/temp/
+
+# ---------- Prisma (اگر استعمال کرتے ہیں) ----------
+/prisma/*.db
+/prisma/*.db-journal
+
+# ---------- Firebase ----------
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# ---------- Misc ----------
+*.bak
+*.old
+*.orig
+/temp/
+/tmp/
