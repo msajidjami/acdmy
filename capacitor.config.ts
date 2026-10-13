@@ -13,20 +13,21 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
 
-  /* ✅ Push & Local Notifications — کلاس ring کے لیے */
+  /* ✅ Notifications & Splash */
   plugins: {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
     LocalNotifications: {
-      smallIcon: 'ic_stat_icon_config_sample',
-      iconColor: '#0ea5e9',
+      smallIcon: 'ic_stat_icon',       // ⚠️ نیچے نوٹ دیکھیں
+      iconColor: '#059669',
       sound: 'ringtone.wav',
     },
     SplashScreen: {
       launchShowDuration: 1500,
-      backgroundColor: '#0f172a',
+      backgroundColor: '#059669',      // ✅ emerald (brand color)
       showSpinner: false,
+      androidScaleType: 'CENTER_CROP',
     },
   },
 
@@ -34,13 +35,14 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
     captureInput: true,
-    webContentsDebuggingEnabled: true, // صرف development میں — release سے پہلے ہٹا دیں
+    webContentsDebuggingEnabled: false, // ✅ release کے لیے بند
   },
 
   /* ✅ iOS specific */
   ios: {
     contentInset: 'always',
     limitsNavigationsToAppBoundDomains: false,
+    backgroundColor: '#059669',
   },
 };
 
