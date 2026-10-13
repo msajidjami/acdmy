@@ -16,10 +16,19 @@ export const dynamic = 'force-dynamic';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-const VALID_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as const;
-const VALID_STATUSES = ['scheduled','ongoing','completed','cancelled'] as const;
-const VALID_PROVIDERS = ['zoom','livekit','none'] as const;
-const VALID_CURRENCIES = ['PKR','USD'] as const;
+const VALID_DAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const;
+
+const VALID_STATUSES = ['scheduled', 'ongoing', 'completed', 'cancelled'] as const;
+const VALID_PROVIDERS = ['zoom', 'livekit', 'none'] as const;
+const VALID_CURRENCIES = ['PKR', 'USD'] as const;
 
 type JwtPayload = { userId?: string };
 type AssignmentStatus = (typeof VALID_STATUSES)[number];
@@ -64,7 +73,9 @@ async function getUser(req: NextRequest) {
 }
 
 function normalizeDays(days: unknown[]): string[] {
-  return [...new Set(days.map((d) => String(d).trim()).filter(Boolean))];
+  return [
+    ...new Set(days.map((d) => String(d).trim()).filter(Boolean)),
+  ];
 }
 
 function buildScheduleKey(args: {
@@ -89,7 +100,7 @@ function buildScheduleKey(args: {
 }
 
 /* ========================================================
-   ✅ Payment sync helper (PUT کے لیے)
+   Payment sync helper
    ======================================================== */
 function getCurrentMonth(): string {
   const d = new Date();
@@ -162,106 +173,184 @@ export async function PUT(
 ) {
   try {
     const user = await getUser(req);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     await connectDB();
 
     const academy = await Academy.findOne({ ownerId: user._id });
-    if (!academy) return NextResponse.json({ error: 'No academy found' }, { status: 404 });
+    if (!academy) {
+      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
+    }
 
     const { id } = await params;
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json({ error: 'Invalid assignment ID' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid assignment ID' },
+        { status: 400 }
+      );
     }
 
-    const assignment = await Assignment.findOne({ _id: id, academyId: academy._id });
-    if (!assignment) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+    const assignment = await Assignment.findOne({
+      _id: id,
+      academyId: academy._id,
+    });
+    if (!assignment) {
+      return NextResponse.json(
+        { error: 'Assignment not found' },
+        { status: 404 }
+      );
+    }
 
     const body = (await req.json()) as RequestBody;
 
     const {
-      studentId, teacherId, courseId, daysOfWeek, startTime, endTime,
-      status, notes, feeAmount, currency,
-      teacherFeeAmount, teacherCurrency,
-      livekitRoomName, livekitHostToken, livekitHostIdentity, livekitProvider,
+      studentId,
+      teacherId,
+      courseId,
+      daysOfWeek,
+      startTime,
+      endTime,
+      status,
+      notes,
+      feeAmount,
+      currency,
+      teacherFeeAmount,
+      teacherCurrency,
+      livekitRoomName,
+      livekitHostToken,
+      livekitHostIdentity,
+      livekitProvider,
     } = body;
 
-    /* Student */
+    /* ---------- Student ---------- */
     if (studentId !== undefined) {
       if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
-        return NextResponse.json({ error: 'Invalid student ID' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid student ID' },
+          { status: 400 }
+        );
       }
-      const s = await Student.findOne({ _id: studentId, academyId: academy._id }).lean();
-      if (!s) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+      const s = await Student.findOne({
+        _id: studentId,
+        academyId: academy._id,
+      }).lean();
+      if (!s)
+        return NextResponse.json(
+          { error: 'Student not found' },
+          { status: 404 }
+        );
       assignment.studentId = new mongoose.Types.ObjectId(studentId);
     }
 
-    /* Teacher */
+    /* ---------- Teacher ---------- */
     if (teacherId !== undefined) {
       if (!teacherId || !mongoose.Types.ObjectId.isValid(teacherId)) {
-        return NextResponse.json({ error: 'Invalid teacher ID' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid teacher ID' },
+          { status: 400 }
+        );
       }
-      const t = await Teacher.findOne({ _id: teacherId, academyId: academy._id }).lean();
-      if (!t) return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
+      const t = await Teacher.findOne({
+        _id: teacherId,
+        academyId: academy._id,
+      }).lean();
+      if (!t)
+        return NextResponse.json(
+          { error: 'Teacher not found' },
+          { status: 404 }
+        );
       assignment.teacherId = new mongoose.Types.ObjectId(teacherId);
     }
 
-    /* Course */
+    /* ---------- Course ---------- */
     if (courseId !== undefined) {
       if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
-        return NextResponse.json({ error: 'Invalid course ID' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid course ID' },
+          { status: 400 }
+        );
       }
-      const c = await Course.findOne({ _id: courseId, academyId: academy._id }).lean();
-      if (!c) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+      const c = await Course.findOne({
+        _id: courseId,
+        academyId: academy._id,
+      }).lean();
+      if (!c)
+        return NextResponse.json(
+          { error: 'Course not found' },
+          { status: 404 }
+        );
       assignment.courseId = new mongoose.Types.ObjectId(courseId);
     }
 
-    /* Days */
+    /* ---------- Days ---------- */
     if (daysOfWeek !== undefined) {
       if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0) {
-        return NextResponse.json({ error: 'At least one day required' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'At least one day required' },
+          { status: 400 }
+        );
       }
       const u = normalizeDays(daysOfWeek);
-      const bad = u.filter((d) => !VALID_DAYS.includes(d as (typeof VALID_DAYS)[number]));
+      const bad = u.filter(
+        (d) => !VALID_DAYS.includes(d as (typeof VALID_DAYS)[number])
+      );
       if (bad.length) {
-        return NextResponse.json({ error: `Invalid day(s): ${bad.join(', ')}` }, { status: 400 });
+        return NextResponse.json(
+          { error: `Invalid day(s): ${bad.join(', ')}` },
+          { status: 400 }
+        );
       }
       assignment.daysOfWeek = u;
     }
 
-    /* Time */
+    /* ---------- Time ---------- */
     if (startTime !== undefined) {
       const v = String(startTime).trim();
       if (!/^\d{2}:\d{2}$/.test(v)) {
-        return NextResponse.json({ error: 'Invalid start time' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid start time (HH:MM)' },
+          { status: 400 }
+        );
       }
       assignment.startTime = v;
     }
     if (endTime !== undefined) {
       const v = String(endTime).trim();
       if (!/^\d{2}:\d{2}$/.test(v)) {
-        return NextResponse.json({ error: 'Invalid end time' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid end time (HH:MM)' },
+          { status: 400 }
+        );
       }
       assignment.endTime = v;
     }
     if (assignment.endTime <= assignment.startTime) {
-      return NextResponse.json({ error: 'End time must be after start time' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'End time must be after start time' },
+        { status: 400 }
+      );
     }
 
-    /* Status */
+    /* ---------- Status ---------- */
     if (status !== undefined) {
       if (!VALID_STATUSES.includes(status as AssignmentStatus)) {
-        return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid status' },
+          { status: 400 }
+        );
       }
       assignment.status = status as AssignmentStatus;
     }
 
-    /* Notes */
+    /* ---------- Notes ---------- */
     if (notes !== undefined) {
-      assignment.notes = typeof notes === 'string' ? notes.trim().slice(0, 1000) : '';
+      assignment.notes =
+        typeof notes === 'string' ? notes.trim().slice(0, 1000) : '';
     }
 
-    /* Student Fee */
+    /* ---------- Student Fee ---------- */
     if (feeAmount !== undefined) {
       assignment.feeAmount = Math.max(0, Number(feeAmount) || 0);
     }
@@ -271,17 +360,22 @@ export async function PUT(
         : 'PKR';
     }
 
-    /* ✅ Teacher Fee */
+    /* ---------- Teacher Fee ---------- */
     if (teacherFeeAmount !== undefined) {
-      assignment.teacherFeeAmount = Math.max(0, Number(teacherFeeAmount) || 0);
+      assignment.teacherFeeAmount = Math.max(
+        0,
+        Number(teacherFeeAmount) || 0
+      );
     }
     if (teacherCurrency !== undefined) {
-      assignment.teacherCurrency = VALID_CURRENCIES.includes(teacherCurrency as Currency)
+      assignment.teacherCurrency = VALID_CURRENCIES.includes(
+        teacherCurrency as Currency
+      )
         ? (teacherCurrency as Currency)
         : 'PKR';
     }
 
-    /* LiveKit */
+    /* ---------- LiveKit ---------- */
     if (livekitRoomName !== undefined) {
       assignment.livekitRoomName =
         typeof livekitRoomName === 'string' ? livekitRoomName.trim() : '';
@@ -292,26 +386,36 @@ export async function PUT(
     }
     if (livekitHostIdentity !== undefined) {
       assignment.livekitHostIdentity =
-        typeof livekitHostIdentity === 'string' ? livekitHostIdentity.trim() : '';
+        typeof livekitHostIdentity === 'string'
+          ? livekitHostIdentity.trim()
+          : '';
     }
     if (livekitProvider !== undefined) {
-      const v = typeof livekitProvider === 'string' ? livekitProvider.trim() : '';
+      const v =
+        typeof livekitProvider === 'string' ? livekitProvider.trim() : '';
       if (v && !VALID_PROVIDERS.includes(v as Provider)) {
-        return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid provider' },
+          { status: 400 }
+        );
       }
-      assignment.livekitProvider = (v || (assignment.livekitRoomName ? 'livekit' : 'none')) as Provider;
+      assignment.livekitProvider = (v ||
+        (assignment.livekitRoomName ? 'livekit' : 'none')) as Provider;
     }
 
-    /* Final days */
+    /* ---------- Final days ---------- */
     const finalDays = Array.isArray(assignment.daysOfWeek)
       ? normalizeDays(assignment.daysOfWeek)
       : [];
     if (finalDays.length === 0) {
-      return NextResponse.json({ error: 'At least one day required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'At least one day required' },
+        { status: 400 }
+      );
     }
     assignment.daysOfWeek = finalDays;
 
-    /* Rebuild scheduleKey */
+    /* ---------- Rebuild scheduleKey ---------- */
     const scheduleKey = buildScheduleKey({
       academyId: academy._id as mongoose.Types.ObjectId,
       studentId: assignment.studentId as mongoose.Types.ObjectId,
@@ -323,7 +427,7 @@ export async function PUT(
     });
     assignment.scheduleKey = scheduleKey;
 
-    /* Duplicate check */
+    /* ---------- Duplicate check ---------- */
     const dup = await Assignment.findOne({
       _id: { $ne: assignment._id },
       academyId: academy._id,
@@ -345,7 +449,7 @@ export async function PUT(
 
     await assignment.save();
 
-    /* ✅ Payment sync */
+    /* ---------- Payment sync ---------- */
     try {
       await syncMonthlyPayment({
         academyId: academy._id as mongoose.Types.ObjectId,
@@ -387,12 +491,16 @@ export async function DELETE(
 ) {
   try {
     const user = await getUser(req);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     await connectDB();
 
     const academy = await Academy.findOne({ ownerId: user._id });
-    if (!academy) return NextResponse.json({ error: 'No academy found' }, { status: 404 });
+    if (!academy) {
+      return NextResponse.json({ error: 'No academy found' }, { status: 404 });
+    }
 
     const { id } = await params;
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
@@ -404,7 +512,9 @@ export async function DELETE(
       academyId: academy._id,
     });
 
-    if (!assignment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!assignment) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
 
     await Payment.deleteMany({ assignmentId: assignment._id });
 

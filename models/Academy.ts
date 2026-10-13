@@ -23,11 +23,9 @@ export interface IRating {
 
 export interface IAcademy extends Document {
   _id: Types.ObjectId;
-
-  // Owner
   ownerId: Types.ObjectId;
 
-  // Basic
+  /* Basic */
   name: string;
   slug: string;
   description: string;
@@ -38,34 +36,32 @@ export interface IAcademy extends Document {
   contactEmail: string;
   isActive: boolean;
 
-  // Followers
+  /* Followers */
   followers: Types.ObjectId[];
   followerCount: number;
 
-  // Ratings
+  /* Ratings */
   ratings: IRating[];
   avgRating: number;
   ratingCount: number;
 
-  // ✅ Subscription / Billing
+  /* Subscription */
   isPublic: boolean;
   subscriptionId?: Types.ObjectId | null;
   studentLimit: number;
   currentStudentCount: number;
   planId: PlanId;
 
-  // ✅ Public Profile (extra fields)
+  /* Public profile (extra) */
   tagline?: string;
   contactPhone?: string;
   city?: string;
   country?: string;
   website?: string;
 
-  // Timestamps
   createdAt: Date;
   updatedAt: Date;
 
-  // Methods
   recalculateStats(): void;
 }
 
@@ -75,30 +71,37 @@ export interface IAcademy extends Document {
 
 const RatingSchema = new Schema<IRating>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    stars: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 5,
-    },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    stars: { type: Number, required: true, min: 1, max: 5 },
     comment: {
       type: String,
       default: '',
       trim: true,
       maxlength: 500,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
+    createdAt: { type: Date, default: Date.now },
   },
   { _id: true }
 );
+
+/* ============================================================
+   SLUG HELPERS
+   ============================================================ */
+
+function slugify(input: string): string {
+  return (
+    String(input)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'academy'
+  );
+}
+
+function randomSuffix(): string {
+  return Math.random().toString(36).slice(2, 7);
+}
 
 /* ============================================================
    MAIN SCHEMA
@@ -115,21 +118,30 @@ const AcademySchema = new Schema<IAcademy>(
     },
 
     /* ---------- BASIC ---------- */
-    name: { type: String, required: true, trim: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 80,
+    },
 
     slug: {
       type: String,
-      required: true,
       unique: true,
       trim: true,
       lowercase: true,
       index: true,
+      sparse: true,
     },
 
-    description: { type: String, required: true, trim: true },
+    description: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 500,
+    },
 
     logo: { type: String, default: '', trim: true },
-
     thumbnail: { type: String, default: '', trim: true },
 
     accentColor: {
@@ -142,7 +154,7 @@ const AcademySchema = new Schema<IAcademy>(
 
     contactEmail: {
       type: String,
-      required: true,
+      default: '',
       trim: true,
       lowercase: true,
     },
@@ -153,15 +165,8 @@ const AcademySchema = new Schema<IAcademy>(
       index: true,
     },
 
-    /* ========================================================
-       FOLLOWERS
-       ======================================================== */
-    followers: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
+    /* ---------- FOLLOWERS ---------- */
+    followers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 
     followerCount: {
       type: Number,
@@ -170,9 +175,7 @@ const AcademySchema = new Schema<IAcademy>(
       index: true,
     },
 
-    /* ========================================================
-       RATINGS
-       ======================================================== */
+    /* ---------- RATINGS ---------- */
     ratings: {
       type: [RatingSchema],
       default: [],
@@ -193,10 +196,7 @@ const AcademySchema = new Schema<IAcademy>(
       index: true,
     },
 
-    /* ========================================================
-       ✅ SUBSCRIPTION / BILLING
-       ======================================================== */
-
+    /* ---------- SUBSCRIPTION ---------- */
     isPublic: {
       type: Boolean,
       default: false,
@@ -223,15 +223,20 @@ const AcademySchema = new Schema<IAcademy>(
 
     planId: {
       type: String,
-      enum: ['free', 'trial', 'starter', 'growth', 'pro', 'business', 'enterprise'],
+      enum: [
+        'free',
+        'trial',
+        'starter',
+        'growth',
+        'pro',
+        'business',
+        'enterprise',
+      ],
       default: 'free',
       index: true,
     },
 
-    /* ========================================================
-       ✅ PUBLIC PROFILE (extra)
-       ======================================================== */
-
+    /* ---------- PUBLIC PROFILE (extra) ---------- */
     tagline: {
       type: String,
       default: '',
@@ -239,29 +244,10 @@ const AcademySchema = new Schema<IAcademy>(
       maxlength: 150,
     },
 
-    contactPhone: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    city: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    country: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-
-    website: {
-      type: String,
-      default: '',
-      trim: true,
-    },
+    contactPhone: { type: String, default: '', trim: true },
+    city: { type: String, default: '', trim: true },
+    country: { type: String, default: '', trim: true },
+    website: { type: String, default: '', trim: true },
   },
   {
     timestamps: true,
@@ -276,10 +262,60 @@ const AcademySchema = new Schema<IAcademy>(
 AcademySchema.index({ ownerId: 1, isActive: 1 });
 AcademySchema.index({ followerCount: -1 });
 AcademySchema.index({ avgRating: -1 });
-
-// ✅ Subscription related
 AcademySchema.index({ isPublic: 1, isActive: 1 });
 AcademySchema.index({ planId: 1, isPublic: 1 });
+
+/* ============================================================
+   ✅ PRE-VALIDATE — slug، description، contactEmail خودبخود
+   ============================================================ */
+
+AcademySchema.pre('validate', async function () {
+  /* ---------- 1. Slug خودبخود بنائیں ---------- */
+  if (!this.slug || String(this.slug).trim() === '') {
+    const base = slugify(this.name || 'academy');
+    let candidate = base;
+    let attempts = 0;
+
+    while (attempts <= 6) {
+      const exists = await (this.constructor as Model<IAcademy>).exists({
+        slug: candidate,
+        _id: { $ne: this._id },
+      });
+
+      if (!exists) break;
+
+      attempts++;
+      candidate =
+        attempts >= 3
+          ? `${base}-${randomSuffix()}`
+          : `${base}-${attempts}`;
+    }
+
+    this.slug = candidate;
+  }
+
+  /* ---------- 2. description default ---------- */
+  if (!this.description || String(this.description).trim() === '') {
+    this.description = `${this.name || 'Academy'} — Islamic learning academy`;
+  }
+
+  /* ---------- 3. contactEmail default ---------- */
+  if (!this.contactEmail || String(this.contactEmail).trim() === '') {
+    try {
+      const UserModel = models.User as Model<any> | undefined;
+      if (UserModel && this.ownerId) {
+        const owner: any = await UserModel.findById(this.ownerId)
+          .select('email')
+          .lean();
+        if (owner?.email) {
+          this.contactEmail = String(owner.email).toLowerCase();
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+});
 
 /* ============================================================
    METHODS
@@ -305,7 +341,7 @@ AcademySchema.methods.recalculateStats = function () {
 };
 
 /* ============================================================
-   ✅ CACHE-SAFE EXPORT (serverless / Next.js safe)
+   CACHE-SAFE EXPORT
    ============================================================ */
 
 const Academy: Model<IAcademy> =

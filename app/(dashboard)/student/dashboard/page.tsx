@@ -11,7 +11,7 @@ import Teacher from '@/models/Teacher';
 import Assignment from '@/models/Assignment';
 import Course from '@/models/Course';
 
-import { ArrowLeft, GraduationCap } from 'lucide-react';
+import { ArrowLeft, GraduationCap, MessageCircle } from 'lucide-react';
 
 import StudentDashboardView from './StudentDashboardView';
 
@@ -25,10 +25,6 @@ type JwtUserPayload = JwtPayload & {
   userId?: string;
   email?: string;
 };
-
-/* ======================================================
-   Helpers
-   ====================================================== */
 
 function normalizeEmail(value: unknown): string {
   return String(value || '').trim().toLowerCase();
@@ -44,14 +40,12 @@ async function getStudentData(email: string) {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
 
-  /* ---------- Find User ---------- */
   const user = await User.findOne({ email: normalized })
     .select('_id name email role')
     .lean();
 
   if (!user) return null;
 
-  /* ---------- Find Student ---------- */
   const student = await Student.findOne({ email: normalized })
     .select(
       '_id name email academyId classLevel imageUrl isActive createdAt'
@@ -65,9 +59,6 @@ async function getStudentData(email: string) {
   const academy = await Academy.findById(student.academyId)
     .select('_id name')
     .lean();
-
-  /* ---------- Get assignments ---------- */
-  // ✅ LiveKit fields شامل
 
   const assignments = await Assignment.find({
     academyId: student.academyId,
@@ -90,8 +81,6 @@ async function getStudentData(email: string) {
       ].join(' ')
     )
     .lean();
-
-  /* ---------- Fetch teachers & courses ---------- */
 
   const teacherIds = [
     ...new Set(
@@ -135,8 +124,6 @@ async function getStudentData(email: string) {
     ])
   );
 
-  /* ---------- Build rows ---------- */
-
   const todayName = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
   });
@@ -157,7 +144,6 @@ async function getStudentData(email: string) {
       endTime: String(a.endTime || ''),
       status: String(a.status || 'scheduled'),
       notes: String(a.notes || ''),
-      // ✅ LiveKit fields
       hasLiveKit: Boolean(a.livekitRoomName),
       livekitRoomName: String(a.livekitRoomName || ''),
       livekitHostIdentity: String(a.livekitHostIdentity || ''),
@@ -167,14 +153,10 @@ async function getStudentData(email: string) {
     };
   });
 
-  /* ---------- Sort: today first, then start time ---------- */
-
   rows.sort((a, b) => {
     if (a.isToday !== b.isToday) return a.isToday ? -1 : 1;
     return String(a.startTime).localeCompare(String(b.startTime));
   });
-
-  /* ---------- Stats ---------- */
 
   const uniqueCourses = new Set(
     rows.map((r) => r.courseName).filter(Boolean)
@@ -200,7 +182,6 @@ async function getStudentData(email: string) {
         todayClasses: todayClasses.length,
         upcomingClasses: upcomingClasses.length,
         ongoingClasses: ongoingClasses.length,
-        // ✅ LiveKit stat
         livekitReadyClasses: livekitReadyClasses.length,
       },
     },
@@ -234,7 +215,7 @@ export default async function StudentDashboardPage() {
 
   const result = await getStudentData(userEmail);
 
-  /* ------------------ No Data / No Student ------------------ */
+  /* ------------------ No Data ------------------ */
 
   if (!result) {
     return (
@@ -271,7 +252,7 @@ export default async function StudentDashboardPage() {
 
   const { user, student, academy, data } = result;
 
-  /* ------------------ Student without academy ------------------ */
+  /* ------------------ No academy ------------------ */
 
   if (!student || !data) {
     return (
@@ -306,8 +287,6 @@ export default async function StudentDashboardPage() {
     );
   }
 
-  /* ------------------ Serialize ------------------ */
-
   const studentData = {
     _id: String(student._id),
     name: String(student.name || (user as any).name || 'Student'),
@@ -328,7 +307,32 @@ export default async function StudentDashboardPage() {
     : null;
 
   return (
-    <div className="mx-auto max-w-7xl pb-10">
+    <div className="mx-auto max-w-7xl space-y-5 pb-10">
+      {/* ✅ WhatsApp-style Chats quick access */}
+      <Link
+        href="/student"
+        className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 p-5 text-white shadow-lg hover:shadow-xl transition-all"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg sm:text-xl font-bold leading-none">
+                Open Chats
+              </h3>
+              <p className="text-xs text-white/80 mt-1">
+                WhatsApp-style contacts &amp; messages
+              </p>
+            </div>
+          </div>
+          <span className="text-2xl group-hover:translate-x-1 transition-transform">
+            →
+          </span>
+        </div>
+      </Link>
+
       <StudentDashboardView
         student={studentData}
         academy={academyData}

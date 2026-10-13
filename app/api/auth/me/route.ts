@@ -1,18 +1,100 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'xK9mP2vL8qR4nA7cE5hF1jM3bU6wY0zX8tC2vB5nM7kL9pQ2rS4tU6wY8zA0';
+import connectDB from '@/app/lib/dbConnect';
+import User from '@/models/User';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+/* ============================================================
+   GET — Current logged-in user info
+   ============================================================ */
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get('token')?.value;
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    /* ---------- 1. JWT_SECRET چیک ---------- */
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      console.error('[auth/me] JWT_SECRET is not configured');
+      return NextResponse.json(
+        { success: false, user: null, error: 'Server misconfigured' },
+        { status: 500 }
+      );
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    return NextResponse.json({ user: decoded }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    /* ---------- 2. Cookie سے token ---------- */
+    const token = request.cookies.get('token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, user: null },
+        { status: 401 }
+      );
+    }
+
+    /* ---------- 3. Token verify ---------- */
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, secret);
+    } catch {
+      return NextResponse.json(
+        { success: false, user: null },
+        { status: 401 }
+      );
+    }
+
+    if (!decoded?.userId) {
+      return NextResponse.json(
+        { success: false, user: null },
+        { status: 401 }
+      );
+    }
+
+    /* ---------- 4. DB سے تازہ user data ---------- */
+    await connectDB();
+
+    const user: any = await User.findById(decoded.userId)
+      .select('name email phone role avatar provider isVerified lastLogin loginCount')
+      .lean();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, user: null },
+        { status: 404 }
+      );
+    }
+
+    /* ---------- 5. Response ---------- */
+    return NextResponse.json(
+      {
+        success: true,
+        user: {
+          id: String(user._id),
+          name: String(user.name || ''),
+          email: String(user.email || ''),
+          phone: String(user.phone || ''),
+          role: String(user.role || 'user'),
+          avatar: String(user.avatar || ''),
+          provider: String(user.provider || 'credentials'),
+          isVerified: user.isVerified ?? false,
+          lastLogin: user.lastLogin
+            ? new Date(user.lastLogin).toISOString()
+            : null,
+          loginCount: Number(user.loginCount) || 0,
+        },
+      },
+      {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store' },
+      }
+    );
+  } catch (err: any) {
+    console.error('[auth/me] error:', err);
+    return NextResponse.json(
+      { success: false, user: null, error: 'Server error' },
+      { status: 500 }
+    );
   }
 }

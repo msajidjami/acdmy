@@ -45,16 +45,82 @@ const DAY_SHORT: Record<string, string> = {
   Thursday: 'Thu', Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
 };
 
+/* ✅ Sidebar width — layout ke SIDEBAR_W (256) کے برابر */
+const SIDEBAR_W = 256;
+const DESKTOP_MIN = 1024; // Tailwind lg breakpoint
+const NAVBAR_H_FALLBACK = 56;
+
 function todayName(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' });
 }
 
-function formatStatus(s: string): string {
-  return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+function initials(name: string): string {
+  return name
+    ? name
+        .split(' ')
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '?';
+}
+
+/* ============================================================
+   Navbar height — صرف sticky/fixed top navbar measure کریں
+   ============================================================ */
+function useNavHeight() {
+  const [navHeight, setNavHeight] = useState(NAVBAR_H_FALLBACK);
+
+  useEffect(() => {
+    const measure = () => {
+      const navs = Array.from(document.querySelectorAll('nav'));
+      for (const n of navs) {
+        const rect = n.getBoundingClientRect();
+        if (rect.height === 0) continue;
+        const cs = window.getComputedStyle(n);
+        if (cs.position === 'sticky' || cs.position === 'fixed') {
+          if (cs.bottom !== 'auto') continue; // skip bottom-fixed bars
+          setNavHeight(rect.height || NAVBAR_H_FALLBACK);
+          return;
+        }
+      }
+      setNavHeight(NAVBAR_H_FALLBACK);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  return navHeight;
+}
+
+/* ============================================================
+   Sidebar offset — desktop pe 256px، mobile pe 0
+   ✅ inline style سے لگائیں گے، Tailwind پر انحصار نہیں
+   ============================================================ */
+function useSidebarOffset() {
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    const check = () => {
+      setOffset(window.innerWidth >= DESKTOP_MIN ? SIDEBAR_W : 0);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  return offset;
 }
 
 /* ---------- No plan view ---------- */
-function NoPlanView({ planReason, academyName }: { planReason: PlanReason; academyName: string }) {
+function NoPlanView({
+  planReason,
+  academyName,
+}: {
+  planReason: PlanReason;
+  academyName: string;
+}) {
   const title =
     planReason === 'no-academy' ? 'Academy setup incomplete'
     : planReason === 'no-subscription' ? 'No active plan'
@@ -82,11 +148,15 @@ function NoPlanView({ planReason, academyName }: { planReason: PlanReason; acade
   );
 }
 
-/* ---------- Main ---------- */
+/* ============================================================
+   Main
+   ============================================================ */
 export default function ClassesView({
   teacherName, teacherEmail, classes, hasPlan, academyName, planReason,
 }: Props) {
   const today = todayName();
+  const navHeight = useNavHeight();
+  const sidebarOffset = useSidebarOffset();
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | 'scheduled' | 'ongoing'>('all');
@@ -139,134 +209,232 @@ export default function ClassesView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classes, search, status, day, todayOnly, today]);
 
-  const hasFilters = search.trim() !== '' || status !== 'all' || day !== 'all' || todayOnly;
+  const hasFilters =
+    search.trim() !== '' || status !== 'all' || day !== 'all' || todayOnly;
 
   const clearAll = () => {
     setSearch(''); setStatus('all'); setDay('all'); setTodayOnly(false);
   };
 
-  if (!hasPlan) return <NoPlanView planReason={planReason} academyName={academyName} />;
+  if (!hasPlan) {
+    return (
+      <div
+        style={{
+          paddingTop: navHeight + 12,
+          paddingLeft: sidebarOffset,
+        }}
+      >
+        <NoPlanView planReason={planReason} academyName={academyName} />
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="space-y-5 sm:space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">My Classes</h1>
-          <p className="text-sm text-slate-500 mt-1 truncate">{teacherName} · {teacherEmail}</p>
-        </div>
+      {/* ============================================================
+          Fixed container — navbar کے نیچے، sidebar کے دائیں طرف
+          ✅ `left` inline style سے دیا — Tailwind پر انحصار نہیں
+          ✅ z-index: 30 (sidebar سے کم — overlap نہیں ہوگا)
+          ============================================================ */}
+      <div
+        className="flex flex-col overflow-hidden"
+        style={{
+          position: 'fixed',
+          top: navHeight,
+          left: sidebarOffset,
+          right: 0,
+          bottom: 0,
+          zIndex: 30,
+          background: '#f1f5f9',
+        }}
+      >
+        {/* ============================================
+            WHATSAPP-STYLE HEADER
+            ============================================ */}
+        <header
+          style={{
+            flexShrink: 0,
+            background: '#059669',
+            color: '#ffffff',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+            zIndex: 10,
+          }}
+        >
+          {/* Row 1: avatar + title + count + search */}
+          <div className="px-3 py-2 flex items-center gap-3">
+            <div className="relative shrink-0">
+              <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
+                {initials(teacherName)}
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-emerald-600 bg-emerald-300" />
+            </div>
 
-        {/* Stats — 2 cols mobile, 4 desktop */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-          <Stat label="Total" value={stats.total} />
-          <Stat label="Today" value={stats.today} accent={stats.today > 0} />
-          <Stat label="Scheduled" value={stats.scheduled} />
-          <Stat label="Ongoing" value={stats.ongoing} />
-        </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate leading-tight">
+                My Classes
+              </p>
+              <p className="text-[11px] opacity-90 leading-tight truncate">
+                {stats.total} total · {stats.today} today
+              </p>
+            </div>
 
-        {/* Filters */}
-        {classes.length > 0 && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('class-search');
+                el?.focus();
+              }}
+              className="p-2 rounded-full hover:bg-emerald-700 transition"
+              aria-label="Search"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Row 2: search */}
+          <div className="px-3 pb-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70" />
               <input
+                id="class-search"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search classes..."
-                className="w-full pl-9 pr-9 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400 transition"
+                className="w-full pl-9 pr-9 py-1.5 bg-white/20 placeholder:text-white/60 text-white text-sm rounded-lg focus:outline-none focus:bg-white/30 transition"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/20 transition"
                   aria-label="Clear"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5 text-white" />
                 </button>
               )}
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterPill active={status === 'all'} onClick={() => setStatus('all')}>
-                All ({classes.length})
-              </FilterPill>
-              <FilterPill active={status === 'scheduled'} onClick={() => setStatus('scheduled')}>
-                Scheduled ({stats.scheduled})
-              </FilterPill>
-              <FilterPill active={status === 'ongoing'} onClick={() => setStatus('ongoing')}>
-                Ongoing ({stats.ongoing})
-              </FilterPill>
-              <FilterPill
-                active={todayOnly}
-                disabled={stats.today === 0}
-                onClick={() => setTodayOnly((v) => !v)}
-              >
-                Today
-              </FilterPill>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-              <span className="text-xs text-slate-400 mr-1">Day:</span>
-              <FilterPill active={day === 'all'} onClick={() => setDay('all')}>All</FilterPill>
-              {DAYS.map((d) => {
-                const count = classes.filter((c) => c.daysOfWeek.includes(d)).length;
-                if (count === 0) return null;
-                return (
-                  <FilterPill key={d} active={day === d} onClick={() => setDay(d)} today={d === today}>
-                    {DAY_SHORT[d]} ({count})
-                  </FilterPill>
-                );
-              })}
-            </div>
-
-            {hasFilters && (
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <p className="text-xs text-slate-500">Showing {filtered.length} of {classes.length}</p>
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+          {/* Row 3: filter pills */}
+          <div className="px-3 pb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <FilterPill
+              active={status === 'all' && !todayOnly}
+              onClick={() => { setStatus('all'); setTodayOnly(false); }}
+            >
+              All ({stats.total})
+            </FilterPill>
+            <FilterPill
+              active={todayOnly}
+              disabled={stats.today === 0}
+              onClick={() => setTodayOnly((v) => !v)}
+              highlight
+            >
+              Today ({stats.today})
+            </FilterPill>
+            <FilterPill
+              active={status === 'scheduled'}
+              onClick={() => { setStatus('scheduled'); setTodayOnly(false); }}
+            >
+              Scheduled ({stats.scheduled})
+            </FilterPill>
+            <FilterPill
+              active={status === 'ongoing'}
+              onClick={() => { setStatus('ongoing'); setTodayOnly(false); }}
+            >
+              Ongoing ({stats.ongoing})
+            </FilterPill>
+            {DAYS.map((d) => {
+              const count = classes.filter((c) => c.daysOfWeek.includes(d)).length;
+              if (count === 0) return null;
+              return (
+                <FilterPill
+                  key={d}
+                  active={day === d}
+                  onClick={() => setDay(day === d ? 'all' : d)}
                 >
-                  Clear filters
-                </button>
-              </div>
+                  {DAY_SHORT[d]} ({count})
+                </FilterPill>
+              );
+            })}
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="shrink-0 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition whitespace-nowrap"
+              >
+                Clear
+              </button>
             )}
           </div>
-        )}
+        </header>
 
-        {/* List */}
-        {classes.length === 0 ? (
-          <EmptyState
-            title="No classes assigned yet"
-            message="Your academy owner has not assigned any active classes to you yet."
-          />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            title="No matches found"
-            message="Try adjusting your search or filters."
-            action={hasFilters ? { label: 'Clear filters', onClick: clearAll } : undefined}
-          />
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 sm:gap-4">
-            {filtered.map((row) => (
-              <ClassCard key={row._id} row={row} today={today} onStart={() => setActiveClass(row)} />
-            ))}
-          </div>
-        )}
+        {/* ============================================
+            LIST
+            ============================================ */}
+        <div
+          className="flex-1 min-h-0 overflow-y-auto"
+          style={{ background: '#ffffff' }}
+        >
+          {classes.length === 0 ? (
+            <EmptyState
+              icon="empty"
+              title="No classes assigned yet"
+              message="Your academy owner has not assigned any active classes to you yet."
+            />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title="No matches found"
+              message="Try adjusting your search or filters."
+              action={hasFilters ? { label: 'Clear filters', onClick: clearAll } : undefined}
+            />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {filtered.map((row) => (
+                <ClassRowItem
+                  key={row._id}
+                  row={row}
+                  today={today}
+                  onStart={() => setActiveClass(row)}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      {/* ================= FULLSCREEN CLASSROOM ================= */}
+      {/* ============================================================
+          FULLSCREEN CLASSROOM
+          ✅ بھی inline `left` سے — sidebar کے دائیں طرف
+          ============================================================ */}
       {activeClass && (
-        <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col">
-          <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b border-white/10 bg-slate-950/60 backdrop-blur">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white truncate">{activeClass.courseName}</p>
-              <p className="text-xs text-white/50 truncate">
-                {activeClass.studentName}
-                {activeClass.fatherName ? ` · ${activeClass.fatherName}` : ''}
-              </p>
+        <div
+          className="flex flex-col"
+          style={{
+            position: 'fixed',
+            top: 0,
+            bottom: 0,
+            left: sidebarOffset,
+            right: 0,
+            zIndex: 100,
+            background: '#0f172a',
+          }}
+        >
+          <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 border-b border-white/10 bg-slate-950/60 backdrop-blur shrink-0">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                {initials(activeClass.studentName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">
+                  {activeClass.courseName}
+                </p>
+                <p className="text-xs text-white/50 truncate">
+                  {activeClass.studentName}
+                  {activeClass.fatherName ? ` · ${activeClass.fatherName}` : ''}
+                </p>
+              </div>
             </div>
 
             <button
@@ -279,7 +447,7 @@ export default function ClassesView({
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-auto">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <TeacherLiveKitClassroomLoader
               assignmentId={activeClass._id}
               roomName={activeClass.livekitRoomName}
@@ -301,24 +469,147 @@ export default function ClassesView({
 }
 
 /* ============================================================
-   Small components
+   Class Row Item
    ============================================================ */
 
-function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+function ClassRowItem({
+  row, today, onStart,
+}: {
+  row: ClassRow;
+  today: string;
+  onStart: () => void;
+}) {
+  const ready = Boolean(row.livekitRoomName);
+  const isToday = row.daysOfWeek.includes(today);
+  const isOngoing = row.status === 'ongoing';
+  const hasUnread = isToday && isOngoing;
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3">
-      <p className={`text-xl sm:text-2xl font-semibold ${accent ? 'text-rose-600' : 'text-slate-900'}`}>
-        {value}
-      </p>
-      <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">{label}</p>
-    </div>
+    <li>
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={!ready}
+        className={[
+          'w-full text-left flex items-center gap-3 px-3 sm:px-4 py-3 transition',
+          ready
+            ? 'hover:bg-slate-50 active:bg-slate-100 cursor-pointer'
+            : 'opacity-60 cursor-not-allowed',
+        ].join(' ')}
+      >
+        <div className="relative shrink-0">
+          <div
+            className={`h-12 w-12 rounded-full ${
+              isOngoing
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                : isToday
+                ? 'bg-gradient-to-br from-rose-500 to-pink-600'
+                : 'bg-gradient-to-br from-slate-500 to-slate-600'
+            } flex items-center justify-center text-white font-bold text-sm shadow-sm`}
+          >
+            {initials(row.studentName)}
+          </div>
+
+          {isOngoing && ready && (
+            <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500 animate-pulse" />
+          )}
+
+          {!ready && (
+            <span className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full border-2 border-white bg-amber-500 flex items-center justify-center">
+              <Clock className="h-2.5 w-2.5 text-white" />
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p
+              className={`text-[15px] truncate ${
+                hasUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-900'
+              }`}
+            >
+              {row.courseName}
+            </p>
+            {isToday && (
+              <span className="shrink-0 inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                Today
+              </span>
+            )}
+            {isOngoing && (
+              <span className="shrink-0 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                Live
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 mt-0.5">
+            <Users className="h-3 w-3 text-slate-400 shrink-0" />
+            <p className="text-[13px] text-slate-600 truncate">
+              {row.studentName}
+              {row.fatherName && (
+                <span className="text-slate-400"> · {row.fatherName}</span>
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+            <p className="text-[12px] text-slate-500 truncate">
+              {row.startTime || '--:--'} – {row.endTime || '--:--'}
+              {row.daysOfWeek.length > 0 && (
+                <span className="text-slate-400">
+                  {' · '}
+                  {row.daysOfWeek.map((d) => DAY_SHORT[d] || d).join(', ')}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {ready ? (
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold ${
+                isOngoing
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30'
+                  : 'bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              <Video className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {isOngoing ? 'Join' : 'Start'}
+              </span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+              <Calendar className="h-3 w-3" />
+              Not ready
+            </span>
+          )}
+
+          {row.totalPages > 0 && (
+            <span className="text-[10px] text-slate-400">
+              {row.totalPages} pages
+            </span>
+          )}
+        </div>
+      </button>
+    </li>
   );
 }
 
+/* ============================================================
+   Small components
+   ============================================================ */
+
 function FilterPill({
-  children, active, disabled, today, onClick,
+  children, active, disabled, highlight, onClick,
 }: {
-  children: React.ReactNode; active: boolean; disabled?: boolean; today?: boolean; onClick: () => void;
+  children: React.ReactNode;
+  active: boolean;
+  disabled?: boolean;
+  highlight?: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -326,11 +617,14 @@ function FilterPill({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'px-2.5 py-1 text-xs font-medium rounded-lg transition whitespace-nowrap',
-        disabled ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-500'
-        : active ? 'bg-slate-900 text-white'
-        : today ? 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+        'shrink-0 px-2.5 py-1 text-xs font-medium rounded-full transition whitespace-nowrap',
+        disabled
+          ? 'opacity-40 cursor-not-allowed bg-white/10 text-white/60'
+          : active
+          ? 'bg-white text-emerald-700 shadow-sm'
+          : highlight
+          ? 'bg-rose-500/30 text-white hover:bg-rose-500/40'
+          : 'bg-white/15 text-white hover:bg-white/25',
       ].join(' ')}
     >
       {children}
@@ -339,111 +633,33 @@ function FilterPill({
 }
 
 function EmptyState({
-  title, message, action,
+  icon, title, message, action,
 }: {
-  title: string; message: string; action?: { label: string; onClick: () => void };
+  icon: 'empty' | 'search';
+  title: string;
+  message: string;
+  action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="bg-white border border-dashed border-slate-200 rounded-2xl py-12 sm:py-14 px-6 text-center">
-      <p className="text-sm font-medium text-slate-800">{title}</p>
-      <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">{message}</p>
+    <div className="px-6 py-16 text-center">
+      <div className="h-20 w-20 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-5">
+        {icon === 'search' ? (
+          <Search className="h-10 w-10 text-emerald-600" />
+        ) : (
+          <BookOpen className="h-10 w-10 text-emerald-600" />
+        )}
+      </div>
+      <p className="text-base font-bold text-slate-800">{title}</p>
+      <p className="text-sm text-slate-500 mt-2 max-w-xs mx-auto">{message}</p>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-4 px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800 transition"
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md transition"
         >
           {action.label}
         </button>
       )}
     </div>
-  );
-}
-
-function ClassCard({ row, today, onStart }: { row: ClassRow; today: string; onStart: () => void }) {
-  const ready = Boolean(row.livekitRoomName);
-  const isToday = row.daysOfWeek.includes(today);
-  const isOngoing = row.status === 'ongoing';
-
-  return (
-    <article
-      className={[
-        'bg-white border rounded-2xl p-4 sm:p-5 transition',
-        isToday ? 'border-rose-200 ring-1 ring-rose-100' : 'border-slate-200',
-      ].join(' ')}
-    >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate">{row.courseName}</h3>
-          <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-600">
-            <Users className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span className="font-medium truncate">{row.studentName}</span>
-            {row.fatherName && <span className="text-slate-400 truncate">· {row.fatherName}</span>}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {isToday && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">
-              Today
-            </span>
-          )}
-          <span
-            className={[
-              'text-[10px] font-semibold px-2 py-0.5 rounded-full',
-              isOngoing ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600',
-            ].join(' ')}
-          >
-            {formatStatus(row.status)}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 text-sm text-slate-700 mb-3">
-        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-        <span className="font-medium">{row.startTime || '--:--'}</span>
-        <span className="text-slate-300">–</span>
-        <span className="font-medium">{row.endTime || '--:--'}</span>
-      </div>
-
-      {row.daysOfWeek.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {row.daysOfWeek.map((d) => {
-            const isDayToday = d === today;
-            return (
-              <span
-                key={d}
-                className={[
-                  'px-2 py-0.5 text-[11px] font-medium rounded-md',
-                  isDayToday ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600',
-                ].join(' ')}
-              >
-                {DAY_SHORT[d] || d}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {row.notes && (
-        <p className="text-xs text-slate-600 leading-relaxed line-clamp-2 mb-3">{row.notes}</p>
-      )}
-
-      {ready ? (
-        <button
-          type="button"
-          onClick={onStart}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition"
-        >
-          <Video className="h-4 w-4" />
-          Start class
-        </button>
-      ) : (
-        <p className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          Classroom not ready yet
-        </p>
-      )}
-    </article>
   );
 }

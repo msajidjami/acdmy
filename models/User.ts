@@ -1,21 +1,74 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model, Types } from 'mongoose';
+
+/* ============================================================
+   TYPES
+   ============================================================ */
+
+export type UserRole = 'admin' | 'owner' | 'teacher' | 'user';
+export type UserProvider = 'credentials' | 'google' | 'phone';
+export type AllowMessagesFrom = 'everyone' | 'contacts' | 'nobody';
+
+export interface IUserPrivacy {
+  allowMessagesFrom: AllowMessagesFrom;
+  blockedUsers: Types.ObjectId[];
+  discoverable: boolean;
+}
 
 export interface IUser extends Document {
+  _id: Types.ObjectId;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string;
   password?: string;
-  role: 'admin' | 'owner' | 'teacher' | 'user' | 'student';
+  role: UserRole;
   isVerified: boolean;
-  provider: 'credentials' | 'google';
+  provider: UserProvider;
   googleId?: string;
   avatar?: string;
   resetToken?: string;
   resetTokenExpiry?: Date | null;
   lastLogin?: Date | null;
   loginCount: number;
+
+  /* Online status */
+  isOnline: boolean;
+  lastSeen: Date;
+
+  /* Privacy */
+  privacy: IUserPrivacy;
+
   createdAt: Date;
   updatedAt: Date;
 }
+
+/* ============================================================
+   PRIVACY SUB-SCHEMA (nested defaults یقینی بناتا ہے)
+   ============================================================ */
+
+const PrivacySchema = new Schema<IUserPrivacy>(
+  {
+    allowMessagesFrom: {
+      type: String,
+      enum: ['everyone', 'contacts', 'nobody'],
+      default: 'contacts',
+      required: true,
+    },
+    blockedUsers: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
+    discoverable: {
+      type: Boolean,
+      default: true,
+      required: true,
+    },
+  },
+  { _id: false }
+);
+
+/* ============================================================
+   USER SCHEMA
+   ============================================================ */
 
 const UserSchema = new Schema<IUser>(
   {
@@ -27,10 +80,17 @@ const UserSchema = new Schema<IUser>(
 
     email: {
       type: String,
-      required: true,
-      unique: true,
       lowercase: true,
       trim: true,
+      unique: true,
+      sparse: true,
+    },
+
+    phone: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
     },
 
     password: {
@@ -43,9 +103,9 @@ const UserSchema = new Schema<IUser>(
 
     role: {
       type: String,
-      enum: ['admin', 'owner', 'teacher', 'user', 'student'],
+      enum: ['admin', 'owner', 'teacher', 'user'],
       required: true,
-      default: 'student',
+      default: 'user',
       index: true,
     },
 
@@ -56,12 +116,11 @@ const UserSchema = new Schema<IUser>(
 
     provider: {
       type: String,
-      enum: ['credentials', 'google'],
+      enum: ['credentials', 'google', 'phone'],
       default: 'credentials',
       index: true,
     },
 
-    /* ✅ sparse unique — صرف موجود ہونے پر index */
     googleId: {
       type: String,
       default: undefined,
@@ -74,7 +133,6 @@ const UserSchema = new Schema<IUser>(
       default: '',
     },
 
-    /* ✅ sparse — صرف موجود ہونے پر index */
     resetToken: {
       type: String,
       default: undefined,
@@ -94,6 +152,33 @@ const UserSchema = new Schema<IUser>(
       type: Number,
       default: 0,
     },
+
+    /* ============================================================
+       ONLINE STATUS
+       ============================================================ */
+    isOnline: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
+
+    /* ============================================================
+       PRIVACY — sub-schema سے defaults یقینی
+       ============================================================ */
+    privacy: {
+      type: PrivacySchema,
+      default: () => ({
+        allowMessagesFrom: 'contacts',
+        blockedUsers: [],
+        discoverable: true,
+      }),
+    },
   },
   {
     timestamps: true,
@@ -106,16 +191,13 @@ const UserSchema = new Schema<IUser>(
    ============================================================ */
 
 UserSchema.index({ resetToken: 1 }, { sparse: true });
+UserSchema.index({ role: 1, provider: 1 });
+UserSchema.index({ lastSeen: -1 });
+UserSchema.index({ 'privacy.allowMessagesFrom': 1 });
+UserSchema.index({ isOnline: 1, lastSeen: -1 });
 
 /* ============================================================
-   ✅ Cache-safe export — serverless (Vercel) کے لیے لازمی
-   ============================================================
-   `delete mongoose.models.User` غلط تھا کیونکہ:
-   - Serverless میں ہر request پر module re-evaluate ہوتا ہے
-   - delete کرنے سے race condition بنتا ہے → "Schema hasn't been registered" error
-   - Hot reload پر بھی مسائل پیدا کرتا ہے
-
-   صحیح طریقہ: existing model کو reuse کریں
+   MODEL (cache-safe — serverless کے لیے)
    ============================================================ */
 
 const User: Model<IUser> =

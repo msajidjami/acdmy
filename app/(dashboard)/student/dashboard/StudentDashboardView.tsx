@@ -8,8 +8,6 @@ import {
   Clock,
   Video,
   Search,
-  Filter,
-  Sparkles,
   CheckCircle2,
   Radio,
   Flame,
@@ -25,16 +23,14 @@ import {
   Layers,
   Zap,
   Users,
-  Award,
-  TrendingUp,
-  Star,
   Activity,
-  AlertCircle,
   PlayCircle,
-  Hash,
+  MessageCircle,
 } from 'lucide-react';
 
-/* ------------------ Types ------------------ */
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 type ClassRow = {
   _id: string;
@@ -46,7 +42,6 @@ type ClassRow = {
   endTime: string;
   status: string;
   notes: string;
-  // ✅ LiveKit fields
   hasLiveKit: boolean;
   livekitRoomName: string;
   livekitHostIdentity: string;
@@ -76,7 +71,7 @@ type Stats = {
   todayClasses: number;
   upcomingClasses: number;
   ongoingClasses: number;
-  livekitReadyClasses: number; // ✅ نیا
+  livekitReadyClasses: number;
 };
 
 type Props = {
@@ -86,17 +81,9 @@ type Props = {
   classes: ClassRow[];
 };
 
-/* ------------------ Helpers ------------------ */
-
-const DAYS = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-] as const;
+/* ============================================================
+   HELPERS
+   ============================================================ */
 
 const DAY_SHORT: Record<string, string> = {
   Monday: 'Mon',
@@ -115,17 +102,13 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function formatStatus(status: string): string {
-  return String(status || '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function getTodayName(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' });
 }
 
-/* ------------------ Main Component ------------------ */
+/* ============================================================
+   MAIN
+   ============================================================ */
 
 export default function StudentDashboardView({
   student,
@@ -139,8 +122,7 @@ export default function StudentDashboardView({
   );
   const [search, setSearch] = useState('');
 
-  /* ------------------ Derived ------------------ */
-
+  /* ---------- Derived ---------- */
   const todayClasses = useMemo(
     () => classes.filter((c) => c.isToday),
     [classes]
@@ -177,7 +159,6 @@ export default function StudentDashboardView({
       {/* ================================================= */}
       {/* HERO HEADER                                        */}
       {/* ================================================= */}
-
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-500 via-cyan-500 to-teal-500 p-6 sm:p-8 text-white shadow-2xl shadow-cyan-500/20">
         <div className="absolute inset-0 opacity-30 pointer-events-none">
           <div className="absolute -top-24 -right-16 h-80 w-80 rounded-full bg-white/40 blur-3xl" />
@@ -186,9 +167,10 @@ export default function StudentDashboardView({
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
           {/* Avatar */}
-          <div className="shrink-0 flex items-center gap-4">
+          <div className="shrink-0">
             <div className="relative">
               {student.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={student.imageUrl}
                   alt={student.name}
@@ -211,12 +193,12 @@ export default function StudentDashboardView({
           {/* Info */}
           <div className="min-w-0 flex-1">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-xs font-semibold">
-              <Sparkles className="h-3.5 w-3.5" />
+              <GraduationCap className="h-3.5 w-3.5" />
               Student Dashboard
             </div>
 
             <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
-              Assalam-o-Alaikum, {student.name.split(' ')[0]}! 👋
+              Assalam-o-Alaikum, {student.name.split(' ')[0]}
             </h1>
 
             <p className="mt-2 text-sm sm:text-base text-cyan-100 break-all">
@@ -248,6 +230,15 @@ export default function StudentDashboardView({
 
           {/* Actions */}
           <div className="flex flex-wrap gap-2 shrink-0">
+            {/* ✅ Chats — سب سے پہلے */}
+            <Link
+              href="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-white text-violet-700 px-4 py-2.5 text-sm font-bold hover:bg-white/90 transition shadow-lg shadow-violet-900/20"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Chats
+            </Link>
+
             <Link
               href="/student/schedule"
               className="inline-flex items-center gap-2 rounded-xl bg-white/15 backdrop-blur border border-white/25 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/25 transition"
@@ -255,6 +246,7 @@ export default function StudentDashboardView({
               <CalendarDays className="h-4 w-4" />
               My Schedule
             </Link>
+
             <Link
               href="/student/settings"
               className="inline-flex items-center gap-2 rounded-xl bg-white text-sky-700 px-4 py-2.5 text-sm font-bold hover:bg-white/90 transition shadow-lg shadow-cyan-900/20"
@@ -269,7 +261,6 @@ export default function StudentDashboardView({
       {/* ================================================= */}
       {/* STATS CARDS                                        */}
       {/* ================================================= */}
-
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           title="Total Classes"
@@ -307,9 +298,8 @@ export default function StudentDashboardView({
       </div>
 
       {/* ================================================= */}
-      {/* ONGOING CLASSES BANNER                            */}
+      {/* ONGOING CLASSES BANNER                             */}
       {/* ================================================= */}
-
       {ongoingClasses.length > 0 && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 p-5 shadow-lg">
           <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-orange-200/50 blur-3xl pointer-events-none" />
@@ -322,7 +312,7 @@ export default function StudentDashboardView({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-amber-900 text-base sm:text-lg">
-                  🟡 {ongoingClasses.length} class
+                  {ongoingClasses.length} class
                   {ongoingClasses.length > 1 ? 'es' : ''} in progress
                 </h3>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-amber-600 text-white px-2 py-0.5 rounded-full">
@@ -371,7 +361,6 @@ export default function StudentDashboardView({
       {/* ================================================= */}
       {/* TABS                                               */}
       {/* ================================================= */}
-
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex border-b border-slate-100">
           {(
@@ -413,13 +402,9 @@ export default function StudentDashboardView({
           })}
         </div>
 
-        {/* ================================================= */}
-        {/* TAB: OVERVIEW                                      */}
-        {/* ================================================= */}
-
+        {/* ---------- OVERVIEW ---------- */}
         {activeTab === 'overview' && (
           <div className="p-5 space-y-5">
-            {/* Quick info grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <QuickTile
                 icon={<BookOpen className="h-4 w-4" />}
@@ -447,7 +432,6 @@ export default function StudentDashboardView({
               />
             </div>
 
-            {/* Today's Classes */}
             {todayClasses.length > 0 ? (
               <div>
                 <SectionHeader
@@ -471,12 +455,11 @@ export default function StudentDashboardView({
                   No classes scheduled today
                 </p>
                 <p className="text-slate-400 text-xs mt-1">
-                  Enjoy your day off 🎉
+                  Enjoy your day off
                 </p>
               </div>
             )}
 
-            {/* Upcoming Classes */}
             {upcomingClasses.length > 0 && (
               <div>
                 <SectionHeader
@@ -495,10 +478,7 @@ export default function StudentDashboardView({
           </div>
         )}
 
-        {/* ================================================= */}
-        {/* TAB: TODAY                                         */}
-        {/* ================================================= */}
-
+        {/* ---------- TODAY ---------- */}
         {activeTab === 'today' && (
           <div className="p-5">
             {todayClasses.length === 0 ? (
@@ -510,7 +490,7 @@ export default function StudentDashboardView({
                   No classes today
                 </h3>
                 <p className="text-slate-400 text-sm mt-1">
-                  You have a free day. Relax and enjoy! 🌴
+                  You have a free day. Relax and enjoy!
                 </p>
               </div>
             ) : (
@@ -523,13 +503,9 @@ export default function StudentDashboardView({
           </div>
         )}
 
-        {/* ================================================= */}
-        {/* TAB: ALL                                           */}
-        {/* ================================================= */}
-
+        {/* ---------- ALL ---------- */}
         {activeTab === 'all' && (
           <div className="p-5 space-y-4">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
@@ -576,7 +552,6 @@ export default function StudentDashboardView({
       {/* ================================================= */}
       {/* SECURITY NOTICE                                    */}
       {/* ================================================= */}
-
       <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
         <div className="flex items-start gap-3">
           <div className="shrink-0 h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center shadow-sm">
@@ -587,8 +562,8 @@ export default function StudentDashboardView({
               LiveKit · Privacy &amp; Security
             </h3>
             <p className="mt-1.5 text-sm leading-6 text-slate-500">
-              All your classes are live-only sessions with end-to-end
-              encrypted video and audio. Nothing is recorded.
+              All your classes are live-only sessions with end-to-end encrypted
+              video and audio. Nothing is recorded.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
@@ -611,7 +586,9 @@ export default function StudentDashboardView({
   );
 }
 
-/* ------------------ Stat Card ------------------ */
+/* ============================================================
+   STAT CARD
+   ============================================================ */
 
 function StatCard({
   title,
@@ -665,7 +642,9 @@ function StatCard({
   );
 }
 
-/* ------------------ Quick Tile ------------------ */
+/* ============================================================
+   QUICK TILE
+   ============================================================ */
 
 function QuickTile({
   icon,
@@ -700,7 +679,9 @@ function QuickTile({
   );
 }
 
-/* ------------------ Section Header ------------------ */
+/* ============================================================
+   SECTION HEADER
+   ============================================================ */
 
 function SectionHeader({
   icon,
@@ -733,7 +714,9 @@ function SectionHeader({
   );
 }
 
-/* ------------------ Class List Item ------------------ */
+/* ============================================================
+   CLASS LIST ITEM
+   ============================================================ */
 
 function ClassListItem({
   row,
@@ -760,7 +743,6 @@ function ClassListItem({
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Icon */}
         <div
           className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
             row.isToday
@@ -773,52 +755,46 @@ function ClassListItem({
           <BookOpen className="h-5 w-5" />
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-bold text-sm text-slate-900 truncate">
-                  {row.courseName}
-                </h4>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-bold text-sm text-slate-900 truncate">
+              {row.courseName}
+            </h4>
 
-                {row.isToday && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider">
-                    <Flame className="h-3 w-3" />
-                    Today
-                  </span>
-                )}
+            {row.isToday && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider">
+                <Flame className="h-3 w-3" />
+                Today
+              </span>
+            )}
 
-                {isOngoing && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                    <Radio className="h-3 w-3" />
-                    Live
-                  </span>
-                )}
+            {isOngoing && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                <Radio className="h-3 w-3" />
+                Live
+              </span>
+            )}
 
-                {hasLiveKit && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-[10px] font-bold uppercase tracking-wider">
-                    <Signal className="h-3 w-3" />
-                    Ready
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 flex-wrap">
-                <span className="inline-flex items-center gap-1">
-                  <UserIcon className="h-3 w-3" />
-                  {row.teacherName}
-                </span>
-                <span className="opacity-50">·</span>
-                <span className="inline-flex items-center gap-1 font-mono">
-                  <Clock className="h-3 w-3" />
-                  {row.startTime} – {row.endTime}
-                </span>
-              </div>
-            </div>
+            {hasLiveKit && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 text-[10px] font-bold uppercase tracking-wider">
+                <Signal className="h-3 w-3" />
+                Ready
+              </span>
+            )}
           </div>
 
-          {/* Days */}
+          <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+            <span className="inline-flex items-center gap-1">
+              <UserIcon className="h-3 w-3" />
+              {row.teacherName}
+            </span>
+            <span className="opacity-50">·</span>
+            <span className="inline-flex items-center gap-1 font-mono">
+              <Clock className="h-3 w-3" />
+              {row.startTime} – {row.endTime}
+            </span>
+          </div>
+
           {expanded && row.daysOfWeek.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {row.daysOfWeek.map((day) => {
@@ -839,7 +815,6 @@ function ClassListItem({
             </div>
           )}
 
-          {/* Notes (expanded) */}
           {expanded && row.notes && (
             <div className="mt-2.5 rounded-lg bg-white border border-slate-100 px-2.5 py-1.5">
               <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
@@ -848,7 +823,6 @@ function ClassListItem({
             </div>
           )}
 
-          {/* Actions */}
           <div className="mt-3 flex flex-wrap gap-2">
             {hasLiveKit ? (
               <Link

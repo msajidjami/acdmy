@@ -46,6 +46,7 @@ import {
   TrendingUp,
   Receipt,
   Clock,
+  MessageCircle,
 } from 'lucide-react';
 
 /* ============================================================
@@ -59,8 +60,6 @@ const FONT_HEADING = {
 const FONT_BODY = {
   fontFamily: 'var(--font-sora), Sora, sans-serif',
 } as const;
-
-const FONT_INHERIT = { fontFamily: 'inherit' } as const;
 
 /* ============================================================
    TYPES
@@ -472,6 +471,7 @@ export default async function OwnerDashboardPage({
           />
         </Suspense>
       )}
+
       {showDeleted && (
         <Suspense fallback={null}>
           <AlertBanner
@@ -541,6 +541,32 @@ export default async function OwnerDashboardPage({
           </Link>
         </div>
       </div>
+
+      {/* ===== QUICK ACCESS — CHATS ===== */}
+      <Link
+        href="/owner"
+        className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white shadow-lg hover:shadow-xl transition-all"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+              <MessageCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <h3
+                className="text-2xl tracking-wider leading-none"
+                style={FONT_HEADING}
+              >
+                Open Chats
+              </h3>
+              <p className="text-xs text-white/80 mt-1">
+                WhatsApp-style contacts &amp; messages
+              </p>
+            </div>
+          </div>
+          <ArrowRightIcon className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
+        </div>
+      </Link>
 
       {/* ===== NO ACADEMY ===== */}
       {!academy ? (
@@ -890,73 +916,32 @@ export default async function OwnerDashboardPage({
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <UserGroupIcon className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        Teachers
-                      </span>
-                    </div>
-                    <span
-                      className="text-2xl tracking-wider text-slate-900 leading-none"
-                      style={FONT_HEADING}
-                    >
-                      {teacherCount}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-purple-50 flex items-center justify-center">
-                        <AcademicCapIcon className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        Students
-                      </span>
-                    </div>
-                    <span
-                      className="text-2xl tracking-wider text-slate-900 leading-none"
-                      style={FONT_HEADING}
-                    >
-                      {studentCount}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center">
-                        <BookOpenIcon className="h-4 w-4 text-emerald-600" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        Courses
-                      </span>
-                    </div>
-                    <span
-                      className="text-2xl tracking-wider text-slate-900 leading-none"
-                      style={FONT_HEADING}
-                    >
-                      {courseCount}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center">
-                        <EnvelopeIcon className="h-4 w-4 text-amber-600" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        Messages
-                      </span>
-                    </div>
-                    <span
-                      className="text-2xl tracking-wider text-slate-900 leading-none"
-                      style={FONT_HEADING}
-                    >
-                      {inquiries.length}
-                    </span>
-                  </div>
+                  <MetricRow
+                    icon={<UserGroupIcon className="h-4 w-4 text-blue-600" />}
+                    iconBg="bg-blue-50"
+                    label="Teachers"
+                    value={teacherCount}
+                  />
+                  <MetricRow
+                    icon={
+                      <AcademicCapIcon className="h-4 w-4 text-purple-600" />
+                    }
+                    iconBg="bg-purple-50"
+                    label="Students"
+                    value={studentCount}
+                  />
+                  <MetricRow
+                    icon={<BookOpenIcon className="h-4 w-4 text-emerald-600" />}
+                    iconBg="bg-emerald-50"
+                    label="Courses"
+                    value={courseCount}
+                  />
+                  <MetricRow
+                    icon={<EnvelopeIcon className="h-4 w-4 text-amber-600" />}
+                    iconBg="bg-amber-50"
+                    label="Messages"
+                    value={inquiries.length}
+                  />
                 </div>
               </div>
 
@@ -994,75 +979,30 @@ export default async function OwnerDashboardPage({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Link
+              <QuickAction
                 href="/owner/academy"
-                className="group relative bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-200 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
-              >
-                <div className="absolute -right-6 -top-6 w-24 h-24 bg-emerald-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex items-start gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-                    <BuildingOfficeIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className="text-xl tracking-wider text-slate-800 group-hover:text-emerald-700 transition"
-                      style={FONT_HEADING}
-                    >
-                      Edit Academy
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Update details
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
+                title="Edit Academy"
+                subtitle="Update details"
+                icon={<BuildingOfficeIcon className="h-6 w-6 text-white" />}
+                gradient="from-emerald-500 to-teal-600"
+                hoverText="group-hover:text-emerald-700"
+              />
+              <QuickAction
                 href="/owner/teachers"
-                className="group relative bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-200 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
-              >
-                <div className="absolute -right-6 -top-6 w-24 h-24 bg-blue-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex items-start gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
-                    <UserGroupIcon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className="text-xl tracking-wider text-slate-800 group-hover:text-blue-700 transition"
-                      style={FONT_HEADING}
-                    >
-                      Teachers
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Manage team
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
+                title="Teachers"
+                subtitle="Manage team"
+                icon={<UserGroupIcon className="h-6 w-6 text-white" />}
+                gradient="from-blue-500 to-indigo-600"
+                hoverText="group-hover:text-blue-700"
+              />
+              <QuickAction
                 href="/owner/billing"
-                className="group relative bg-white p-5 rounded-2xl border border-slate-200 hover:border-violet-200 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
-              >
-                <div className="absolute -right-6 -top-6 w-24 h-24 bg-violet-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="relative flex items-start gap-3">
-                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/20 shrink-0">
-                    <Receipt className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className="text-xl tracking-wider text-slate-800 group-hover:text-violet-700 transition"
-                      style={FONT_HEADING}
-                    >
-                      Billing
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Manage plan
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
+                title="Billing"
+                subtitle="Manage plan"
+                icon={<Receipt className="h-6 w-6 text-white" />}
+                gradient="from-violet-500 to-fuchsia-600"
+                hoverText="group-hover:text-violet-700"
+              />
               <Link
                 href="/owner/inquiries"
                 className="group relative bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-200 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
@@ -1101,6 +1041,84 @@ export default async function OwnerDashboardPage({
 }
 
 /* ============================================================
+   METRIC ROW
+   ============================================================ */
+
+function MetricRow({
+  icon,
+  iconBg,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition">
+      <div className="flex items-center gap-3">
+        <div className={`h-9 w-9 rounded-lg ${iconBg} flex items-center justify-center`}>
+          {icon}
+        </div>
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+      </div>
+      <span
+        className="text-2xl tracking-wider text-slate-900 leading-none"
+        style={FONT_HEADING}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ============================================================
+   QUICK ACTION
+   ============================================================ */
+
+function QuickAction({
+  href,
+  title,
+  subtitle,
+  icon,
+  gradient,
+  hoverText,
+}: {
+  href: string;
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  gradient: string;
+  hoverText: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden"
+    >
+      <div className="absolute -right-6 -top-6 w-24 h-24 bg-slate-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="relative flex items-start gap-3">
+        <div
+          className={`h-12 w-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg shrink-0`}
+        >
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3
+            className={`text-xl tracking-wider text-slate-800 transition ${hoverText}`}
+            style={FONT_HEADING}
+          >
+            {title}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/* ============================================================
    SUBSCRIPTION BANNER
    ============================================================ */
 
@@ -1122,64 +1140,8 @@ function SubscriptionBanner({
   const hasPending = subscription.hasPendingPayment;
   const isTrial = subscription.isTrial;
 
-  let bannerStyle = '';
-  let icon = null;
-  let title = '';
-  let message = '';
-  let ctaText = '';
-  let ctaStyle = '';
-
-  if (hasPending) {
-    bannerStyle = 'bg-blue-50 border-blue-300';
-    icon = <Clock className="h-6 w-6 text-blue-600" />;
-    title = 'Payment Under Review';
-    message =
-      "We're verifying your payment. You'll be notified within 24 hours. Your plan will activate automatically.";
-  } else if (isExpired) {
-    bannerStyle = 'bg-rose-50 border-rose-300';
-    icon = <AlertTriangle className="h-6 w-6 text-rose-600" />;
-    title = 'Subscription Expired';
-    message = `You used ${subscription.daysTotal} day${
-      subscription.daysTotal !== 1 ? 's' : ''
-    } of your ${subscription.planName} plan. Renew now to continue adding students and keep your academy public.`;
-    ctaText = 'Renew Plan';
-    ctaStyle = 'bg-rose-600 hover:bg-rose-700';
-  } else if (isTrial) {
-    bannerStyle = 'bg-violet-50 border-violet-300';
-    icon = <Zap className="h-6 w-6 text-violet-600" />;
-    title = `Free Trial — ${subscription.daysRemaining} day${
-      subscription.daysRemaining !== 1 ? 's' : ''
-    } left`;
-    message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Add students and explore all features. Upgrade anytime to keep your academy running without interruption.`;
-    ctaText = 'Upgrade Now';
-    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
-  } else if (isFree) {
-    bannerStyle = 'bg-amber-50 border-amber-300';
-    icon = <Lock className="h-6 w-6 text-amber-600" />;
-    title = 'Free Plan — Upgrade Required';
-    message =
-      "You're on the Free plan. Upgrade to add students and make your academy public.";
-    ctaText = 'View Plans';
-    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
-  } else if (isExpiringSoon) {
-    bannerStyle = 'bg-amber-50 border-amber-300';
-    icon = <Clock className="h-6 w-6 text-amber-600" />;
-    title = `Plan Expiring in ${subscription.daysRemaining} Day${
-      subscription.daysRemaining !== 1 ? 's' : ''
-    }`;
-    message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Your ${
-      subscription.planName
-    } plan will expire on ${new Date(subscription.endDate).toLocaleDateString(
-      'en-US',
-      {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      }
-    )}. Renew to avoid interruption.`;
-    ctaText = 'Renew Now';
-    ctaStyle = 'bg-amber-600 hover:bg-amber-700';
-  } else {
+  /* Active state — simple banner */
+  if (!hasPending && !isExpired && !isTrial && !isFree && !isExpiringSoon) {
     return (
       <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
         <div className="flex items-center gap-3">
@@ -1203,12 +1165,7 @@ function SubscriptionBanner({
             <p className="text-xs text-emerald-700 mt-0.5">
               {subscription.daysPassed}/{subscription.daysTotal} days used ·{' '}
               {subscription.daysRemaining} day
-              {subscription.daysRemaining !== 1 ? 's' : ''} left · Expires{' '}
-              {new Date(subscription.endDate).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+              {subscription.daysRemaining !== 1 ? 's' : ''} left
             </p>
           </div>
           <Link
@@ -1221,6 +1178,55 @@ function SubscriptionBanner({
         </div>
       </div>
     );
+  }
+
+  /* Other states */
+  let bannerStyle = '';
+  let icon = null;
+  let title = '';
+  let message = '';
+  let ctaText = '';
+  let ctaStyle = '';
+
+  if (hasPending) {
+    bannerStyle = 'bg-blue-50 border-blue-300';
+    icon = <Clock className="h-6 w-6 text-blue-600" />;
+    title = 'Payment Under Review';
+    message =
+      "We're verifying your payment. You'll be notified within 24 hours.";
+  } else if (isExpired) {
+    bannerStyle = 'bg-rose-50 border-rose-300';
+    icon = <AlertTriangle className="h-6 w-6 text-rose-600" />;
+    title = 'Subscription Expired';
+    message = `Your ${subscription.planName} plan expired. Renew now to continue.`;
+    ctaText = 'Renew Plan';
+    ctaStyle = 'bg-rose-600 hover:bg-rose-700';
+  } else if (isTrial) {
+    bannerStyle = 'bg-violet-50 border-violet-300';
+    icon = <Zap className="h-6 w-6 text-violet-600" />;
+    title = `Free Trial — ${subscription.daysRemaining} day${
+      subscription.daysRemaining !== 1 ? 's' : ''
+    } left`;
+    message = `You've used ${subscription.daysPassed} of ${subscription.daysTotal} days. Upgrade anytime.`;
+    ctaText = 'Upgrade Now';
+    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
+  } else if (isFree) {
+    bannerStyle = 'bg-amber-50 border-amber-300';
+    icon = <Lock className="h-6 w-6 text-amber-600" />;
+    title = 'Free Plan';
+    message =
+      "You're on the Free plan. Upgrade to add students and make your academy public.";
+    ctaText = 'View Plans';
+    ctaStyle = 'bg-violet-600 hover:bg-violet-700';
+  } else if (isExpiringSoon) {
+    bannerStyle = 'bg-amber-50 border-amber-300';
+    icon = <Clock className="h-6 w-6 text-amber-600" />;
+    title = `Plan Expiring in ${subscription.daysRemaining} Day${
+      subscription.daysRemaining !== 1 ? 's' : ''
+    }`;
+    message = `Your ${subscription.planName} plan will expire soon.`;
+    ctaText = 'Renew Now';
+    ctaStyle = 'bg-amber-600 hover:bg-amber-700';
   }
 
   return (

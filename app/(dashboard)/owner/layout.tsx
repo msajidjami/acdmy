@@ -12,7 +12,6 @@ import {
   User,
   BookOpen,
   Calendar,
-  Menu,
   X,
   GraduationCap,
   ChevronRight,
@@ -25,11 +24,8 @@ import {
   ClipboardList,
   ShieldAlert,
   MoreHorizontal,
+  MessageCircle,
 } from 'lucide-react';
-
-/* ============================================================
-   FONT HELPERS
-   ============================================================ */
 
 const FONT_HEADING = {
   fontFamily: 'var(--font-bebas), "Bebas Neue", sans-serif',
@@ -41,24 +37,15 @@ const FONT_BODY = {
 
 const FONT_INHERIT = { fontFamily: 'inherit' } as const;
 
-/* ============================================================
-   TYPES
-   ============================================================ */
-
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
-  badge?: string;
 }
 
 interface OwnerLayoutProps {
   children: React.ReactNode;
 }
-
-/* ============================================================
-   NAVBAR HEIGHT (global top navbar)
-   ============================================================ */
 
 const NAVBAR_H = '4rem';
 
@@ -67,6 +54,7 @@ const NAVBAR_H = '4rem';
    ============================================================ */
 
 const mainNavItems: NavItem[] = [
+  { name: 'Chats', href: '/owner', icon: MessageCircle },
   { name: 'Dashboard', href: '/owner/dashboard', icon: LayoutDashboard },
   { name: 'My Academy', href: '/owner/academy', icon: School },
   { name: 'Teachers', href: '/owner/teachers', icon: Users },
@@ -90,12 +78,11 @@ const systemNavItems: NavItem[] = [
   { name: 'Settings', href: '/owner/settings', icon: Settings },
 ];
 
-/* Bottom tab bar — 4 main + More */
 const bottomTabs: NavItem[] = [
+  { name: 'Chats', href: '/owner', icon: MessageCircle },
   { name: 'Home', href: '/owner/dashboard', icon: LayoutDashboard },
   { name: 'Academy', href: '/owner/academy', icon: School },
   { name: 'Teachers', href: '/owner/teachers', icon: Users },
-  { name: 'Students', href: '/owner/students', icon: User },
 ];
 
 /* ============================================================
@@ -107,13 +94,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const router = useRouter();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [ownerName, setOwnerName] = useState('Academy Owner');
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  /* Close "More" sheet when route changes */
   useEffect(() => {
     setIsMoreOpen(false);
   }, [pathname]);
 
-  /* Lock body scroll when sheet is open */
   useEffect(() => {
     if (isMoreOpen) {
       document.body.style.overflow = 'hidden';
@@ -125,28 +111,72 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     };
   }, [isMoreOpen]);
 
-  /* Fetch owner name */
+  /* ✅ Owner name */
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/owner/profile', {
+        const res = await fetch('/api/auth/me', {
           credentials: 'include',
           cache: 'no-store',
         });
         if (!res.ok) return;
         const d = await res.json();
         if (cancelled) return;
-        const name = d?.user?.name || d?.name;
+        const name = d?.user?.name;
         if (name) setOwnerName(String(name));
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  /* ✅ Unread count — polling + focus refresh */
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/contacts/unread-count', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setUnreadCount(Number(data?.count) || 0);
+      } catch {}
+    };
+
+    fetchUnread();
+
+    const interval = setInterval(fetchUnread, 8000);
+
+    const onFocus = () => fetchUnread();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [pathname]);
+
+  /* Refetch unread when route changes */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/contacts/unread-count', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setUnreadCount(Number(data?.count) || 0);
+      } catch {}
+    })();
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -154,21 +184,17 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
         method: 'POST',
         credentials: 'include',
       });
-    } catch {
-      /* ignore */
-    }
-
+    } catch {}
     document.cookie =
       'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-
     router.push('/login');
     router.refresh();
   };
 
-  /* ============================================================
-     IS ACTIVE
-     ============================================================ */
   const isActive = (href: string) => {
+    if (href === '/owner') {
+      return pathname === '/owner' || pathname === '/owner/';
+    }
     if (href === '/owner/payments') {
       return (
         pathname === '/owner/payments' ||
@@ -189,6 +215,8 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     const active = isActive(item.href);
     const Icon = item.icon;
     const isTranscript = item.href === '/owner/transcripts';
+    const isChats = item.href === '/owner';
+    const showBadge = isChats && unreadCount > 0;
 
     return (
       <Link
@@ -217,7 +245,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
 
         <span
           className={`
-            flex items-center justify-center h-8 w-8 rounded-lg transition-colors
+            relative flex items-center justify-center h-8 w-8 rounded-lg transition-colors
             ${
               active
                 ? isTranscript
@@ -228,13 +256,18 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           `}
         >
           <Icon className="h-4 w-4" />
+          {showBadge && (
+            <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </span>
 
         <span className="flex-1">{item.name}</span>
 
-        {item.badge && (
+        {showBadge && (
           <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-600">
-            {item.badge}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
 
@@ -249,7 +282,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     );
   };
 
-  /* ---------- Section ---------- */
   const renderSection = (
     label: string,
     items: NavItem[],
@@ -265,11 +297,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     </>
   );
 
-  /* ---------- Mobile Sheet Row ---------- */
   const renderSheetRow = (item: NavItem) => {
     const active = isActive(item.href);
     const Icon = item.icon;
     const isTranscript = item.href === '/owner/transcripts';
+    const isChats = item.href === '/owner';
+    const showBadge = isChats && unreadCount > 0;
 
     return (
       <Link
@@ -289,7 +322,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       >
         <span
           className={`
-            flex items-center justify-center h-10 w-10 rounded-xl
+            relative flex items-center justify-center h-10 w-10 rounded-xl
             ${
               active
                 ? isTranscript
@@ -300,8 +333,18 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           `}
         >
           <Icon className="h-5 w-5" />
+          {showBadge && (
+            <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </span>
         <span className="flex-1">{item.name}</span>
+        {showBadge && (
+          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-600">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
         <ChevronRight className="h-4 w-4 text-slate-400" />
       </Link>
     );
@@ -313,7 +356,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       style={{ paddingTop: NAVBAR_H, ...FONT_BODY }}
     >
       {/* =========================================
-          MOBILE HEADER (like WhatsApp top bar)
+          MOBILE HEADER
       ========================================= */}
       <header
         className="
@@ -342,12 +385,22 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
         </div>
 
         <div className="flex items-center gap-1">
+          {unreadCount > 0 && (
+            <Link
+              href="/owner"
+              className="relative flex items-center justify-center h-10 w-10 rounded-full hover:bg-slate-100 transition"
+              aria-label="Chats"
+            >
+              <MessageCircle className="h-5 w-5 text-emerald-600" />
+              <span className="absolute top-1 right-1 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            </Link>
+          )}
+
           <Link
             href="/owner/settings"
-            className="
-              flex items-center justify-center h-10 w-10 rounded-full
-              hover:bg-slate-100 active:bg-slate-200 transition
-            "
+            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-slate-100 active:bg-slate-200 transition"
             aria-label="Settings"
           >
             <Settings className="h-5 w-5 text-slate-700" />
@@ -357,10 +410,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
             type="button"
             onClick={handleLogout}
             style={FONT_INHERIT}
-            className="
-              flex items-center justify-center h-10 w-10 rounded-full
-              hover:bg-rose-50 active:bg-rose-100 transition
-            "
+            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-rose-50 active:bg-rose-100 transition"
             aria-label="Logout"
           >
             <LogOut className="h-5 w-5 text-rose-600" />
@@ -372,9 +422,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           LAYOUT WRAPPER
       ========================================= */}
       <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
-        {/* =========================================
-            DESKTOP SIDEBAR
-        ========================================= */}
         <aside className="hidden lg:block w-72 shrink-0">
           <div
             className="sticky bg-white border-r border-slate-200 flex flex-col"
@@ -383,7 +430,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
               height: `calc(100vh - ${NAVBAR_H})`,
             }}
           >
-            {/* Brand */}
             <div className="p-5 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
@@ -404,14 +450,12 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
               </div>
             </div>
 
-            {/* Navigation */}
             <nav className="flex-1 p-3 overflow-y-auto">
               {renderSection('Main Menu', mainNavItems)}
               {renderSection('Content', contentNavItems)}
               {renderSection('System', systemNavItems)}
             </nav>
 
-            {/* User / Logout */}
             <div className="p-3 border-t border-slate-100">
               <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 mb-2">
                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md">
@@ -431,10 +475,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                 type="button"
                 onClick={handleLogout}
                 style={FONT_INHERIT}
-                className="
-                  flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl
-                  text-sm font-medium text-rose-600 hover:bg-rose-50 transition
-                "
+                className="flex items-center gap-3 px-3.5 py-2.5 w-full rounded-xl text-sm font-medium text-rose-600 hover:bg-rose-50 transition"
               >
                 <span className="flex items-center justify-center h-8 w-8 rounded-lg bg-rose-100 text-rose-600">
                   <LogOut className="h-4 w-4" />
@@ -445,9 +486,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           </div>
         </aside>
 
-        {/* =========================================
-            MAIN CONTENT
-        ========================================= */}
         <main className="flex-1 min-w-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 lg:pt-8 pb-28 lg:pb-10">
             {children}
@@ -456,7 +494,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       </div>
 
       {/* =========================================
-          MOBILE BOTTOM TAB BAR (WhatsApp / Zoom style)
+          MOBILE BOTTOM TAB BAR
       ========================================= */}
       <nav
         className="
@@ -471,19 +509,18 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           {bottomTabs.map((tab) => {
             const active = isActive(tab.href);
             const Icon = tab.icon;
+            const isChats = tab.href === '/owner';
+            const showBadge = isChats && unreadCount > 0;
+
             return (
               <Link
                 key={tab.name}
                 href={tab.href}
-                className="
-                  relative flex flex-col items-center justify-center gap-1
-                  transition-colors
-                "
+                className="relative flex flex-col items-center justify-center gap-1 transition-colors"
               >
                 <span
                   className={`
-                    flex items-center justify-center h-8 w-12 rounded-full
-                    transition-all
+                    relative flex items-center justify-center h-8 w-12 rounded-full transition-all
                     ${
                       active
                         ? 'bg-emerald-100 text-emerald-700'
@@ -492,6 +529,11 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                   `}
                 >
                   <Icon className="h-5 w-5" />
+                  {showBadge && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </span>
                 <span
                   className={`text-[10px] font-medium leading-none ${
@@ -504,15 +546,11 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
             );
           })}
 
-          {/* More button */}
           <button
             type="button"
             onClick={() => setIsMoreOpen(true)}
             style={FONT_INHERIT}
-            className="
-              relative flex flex-col items-center justify-center gap-1
-              transition-colors
-            "
+            className="relative flex flex-col items-center justify-center gap-1 transition-colors"
             aria-label="More"
           >
             <span className="flex items-center justify-center h-8 w-12 rounded-full text-slate-500">
@@ -530,13 +568,11 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
       ========================================= */}
       {isMoreOpen && (
         <div className="lg:hidden">
-          {/* Backdrop */}
           <div
             className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px] z-50 animate-in fade-in duration-200"
             onClick={() => setIsMoreOpen(false)}
           />
 
-          {/* Sheet */}
           <div
             className="
               fixed bottom-0 left-0 right-0 z-50
@@ -547,12 +583,10 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
             "
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
-            {/* Handle */}
             <div className="pt-3 pb-1 flex justify-center">
               <div className="h-1.5 w-12 rounded-full bg-slate-300" />
             </div>
 
-            {/* Header */}
             <div className="px-4 pb-3 pt-2 flex items-center justify-between border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md">
@@ -572,17 +606,13 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                 type="button"
                 onClick={() => setIsMoreOpen(false)}
                 style={FONT_INHERIT}
-                className="
-                  flex items-center justify-center h-9 w-9 rounded-full
-                  bg-slate-100 hover:bg-slate-200 transition
-                "
+                className="flex items-center justify-center h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200 transition"
                 aria-label="Close"
               >
                 <X className="h-4 w-4 text-slate-700" />
               </button>
             </div>
 
-            {/* Scroll content */}
             <div className="overflow-y-auto px-3 py-3">
               <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Main Menu
@@ -610,11 +640,7 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
                   type="button"
                   onClick={handleLogout}
                   style={FONT_INHERIT}
-                  className="
-                    flex items-center gap-3 px-3 py-3 w-full rounded-2xl
-                    text-sm font-medium text-rose-600 hover:bg-rose-50
-                    active:bg-rose-100 transition
-                  "
+                  className="flex items-center gap-3 px-3 py-3 w-full rounded-2xl text-sm font-medium text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition"
                 >
                   <span className="flex items-center justify-center h-10 w-10 rounded-xl bg-rose-100 text-rose-600">
                     <LogOut className="h-5 w-5" />

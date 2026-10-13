@@ -7,7 +7,12 @@ import Academy from '@/models/Academy';
 import Teacher from '@/models/Teacher';
 import Student from '@/models/Student';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+/* ============================================================
+   TYPES
+   ============================================================ */
 
 interface DecodedToken extends JwtPayload {
   userId?: string;
@@ -15,86 +20,170 @@ interface DecodedToken extends JwtPayload {
   _id?: string;
 }
 
+type DetectedRole = 'admin' | 'owner' | 'teacher' | 'student';
+
+interface RolesResponse {
+  roles: DetectedRole[];
+  primary: DetectedRole | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    role: string;
+  } | null;
+  academy?: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+
+function emptyResponse(): RolesResponse {
+  return { roles: [], primary: null, user: null, academy: null };
+}
+
+/* ============================================================
+   GET — Current user کے roles detect کریں
+   ============================================================ */
+
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get('token')?.value;
+    const secret = process.env.JWT_SECRET;
 
-    if (!token) {
-      return NextResponse.json({ roles: [], user: null }, { status: 200 });
+    if (!secret) {
+      console.error('[roles] JWT_SECRET is not configured');
+      return NextResponse.json(emptyResponse(), { status: 500 });
     }
 
+    /* ---------- 1. Cookie سے token ---------- */
+    const token = req.cookies.get('token')?.value;
+    if (!token) {
+      return NextResponse.json(emptyResponse(), { status: 200 });
+    }
+
+    /* ---------- 2. Token verify ---------- */
     let decoded: DecodedToken;
-
     try {
-      const verified = jwt.verify(token, JWT_SECRET);
-
+      const verified = jwt.verify(token, secret);
       if (typeof verified === 'string') {
-        return NextResponse.json({ roles: [], user: null }, { status: 200 });
+        return NextResponse.json(emptyResponse(), { status: 200 });
       }
-
       decoded = verified as DecodedToken;
     } catch {
-      return NextResponse.json({ roles: [], user: null }, { status: 200 });
+      return NextResponse.json(emptyResponse(), { status: 200 });
     }
 
-    // ✅ userId, id, _id — تینوں میں سے کوئی ایک
+    /* ---------- 3. userId حاصل کریں ---------- */
     const userId = decoded.userId || decoded.id || decoded._id;
-
     if (!userId) {
-      return NextResponse.json({ roles: [], user: null }, { status: 200 });
+      return NextResponse.json(emptyResponse(), { status: 200 });
     }
 
+    /* ---------- 4. User ڈھونڈیں ---------- */
     await connectDB();
 
-    const user = await User.findById(userId).select('-password');
+    const user: any = await User.findById(userId)
+      .select('name email phone role')
+      .lean();
 
     if (!user) {
-      return NextResponse.json({ roles: [], user: null }, { status: 200 });
+      return NextResponse.json(emptyResponse(), { status: 200 });
     }
 
-    const roles: string[] = [];
-    const userObjectId = user._id;
-    const email = user.email?.toLowerCase();
+    const userObjectId = String(user._id);
+    const emailLower = user.email ? String(user.email).toLowerCase() : '';
+    const phone = user.phone ? String(user.phone) : '';
 
-    // 1. Admin (صرف schema والا role)
+    const roles: DetectedRole[] = [];
+
+    /* ============================================================
+       5. Role Detection
+       ============================================================ */
+
+    /* ---------- 5.1 Admin ---------- */
     if (user.role === 'admin') {
       roles.push('admin');
     }
 
-    // 2. Owner — academy کا مالک ہو
-    const academy = await Academy.findOne({ ownerId: userObjectId });
-    if (academy) {
+    /* ---------- 5.2 Owner — Academy کا مالک ---------- */
+    let academy: any = null;
+    academy = await Academy.findOne({ ownerId: userObjectId })
+      .select('_id name slug')
+      .lean();
+
+    if (academy || user.role === 'owner') {
       roles.push('owner');
     }
 
-    // 3 & 4. Teacher اور Student — email سے (case-insensitive)
-    if (email) {
-      const emailRegex = new RegExp(`^${email}$`, 'i');
+    /* ---------- 5.3 Teacher — userId OR email OR phone ---------- */
+    const teacherOr: any[] = [{ userId: userObjectId }];
+    if (emailLower) teacherOr.push({ email: emailLower });
+    if (phone) teacherOr.push({ phone });
 
-      const teacher = await Teacher.findOne({ email: emailRegex });
-      if (teacher) {
-        roles.push('teacher');
-      }
+    const teacher = await Teacher.findOne({ $or: teacherOr })
+      .select('_id')
+      .lean();
 
-      const student = await Student.findOne({ email: emailRegex });
-      if (student) {
-        roles.push('student');
-      }
+    if (teacher) {
+      roles.push('teacher');
     }
 
-    const userData = {
-      id: user._id.toString(),
-      name: user.name,
-      email: user.email,
+    /* ---------- 5.4 Student — userId OR email OR phone ---------- */
+    const studentOr: any[] = [{ userId: userObjectId }];
+    if (emailLower) studentOr.push({ email: emailLower });
+    if (phone) studentOr.push({ phone });
+
+    const student = await Student.findOne({ $or: studentOr })
+      .select('_id')
+      .lean();
+
+    if (student) {
+      roles.push('student');
+    }
+
+    /* ============================================================
+       6. Primary role — ترجیح کی ترتیب
+       ============================================================
+       admin > owner > teacher > student
+       ============================================================ */
+
+    const priority: DetectedRole[] = ['admin', 'owner', 'teacher', 'student'];
+    const primary = priority.find((r) => roles.includes(r)) || null;
+
+    /* ============================================================
+       7. Response
+       ============================================================ */
+
+    const response: RolesResponse = {
+      roles,
+      primary,
+      user: {
+        id: userObjectId,
+        name: String(user.name || ''),
+        email: String(user.email || ''),
+        phone: String(user.phone || ''),
+        role: String(user.role || 'user'),
+      },
+      academy: academy
+        ? {
+            id: String(academy._id),
+            name: String(academy.name || ''),
+            slug: String(academy.slug || ''),
+          }
+        : null,
     };
 
-    return NextResponse.json({ roles, user: userData });
+    return NextResponse.json(response, {
+      status: 200,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   } catch (error) {
-    console.error('Error fetching user roles:', error);
-
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[roles] error:', error);
+    return NextResponse.json(emptyResponse(), { status: 500 });
   }
 }

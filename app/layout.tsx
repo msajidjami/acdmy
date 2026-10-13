@@ -4,24 +4,16 @@ import { AuthProvider } from '@/app/components/AuthProvider';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 
-// ✅ metadataBase ضروری ہے تاکہ OG images اور canonical URLs صحیح domain سے resolve ہوں
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://academyhub.com';
 
 export const metadata: Metadata = {
-  // ✅ metadataBase — Google اور social crawlers کے لیے بنیادی URL
   metadataBase: new URL(siteUrl),
-
-  // ✅ Title Template — بچوں کے صفحات خودکار طور پر برانڈ کے ساتھ جڑ جائیں گے
   title: {
     default: 'Academy Hub — Online Academy Marketplace',
     template: '%s | Academy Hub',
   },
-
-  // ✅ Description — Google 150-160 characters کو ترجیح دیتا ہے
   description:
     'Academy Hub is the leading online academy marketplace connecting students with expert instructors. Discover, enroll, and master new skills with top-rated courses.',
-
-  // ✅ Keywords — AI search engines کے لیے semantic signals
   keywords: [
     'online academy',
     'academy marketplace',
@@ -32,21 +24,13 @@ export const metadata: Metadata = {
     'course marketplace',
     'learn online',
   ],
-
-  // ✅ Author & Publisher — E-E-A-T signals
   authors: [{ name: 'Academy Hub', url: siteUrl }],
   creator: 'Academy Hub',
   publisher: 'Academy Hub',
-
-  // ✅ Application Name
   applicationName: 'Academy Hub',
-
-  // ✅ Google Search Console Verification
   verification: {
     google: 'aJgZEnENBTu5TugijShYrhySGktjtxkBq02nNRvSadU',
   },
-
-  // ✅ Open Graph — Facebook, LinkedIn, WhatsApp previews
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -57,25 +41,21 @@ export const metadata: Metadata = {
       'Discover top-rated online courses and expert instructors. Join Academy Hub to learn, grow, and master new skills.',
     images: [
       {
-        url: `${siteUrl}/og-image.png`, // 1200x630 recommended
+        url: `${siteUrl}/og-image.png`,
         width: 1200,
         height: 630,
         alt: 'Academy Hub — Online Academy Marketplace',
       },
     ],
   },
-
-  // ✅ Twitter Cards — X (Twitter) previews
   twitter: {
     card: 'summary_large_image',
     title: 'Academy Hub — Online Academy Marketplace',
     description:
       'Discover top-rated online courses and expert instructors. Join Academy Hub to learn, grow, and master new skills.',
-    images: [`${siteUrl}/twitter-image.png`], // 1200x600 recommended
-    creator: '@academyhub', // اپنا Twitter handle ڈالیں
+    images: [`${siteUrl}/twitter-image.png`],
+    creator: '@academyhub',
   },
-
-  // ✅ Robots — Google indexing controls
   robots: {
     index: true,
     follow: true,
@@ -87,22 +67,11 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
-
-  // ✅ Canonical URL — duplicate content سے بچنے کے لیے
-  alternates: {
-    canonical: siteUrl,
-  },
-
-  // ✅ Category & Classification
+  alternates: { canonical: siteUrl },
   category: 'education',
-
-  // ✅ Other meta tags
-  other: {
-    'google-adsense-account': 'ca-pub-XXXXXXXX', // اگر AdSense استعمال کر رہے ہیں تو
-  },
+  other: { 'google-adsense-account': 'ca-pub-XXXXXXXX' },
 };
 
-// ✅ Viewport — الگ export کرنا ضروری ہے (Next.js 14+)
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
@@ -122,14 +91,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* ✅ JSON-LD Structured Data — AI SEO کے لیے انتہائی اہم */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@graph': [
-                // 1. WebSite Schema — Sitelinks Search Box
                 {
                   '@type': 'WebSite',
                   '@id': `${siteUrl}/#website`,
@@ -146,7 +113,6 @@ export default function RootLayout({
                     'query-input': 'required name=search_term_string',
                   },
                 },
-                // 2. Organization Schema — Knowledge Panel
                 {
                   '@type': 'Organization',
                   '@id': `${siteUrl}/#organization`,
@@ -174,14 +140,16 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body className="min-h-screen bg-slate-50">
         <AuthProvider>
-          {/* نیویگیشن بار - ہر صفحے پر شامل */}
-          <Navbar />
-          {/* مرکزی مواد */}
-          <main>{children}</main>
-          {/* فوٹر - ہر صفحے پر شامل */}
-          <Footer />
+          <div className="min-h-screen flex flex-col">
+            {/* ✅ Navbar har page par rahega — ab chhota hoga */}
+            <Navbar />
+
+            <main className="flex-1 min-h-0">{children}</main>
+
+            <Footer />
+          </div>
         </AuthProvider>
       </body>
     </html>

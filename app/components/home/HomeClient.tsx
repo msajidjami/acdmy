@@ -19,7 +19,7 @@ import {
   useSpring,
   useTransform,
 } from 'framer-motion';
-import { useAuth } from '@/app/components/AuthProvider';
+
 import {
   AcademicCapIcon,
   UserGroupIcon,
@@ -57,7 +57,6 @@ const FONT_BODY = {
   fontFamily: 'var(--font-sora), Sora, sans-serif',
 } as const;
 
-/** Form controls (button/input/textarea) ko Sora inherit karane ke liye */
 const FONT_INHERIT = { fontFamily: 'inherit' } as const;
 
 /* ============================================================
@@ -95,6 +94,7 @@ type CurrentUser = {
   id: string;
   name: string;
   email: string;
+  phone: string;
   role: string;
 };
 
@@ -501,13 +501,14 @@ function InteractiveHero({
                   </div>
 
                   <div className="mt-9 flex flex-wrap gap-3">
-                    {showCreateAcademy && (
+                    {/* ✅ Create Academy — صرف لاگ ان صارف، اور academy نہ ہو */}
+                    {showCreateAcademy && isLoggedIn && !userAcademy && (
                       <motion.div
                         whileHover={{ scale: 1.03 }}
                         whileTap={{ scale: 0.97 }}
                       >
                         <Link
-                          href="/owner/academy"
+                          href="/academy/create"
                           className="group inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition"
                         >
                           <RocketLaunchIcon className="h-5 w-5" />
@@ -517,6 +518,7 @@ function InteractiveHero({
                       </motion.div>
                     )}
 
+                    {/* ✅ My Academy — اگر academy موجود ہو */}
                     {userAcademy && (
                       <motion.div
                         whileHover={{ scale: 1.03 }}
@@ -533,6 +535,7 @@ function InteractiveHero({
                       </motion.div>
                     )}
 
+                    {/* Dashboard links based on roles */}
                     {isLoggedIn &&
                       !rolesLoading &&
                       hasRoles &&
@@ -559,6 +562,7 @@ function InteractiveHero({
                         );
                       })}
 
+                    {/* Sign Up Free — غیر لاگ ان */}
                     {!isLoggedIn && (
                       <motion.div
                         whileHover={{ scale: 1.03 }}
@@ -573,23 +577,19 @@ function InteractiveHero({
                       </motion.div>
                     )}
 
-                    {isLoggedIn && !rolesLoading && !hasRoles && (
-                      <motion.div
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
+                    {/* Explore — غیر لاگ ان کے لیے بھی */}
+                    <motion.div
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      <Link
+                        href="/explore"
+                        className="inline-flex items-center gap-2 px-7 py-3.5 bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl shadow-sm transition"
                       >
-                        <Link
-                          href="/dashboard"
-                          className="inline-flex items-center gap-2 px-7 py-3.5 bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl shadow-sm transition"
-                        >
-                          Dashboard
-                          <ArrowRightIcon
-                            className="h-5 w-5"
-                            aria-hidden="true"
-                          />
-                        </Link>
-                      </motion.div>
-                    )}
+                        Explore Academies
+                        <ArrowRightIcon className="h-5 w-5" aria-hidden="true" />
+                      </Link>
+                    </motion.div>
                   </div>
                 </motion.div>
               ) : (
@@ -711,24 +711,6 @@ function InteractiveHero({
                           className="inline-flex items-center gap-2 px-7 py-3.5 bg-white border-2 border-violet-600 text-violet-700 hover:bg-violet-50 font-semibold rounded-xl shadow-sm transition"
                         >
                           Join Free
-                        </Link>
-                      </motion.div>
-                    )}
-
-                    {isLoggedIn && !rolesLoading && !hasRoles && (
-                      <motion.div
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                      >
-                        <Link
-                          href="/dashboard"
-                          className="inline-flex items-center gap-2 px-7 py-3.5 bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl shadow-sm transition"
-                        >
-                          Dashboard
-                          <ArrowRightIcon
-                            className="h-5 w-5"
-                            aria-hidden="true"
-                          />
                         </Link>
                       </motion.div>
                     )}
@@ -1362,7 +1344,7 @@ function WhiteboardShowcase() {
 
             <div className="mt-9 flex flex-wrap gap-3">
               <Link
-                href="/owner/academy"
+                href="/signup"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition"
               >
                 Try the Whiteboard
@@ -1785,9 +1767,7 @@ function AcademyCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
           {!hasThumbnail && (
-            <div
-              className={`absolute inset-0 ${techPatternClass} opacity-40`}
-            />
+            <div className={`absolute inset-0 ${techPatternClass} opacity-40`} />
           )}
 
           {!hasThumbnail && (
@@ -2257,8 +2237,6 @@ function CTASection({
   showCreateAcademy: boolean;
   userAcademy: UserAcademy | null;
 }) {
-  if (!showCreateAcademy) return null;
-
   return (
     <section aria-labelledby="cta-heading" className="py-20 bg-gray-950">
       <div className="max-w-5xl mx-auto px-6 text-center">
@@ -2280,13 +2258,24 @@ function CTASection({
         </p>
 
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <Link
-            href="/owner/academy"
-            className="inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition"
-          >
-            Create Your Academy
-            <ArrowRightIcon className="h-5 w-5" aria-hidden="true" />
-          </Link>
+          {/* ✅ لاگ ان صارف → Create Academy یا Dashboard */}
+          {showCreateAcademy ? (
+            <Link
+              href="/academy/create"
+              className="inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition"
+            >
+              Create Your Academy
+              <ArrowRightIcon className="h-5 w-5" aria-hidden="true" />
+            </Link>
+          ) : (
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 px-7 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition"
+            >
+              Sign Up Free
+              <ArrowRightIcon className="h-5 w-5" aria-hidden="true" />
+            </Link>
+          )}
 
           <Link
             href="/explore"
@@ -2309,7 +2298,6 @@ export default function HomeClient({
   userAcademy = null,
   showCreateAcademy = false,
 }: HomeClientProps) {
-  const { user: authUser } = useAuth();
   const {
     academies,
     loading: academiesLoading,
@@ -2320,7 +2308,7 @@ export default function HomeClient({
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
 
-  const user = currentUser || authUser;
+  const user = currentUser;
 
   useEffect(() => {
     async function fetchRoles() {
@@ -2330,7 +2318,11 @@ export default function HomeClient({
       }
 
       try {
-        const res = await fetch('/api/user/roles', { cache: 'no-store' });
+        // ✅ صحیح endpoint
+        const res = await fetch('/api/auth/roles', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
 
         if (res.ok) {
           const data = await res.json();
@@ -2349,7 +2341,7 @@ export default function HomeClient({
   const getDashboardInfo = useCallback((role: string): DashboardInfo => {
     switch (role) {
       case 'admin':
-        return { href: '/admin', label: 'Admin Dashboard', icon: '🛡️' };
+        return { href: '/admin/dashboard', label: 'Admin Dashboard', icon: '🛡️' };
       case 'owner':
         return {
           href: '/owner/dashboard',

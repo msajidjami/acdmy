@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
 import {
   LayoutDashboard,
   School,
@@ -14,28 +13,20 @@ import {
   Settings,
   LogOut,
   BookOpen,
-  X,
   GraduationCap,
   ChevronRight,
   MoreHorizontal,
-  Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 
 type NavItem = {
   name: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 };
-
-type TeacherLayoutProps = {
-  children: ReactNode;
-};
-
-/* ============================================================
-   NAVIGATION
-   ============================================================ */
 
 const navItems: NavItem[] = [
+  { name: 'Chats', href: '/teacher', icon: MessageCircle },
   { name: 'Dashboard', href: '/teacher/dashboard', icon: LayoutDashboard },
   { name: 'My Academy', href: '/teacher/academy', icon: School },
   { name: 'My Classes', href: '/teacher/classes', icon: BookOpen },
@@ -45,375 +36,738 @@ const navItems: NavItem[] = [
   { name: 'Settings', href: '/teacher/settings', icon: Settings },
 ];
 
-/* Bottom tab bar — 4 main + More */
 const bottomTabs: NavItem[] = [
+  { name: 'Chats', href: '/teacher', icon: MessageCircle },
   { name: 'Home', href: '/teacher/dashboard', icon: LayoutDashboard },
   { name: 'Classes', href: '/teacher/classes', icon: BookOpen },
   { name: 'Students', href: '/teacher/students', icon: Users },
-  { name: 'Schedule', href: '/teacher/schedule', icon: Calendar },
 ];
 
-/* ============================================================
-   LAYOUT
-   ============================================================ */
+/* ✅ Sidebar width = 256px (16rem) — ClassesView ke lg:left-64 se match */
+const SIDEBAR_W = 256;
+const NAVBAR_H_FALLBACK = 56;
 
-export default function TeacherLayout({ children }: TeacherLayoutProps) {
+export default function TeacherLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [navHeight, setNavHeight] = useState(NAVBAR_H_FALLBACK);
+  const [isDesktop, setIsDesktop] = useState(false);
 
-  /* Close "More" sheet when route changes */
+  /* ✅ Desktop detect — window.innerWidth (Tailwind lg = 1024px) */
   useEffect(() => {
-    setIsMoreOpen(false);
-  }, [pathname]);
+    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
-  /* Lock body scroll when sheet is open */
+  /* ✅ Navbar height measure — sirf sticky top navbar dhoonde */
   useEffect(() => {
-    if (isMoreOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
+    if (!isDesktop) return;
+    const measure = () => {
+      const navs = Array.from(document.querySelectorAll('nav'));
+      for (const n of navs) {
+        const rect = n.getBoundingClientRect();
+        if (rect.height === 0) continue; // skip display:none
+        const cs = window.getComputedStyle(n);
+        if (cs.position === 'sticky' || cs.position === 'fixed') {
+          // Skip bottom-fixed (our mobile tab bar has bottom !== auto)
+          if (cs.bottom !== 'auto') continue;
+          setNavHeight(rect.height || NAVBAR_H_FALLBACK);
+          return;
+        }
+      }
+      setNavHeight(NAVBAR_H_FALLBACK);
     };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isDesktop]);
+
+  useEffect(() => { setIsMoreOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = isMoreOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [isMoreOpen]);
 
-  /* Close on Escape */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsMoreOpen(false);
+    if (!isDesktop) return;
+    let cancelled = false;
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/contacts/unread-count', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setUnreadCount(Number(data?.count) || 0);
+      } catch {}
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 8000);
+    const onFocus = () => fetchUnread();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [pathname, isDesktop]);
 
   const handleLogout = () => {
     document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     window.location.href = '/login';
   };
 
-  const isItemActive = (href: string) =>
-    pathname === href ||
-    (href !== '/teacher/dashboard' && pathname.startsWith(`${href}/`));
-
-  /* ---------- Desktop Nav Item ---------- */
-  const renderDesktopNavItem = (item: NavItem) => {
-    const Icon = item.icon;
-    const isActive = isItemActive(item.href);
+  const isItemActive = (href: string) => {
+    if (href === '/teacher') {
+      return pathname === '/teacher' || pathname === '/teacher/';
+    }
     return (
-      <Link
-        key={item.href}
-        href={item.href}
-        className={[
-          'group relative flex items-center gap-3 rounded-xl px-3.5 py-3',
-          'text-sm font-semibold transition-all duration-200',
-          isActive
-            ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 shadow-sm'
-            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-        ].join(' ')}
-      >
-        {isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-gradient-to-b from-indigo-500 to-purple-600" />
-        )}
-        <div
-          className={[
-            'h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition',
-            isActive
-              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-purple-500/25'
-              : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700',
-          ].join(' ')}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-        <span className="flex-1">{item.name}</span>
-        {isActive && (
-          <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
-        )}
-      </Link>
+      pathname === href ||
+      (href !== '/teacher/dashboard' && pathname.startsWith(`${href}/`))
     );
   };
 
-  /* ---------- Mobile Sheet Row ---------- */
-  const renderSheetRow = (item: NavItem) => {
-    const Icon = item.icon;
-    const isActive = isItemActive(item.href);
+  /* ============================================================
+     DESKTOP SIDEBAR — صرف inline styles (Tailwind پر انحصار نہیں)
+     ============================================================ */
+  const renderSidebar = () => {
+    if (!isDesktop) return null;
+
     return (
-      <Link
-        key={item.href}
-        href={item.href}
-        className={[
-          'flex items-center gap-3 px-3 py-3 rounded-2xl',
-          'text-sm font-semibold transition-all',
-          isActive
-            ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700'
-            : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100',
-        ].join(' ')}
+      <aside
+        style={{
+          position: 'fixed',
+          top: navHeight,
+          left: 0,
+          bottom: 0,
+          width: SIDEBAR_W,
+          background: '#ffffff',
+          borderRight: '1px solid #e2e8f0',
+          zIndex: 40,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
       >
-        <span
-          className={[
-            'flex items-center justify-center h-10 w-10 rounded-xl shrink-0',
-            isActive
-              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-purple-500/25'
-              : 'bg-slate-100 text-slate-500',
-          ].join(' ')}
+        {/* Brand */}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: '12px 16px',
+            borderBottom: '1px solid #f1f5f9',
+          }}
         >
-          <Icon className="h-5 w-5" />
-        </span>
-        <span className="flex-1">{item.name}</span>
-        <ChevronRight className="h-4 w-4 text-slate-400" />
-      </Link>
+          <Link
+            href="/teacher/dashboard"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              textDecoration: 'none',
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background:
+                  'linear-gradient(135deg, #4f46e5, #9333ea, #c026d3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(147,51,234,0.25)',
+                flexShrink: 0,
+              }}
+            >
+              <GraduationCap
+                style={{ width: 18, height: 18, color: '#ffffff' }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: '#34d399',
+                  border: '2px solid #ffffff',
+                }}
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  lineHeight: 1.2,
+                }}
+              >
+                Teacher Panel
+              </div>
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  color: '#94a3b8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  lineHeight: 1.2,
+                }}
+              >
+                Manage your classes
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Nav */}
+        <nav
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isItemActive(item.href);
+            const isChats = item.href === '/teacher';
+            const showBadge = isChats && unreadCount > 0;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  textDecoration: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: active
+                    ? 'linear-gradient(to right, #eef2ff, #faf5ff)'
+                    : 'transparent',
+                  color: active ? '#4338ca' : '#475569',
+                  transition: 'background 0.15s',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'relative',
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    background: active
+                      ? 'linear-gradient(135deg, #6366f1, #a855f7)'
+                      : '#f1f5f9',
+                    color: active ? '#ffffff' : '#64748b',
+                  }}
+                >
+                  <Icon style={{ width: 16, height: 16 }} />
+                  {showBadge && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        minWidth: 16,
+                        height: 16,
+                        padding: '0 4px',
+                        borderRadius: 999,
+                        background: '#f43f5e',
+                        color: '#ffffff',
+                        fontSize: 9,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px solid #ffffff',
+                      }}
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </span>
+                <span style={{ flex: 1 }}>{item.name}</span>
+                {showBadge && (
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                      background: '#ffe4e6',
+                      color: '#e11d48',
+                      fontSize: 10,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div
+          style={{
+            flexShrink: 0,
+            borderTop: '1px solid #f1f5f9',
+            padding: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              width: '100%',
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: 'none',
+              background: 'transparent',
+              color: '#e11d48',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#ffe4e6',
+              }}
+            >
+              <LogOut style={{ width: 16, height: 16, color: '#e11d48' }} />
+            </span>
+            <span style={{ flex: 1 }}>Logout</span>
+          </button>
+        </div>
+      </aside>
+    );
+  };
+
+  /* ============================================================
+     MOBILE — bottom tab bar + More sheet
+     ============================================================ */
+  const renderMobile = () => {
+    if (isDesktop) return null;
+
+    return (
+      <>
+        {/* Bottom tab bar */}
+        <nav
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 40,
+            background: 'rgba(255,255,255,0.98)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            borderTop: '1px solid #e2e8f0',
+            boxShadow: '0 -4px 20px -8px rgba(15,23,42,0.15)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              height: 64,
+            }}
+          >
+            {bottomTabs.map((tab) => {
+              const active = isItemActive(tab.href);
+              const Icon = tab.icon;
+              const isChats = tab.href === '/teacher';
+              const showBadge = isChats && unreadCount > 0;
+
+              return (
+                <Link
+                  key={tab.name}
+                  href={tab.href}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span
+                    style={{
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 48,
+                      height: 32,
+                      borderRadius: 999,
+                      background: active ? '#e0e7ff' : 'transparent',
+                      color: active ? '#4338ca' : '#64748b',
+                    }}
+                  >
+                    <Icon style={{ width: 20, height: 20 }} />
+                    {showBadge && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          minWidth: 16,
+                          height: 16,
+                          padding: '0 4px',
+                          borderRadius: 999,
+                          background: '#f43f5e',
+                          color: '#ffffff',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '2px solid #ffffff',
+                        }}
+                      >
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 500,
+                      lineHeight: 1,
+                      color: active ? '#4338ca' : '#64748b',
+                    }}
+                  >
+                    {tab.name}
+                  </span>
+                </Link>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen(true)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 48,
+                  height: 32,
+                  borderRadius: 999,
+                  color: '#64748b',
+                }}
+              >
+                <MoreHorizontal style={{ width: 20, height: 20 }} />
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 500,
+                  lineHeight: 1,
+                  color: '#64748b',
+                }}
+              >
+                More
+              </span>
+            </button>
+          </div>
+        </nav>
+
+        {/* More sheet */}
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            pointerEvents: isMoreOpen ? 'auto' : 'none',
+            opacity: isMoreOpen ? 1 : 0,
+            transition: 'opacity 0.3s',
+          }}
+        >
+          <div
+            onClick={() => setIsMoreOpen(false)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(15,23,42,0.5)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: '#ffffff',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              boxShadow: '0 -10px 40px rgba(15,23,42,0.2)',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              transform: isMoreOpen
+                ? 'translateY(0)'
+                : 'translateY(100%)',
+              transition: 'transform 0.3s ease-out',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+            }}
+          >
+            <div
+              style={{
+                paddingTop: 12,
+                paddingBottom: 4,
+                display: 'flex',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  height: 6,
+                  width: 48,
+                  borderRadius: 999,
+                  background: '#cbd5e1',
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                padding: '8px 16px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid #f1f5f9',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    background:
+                      'linear-gradient(135deg, #4f46e5, #9333ea, #c026d3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <GraduationCap
+                    style={{ width: 20, height: 20, color: '#ffffff' }}
+                  />
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#0f172a',
+                    }}
+                  >
+                    Teacher Panel
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    Manage your classes
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsMoreOpen(false)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 999,
+                  border: 'none',
+                  background: '#f1f5f9',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <ChevronRight
+                  style={{
+                    width: 16,
+                    height: 16,
+                    color: '#334155',
+                    transform: 'rotate(90deg)',
+                  }}
+                />
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', padding: 12 }}>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = isItemActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsMoreOpen(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 12px',
+                      borderRadius: 16,
+                      textDecoration: 'none',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      background: active
+                        ? 'linear-gradient(to right, #eef2ff, #faf5ff)'
+                        : 'transparent',
+                      color: active ? '#4338ca' : '#334155',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: active
+                          ? 'linear-gradient(135deg, #6366f1, #a855f7)'
+                          : '#f1f5f9',
+                        color: active ? '#ffffff' : '#64748b',
+                      }}
+                    >
+                      <Icon style={{ width: 18, height: 18 }} />
+                    </span>
+                    <span style={{ flex: 1 }}>{item.name}</span>
+                    <ChevronRight
+                      style={{ width: 16, height: 16, color: '#94a3b8' }}
+                    />
+                  </Link>
+                );
+              })}
+
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '1px solid #f1f5f9',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 12px',
+                    width: '100%',
+                    borderRadius: 16,
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#e11d48',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#ffe4e6',
+                    }}
+                  >
+                    <LogOut
+                      style={{ width: 18, height: 18, color: '#e11d48' }}
+                    />
+                  </span>
+                  <span style={{ flex: 1 }}>Logout</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* =========================================
-          MOBILE TOP HEADER
-      ========================================= */}
-      <header
-        className="fixed top-0 left-0 right-0 z-40 lg:hidden bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4"
-        style={{ height: '4rem' }}
-      >
-        <Link
-          href="/teacher/dashboard"
-          className="flex items-center gap-2.5 min-w-0"
-        >
-          <div className="relative shrink-0">
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 flex items-center justify-center shadow-md shadow-purple-500/25">
-              <GraduationCap className="h-4 w-4 text-white" />
-            </div>
-            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 border-2 border-white" />
-          </div>
-          <div className="leading-tight min-w-0">
-            <p className="text-sm font-bold text-slate-900 truncate">
-              Teacher Panel
-            </p>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Manage your classes
-            </p>
-          </div>
-        </Link>
+    <>
+      {renderSidebar()}
 
-        <div className="flex items-center gap-1 shrink-0">
-          <Link
-            href="/teacher/settings"
-            aria-label="Settings"
-            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-slate-100 active:bg-slate-200 transition"
-          >
-            <Settings className="h-5 w-5 text-slate-700" />
-          </Link>
-          <button
-            type="button"
-            onClick={handleLogout}
-            aria-label="Logout"
-            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-rose-50 active:bg-rose-100 transition"
-          >
-            <LogOut className="h-5 w-5 text-rose-600" />
-          </button>
-        </div>
-      </header>
-
-      {/* =========================================
-          LAYOUT WRAPPER
-      ========================================= */}
+      {/* Content area — desktop pe left padding */}
       <div
-        className="mx-auto max-w-[1600px] px-3 sm:px-4 lg:px-6 py-3 sm:py-4 lg:py-6 flex gap-0 lg:gap-6"
-        style={{ paddingTop: 'calc(4rem + 0.75rem)' }}
+        style={{
+          paddingLeft: isDesktop ? SIDEBAR_W : 0,
+          minHeight: '100vh',
+          background: '#f8fafc',
+        }}
       >
-        {/* =========================================
-            DESKTOP SIDEBAR
-        ========================================= */}
-        <aside className="hidden lg:flex flex-col w-72 shrink-0 sticky top-20 self-start h-[calc(100vh-6rem)] bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="relative shrink-0 p-5 border-b border-slate-100">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full blur-3xl opacity-50 pointer-events-none" />
-
-            <Link
-              href="/teacher/dashboard"
-              className="relative flex items-center gap-3 group"
-            >
-              <div className="relative shrink-0">
-                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-105 transition-transform">
-                  <GraduationCap className="h-6 w-6 text-white" />
-                </div>
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-400 border-2 border-white animate-pulse" />
-              </div>
-              <div className="min-w-0 leading-tight">
-                <h1 className="text-lg font-bold text-slate-900 group-hover:text-indigo-700 transition">
-                  Teacher Panel
-                </h1>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Manage your classes
-                </p>
-              </div>
-            </Link>
-          </div>
-
-          <nav className="flex-1 overflow-y-auto p-4 space-y-1.5">
-            <div className="flex items-center gap-2 px-3 py-2 mb-1">
-              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Navigation
-              </p>
-            </div>
-
-            {navItems.map(renderDesktopNavItem)}
-          </nav>
-
-          <div className="shrink-0 border-t border-slate-100 p-4">
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="group flex w-full items-center gap-3 rounded-xl p-3 text-sm font-semibold text-rose-600 text-left hover:bg-rose-50 transition-all active:scale-[0.98]"
-            >
-              <div className="h-9 w-9 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center shrink-0 transition">
-                <LogOut className="h-4 w-4 text-rose-600" />
-              </div>
-              <span className="flex-1">Logout</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* =========================================
-            MAIN CONTENT
-        ========================================= */}
-        <main className="flex-1 min-w-0 pb-28 lg:pb-6">{children}</main>
+        <main
+          style={{
+            minHeight: '100vh',
+            paddingBottom: isDesktop ? 0 : 80,
+          }}
+        >
+          {children}
+        </main>
       </div>
 
-      {/* =========================================
-          MOBILE BOTTOM TAB BAR
-      ========================================= */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/98 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_-8px_rgba(15,23,42,0.15)]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
-        <div className="grid grid-cols-5 h-16">
-          {bottomTabs.map((tab) => {
-            const active = isItemActive(tab.href);
-            const Icon = tab.icon;
-            return (
-              <Link
-                key={tab.name}
-                href={tab.href}
-                className="relative flex flex-col items-center justify-center gap-1 transition-colors"
-              >
-                <span
-                  className={[
-                    'flex items-center justify-center h-8 w-12 rounded-full transition-all',
-                    active ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500',
-                  ].join(' ')}
-                >
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span
-                  className={[
-                    'text-[10px] font-medium leading-none',
-                    active ? 'text-indigo-700' : 'text-slate-500',
-                  ].join(' ')}
-                >
-                  {tab.name}
-                </span>
-              </Link>
-            );
-          })}
-
-          {/* More button */}
-          <button
-            type="button"
-            onClick={() => setIsMoreOpen(true)}
-            aria-label="More"
-            className="relative flex flex-col items-center justify-center gap-1 transition-colors"
-          >
-            <span className="flex items-center justify-center h-8 w-12 rounded-full text-slate-500">
-              <MoreHorizontal className="h-5 w-5" />
-            </span>
-            <span className="text-[10px] font-medium leading-none text-slate-500">
-              More
-            </span>
-          </button>
-        </div>
-      </nav>
-
-      {/* =========================================
-          MOBILE "MORE" BOTTOM SHEET
-          (always mounted → smooth transition, no keyframes)
-      ========================================= */}
-      <div
-        className={[
-          'lg:hidden fixed inset-0 z-50 transition-opacity duration-300',
-          isMoreOpen
-            ? 'opacity-100 pointer-events-auto'
-            : 'opacity-0 pointer-events-none',
-        ].join(' ')}
-        aria-hidden={!isMoreOpen}
-      >
-        {/* Backdrop */}
-        <div
-          className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
-          onClick={() => setIsMoreOpen(false)}
-        />
-
-        {/* Sheet */}
-        <div
-          className={[
-            'absolute bottom-0 left-0 right-0',
-            'bg-white rounded-t-3xl shadow-2xl',
-            'max-h-[80vh] flex flex-col',
-            'transition-transform duration-300 ease-out',
-            isMoreOpen ? 'translate-y-0' : 'translate-y-full',
-          ].join(' ')}
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-        >
-          {/* Handle */}
-          <div className="pt-3 pb-1 flex justify-center">
-            <div className="h-1.5 w-12 rounded-full bg-slate-300" />
-          </div>
-
-          {/* Header */}
-          <div className="px-4 pb-3 pt-2 flex items-center justify-between border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 flex items-center justify-center text-white shadow-md">
-                <GraduationCap className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 truncate">
-                  Teacher Panel
-                </p>
-                <p className="text-[11px] text-slate-500">Manage your classes</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsMoreOpen(false)}
-              aria-label="Close"
-              className="flex items-center justify-center h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200 transition"
-            >
-              <X className="h-4 w-4 text-slate-700" />
-            </button>
-          </div>
-
-          {/* Scroll content */}
-          <div className="overflow-y-auto px-3 py-3">
-            <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Navigation
-            </p>
-            <div className="space-y-1">{navItems.map(renderSheetRow)}</div>
-
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex items-center gap-3 px-3 py-3 w-full rounded-2xl text-sm font-semibold text-rose-600 hover:bg-rose-50 active:bg-rose-100 transition"
-              >
-                <span className="flex items-center justify-center h-10 w-10 rounded-xl bg-rose-100 text-rose-600">
-                  <LogOut className="h-5 w-5" />
-                </span>
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      {renderMobile()}
+    </>
   );
 }

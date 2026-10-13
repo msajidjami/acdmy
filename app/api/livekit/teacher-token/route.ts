@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { AccessToken } from 'livekit-server-sdk';
+
 import connectDB from '@/app/lib/dbConnect';
 import User from '@/models/User';
+import Assignment from '@/models/Assignment';
+import Course from '@/models/Course';
+import { sendPush } from '@/app/lib/push/sendNotification';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-
+const JWT_SECRET = process.env.JWT_SECRET;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
 async function getUserFromRequest(req: NextRequest) {
   const token = req.cookies.get('token')?.value;
   if (!token) return null;
+
+  const secret = JWT_SECRET;
+  if (!secret) return null;
+
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const decoded = jwt.verify(token, secret) as { userId: string };
     await connectDB();
     return await User.findById(decoded.userId).select('-password').lean();
   } catch {
@@ -26,10 +33,10 @@ async function getUserFromRequest(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    /* ✅ Environment variables چیک */
+    /* ---------- Environment check ---------- */
     if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
       console.error(
-        '❌ LIVEKIT_API_KEY or LIVEKIT_API_SECRET is missing in environment variables'
+        '❌ LIVEKIT_API_KEY or LIVEKIT_API_SECRET is missing'
       );
       return NextResponse.json(
         { error: 'LiveKit is not configured. Please contact support.' },
@@ -37,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ✅ Auth */
+    /* ---------- Auth ---------- */
     const user = await getUserFromRequest(req);
     if (!user) {
       return NextResponse.json(
@@ -46,10 +53,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ✅ Body */
+    /* ---------- Body ---------- */
     const body = await req.json().catch(() => ({} as any));
     const roomName = String(body.roomName || body.room || '').trim();
     const role = String(body.role || 'viewer').trim();
+    const assignmentId = String(body.assignmentId || '').trim();
 
     if (!roomName) {
       return NextResponse.json(
@@ -58,18 +66,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ✅ Identity — ہمیشہ unique ہونی چاہیے */
+    /* ---------- Unique identity ---------- */
     const identity = `${String((user as any)._id)}-${Date.now()}`;
     const displayName = String((user as any).name || 'User');
 
-    /* ✅ AccessToken بنائیں */
+    /* ---------- Build AccessToken ---------- */
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity,
       name: displayName,
       ttl: '2h',
     });
 
-    /* ✅ Grants */
     at.addGrant({
       room: roomName,
       roomJoin: true,
@@ -78,10 +85,44 @@ export async function POST(req: NextRequest) {
       canPublishData: true,
     });
 
-    /* ✅ JWT generate */
     const token = await at.toJwt();
 
-    /* ✅ Debug logging (development only) */
+    /* ---------- ✅ Notify student (only when teacher joins) ---------- */
+    if (role === 'teacher' && assignmentId && /^[a-fA-F0-9]{24}$/.test(assignmentId)) {
+      try {
+        const assignment: any = await Assignment.findById(assignmentId)
+          .select('studentId courseId teacherId livekitRoomName')
+          .lean();
+
+        if (assignment?.studentId) {
+          const course: any = assignment.courseId
+            ? await Course.findById(assignment.courseId)
+                .select('name title')
+                .lean()
+            : null;
+
+          const courseName =
+            course?.name || course?.title || 'Class';
+
+          await sendPush({
+            toUserId: String(assignment.studentId),
+            title: '📞 Class is starting now',
+            body: `${courseName} — tap to join`,
+            type: 'call',
+            ring: true,
+            data: {
+              assignmentId: String(assignmentId),
+              roomName: String(roomName),
+              action: 'open_classroom',
+            },
+          });
+        }
+      } catch (pushErr) {
+        console.warn('[livekit/teacher-token] push failed:', pushErr);
+      }
+    }
+
+    /* ---------- Debug (dev only) ---------- */
     if (process.env.NODE_ENV === 'development') {
       console.log('🎫 LiveKit token generated:', {
         identity,
@@ -102,7 +143,8 @@ export async function POST(req: NextRequest) {
       },
       {
         headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Cache-Control':
+            'no-store, no-cache, must-revalidate, max-age=0',
         },
       }
     );

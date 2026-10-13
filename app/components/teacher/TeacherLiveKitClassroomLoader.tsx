@@ -160,7 +160,6 @@ export default function TeacherLiveKitClassroomLoader({
   const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const roomRef = useRef<Room | null>(null);
 
-  /* ✅ Connection guards — refs, not state */
   const isConnectingRef = useRef(false);
   const sessionIdRef = useRef(0);
 
@@ -186,7 +185,6 @@ export default function TeacherLiveKitClassroomLoader({
   useEffect(() => { noiseCancelRef.current = noiseCancellation; }, [noiseCancellation]);
   useEffect(() => { annotColorRef.current = annotColor; }, [annotColor]);
 
-  /* ✅ Attach local video after room is set (avoids race with ref) */
   useEffect(() => {
     if (!room) return;
     const localVideoTrack = localTracksRef.current.find(
@@ -201,7 +199,6 @@ export default function TeacherLiveKitClassroomLoader({
     }
   }, [room, camEnabled]);
 
-  /* ✅ Cleanup on tab close */
   useEffect(() => {
     const handler = () => {
       if (roomRef.current) {
@@ -504,10 +501,9 @@ export default function TeacherLiveKitClassroomLoader({
   }, [noiseCancellation]);
 
   /* ============================================================
-     ✅ CONNECT — bulletproof version
+     CONNECT
      ============================================================ */
   const connectToRoom = useCallback(async () => {
-    // ✅ Guard against double-connect (refs are synchronous)
     if (roomRef.current) return;
     if (isConnectingRef.current) return;
 
@@ -522,7 +518,6 @@ export default function TeacherLiveKitClassroomLoader({
     let tracks: LocalTrack[] = [];
 
     try {
-      /* ---------- 1. Fetch token ---------- */
       const tokenRes = await fetch('/api/livekit/teacher-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -543,13 +538,11 @@ export default function TeacherLiveKitClassroomLoader({
 
       if (!isCurrent()) return;
 
-      /* ---------- 2. Create room ---------- */
       newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
       });
 
-      /* ---------- 3. Participant refresh ---------- */
       const refresh = () => {
         if (!newRoom || roomRef.current !== newRoom) return;
         const list: ParticipantInfo[] = [];
@@ -587,7 +580,6 @@ export default function TeacherLiveKitClassroomLoader({
         setStudentCount(count);
       };
 
-      /* ---------- 4. Attach listeners (all with session check) ---------- */
       newRoom
         .on(RoomEvent.Connected, () => {
           if (!isCurrent()) return;
@@ -673,7 +665,6 @@ export default function TeacherLiveKitClassroomLoader({
           setActiveSpeaker(speakers.length > 0 ? speakers[0].identity : '');
         });
 
-      /* ---------- 5. Connect ---------- */
       await newRoom.connect(url, token);
 
       if (!isCurrent()) {
@@ -681,10 +672,8 @@ export default function TeacherLiveKitClassroomLoader({
         return;
       }
 
-      /* ---------- 6. Set room ref NOW (before tracks) ---------- */
       roomRef.current = newRoom;
 
-      /* ---------- 7. Create local tracks ---------- */
       try {
         tracks = await createLocalTracks({
           audio: {
@@ -709,7 +698,6 @@ export default function TeacherLiveKitClassroomLoader({
 
       localTracksRef.current = tracks;
 
-      /* ---------- 8. Apply noise filter ---------- */
       if (noiseCancelRef.current) {
         const audioTrack = tracks.find((t) => t.kind === Track.Kind.Audio);
         if (audioTrack) {
@@ -718,7 +706,6 @@ export default function TeacherLiveKitClassroomLoader({
         }
       }
 
-      /* ---------- 9. ✅ Publish FIRST (tracks are enabled) ---------- */
       for (const t of tracks) {
         try {
           await newRoom.localParticipant.publishTrack(t);
@@ -727,18 +714,15 @@ export default function TeacherLiveKitClassroomLoader({
         }
       }
 
-      /* ---------- 10. ✅ THEN mute ---------- */
       for (const t of tracks) {
         try { await t.mute(); } catch { /* ignore */ }
       }
 
-      /* ---------- 11. Attach local video ---------- */
       const localVideoTrack = tracks.find((t) => t.kind === Track.Kind.Video);
       if (localVideoTrack && localVideoRef.current) {
         try { localVideoTrack.attach(localVideoRef.current); } catch { /* ignore */ }
       }
 
-      /* ---------- 12. Set final state ---------- */
       setMicEnabled(false);
       setCamEnabled(false);
       setRoom(newRoom);
@@ -767,7 +751,6 @@ export default function TeacherLiveKitClassroomLoader({
     publishWhiteboardMessage, publishAnnotation, ensureTranscriptSession,
   ]);
 
-  /* ---------- Auto-connect ---------- */
   useEffect(() => {
     if (!autoConnect) return;
     if (roomRef.current) return;
@@ -777,16 +760,14 @@ export default function TeacherLiveKitClassroomLoader({
   }, [autoConnect]);
 
   /* ============================================================
-     ✅ DISCONNECT — clean up first, then kill everything
+     DISCONNECT
      ============================================================ */
   const disconnect = useCallback(async () => {
     const r = roomRef.current;
 
-    // ✅ Invalidate any pending connect operations FIRST
     roomRef.current = null;
     sessionIdRef.current += 1;
 
-    // ---------- Close transcript session ----------
     if (transcriptSessionIdRef.current) {
       const durationSec = classStartRef.current
         ? Math.floor((Date.now() - classStartRef.current) / 1000)
@@ -803,24 +784,20 @@ export default function TeacherLiveKitClassroomLoader({
       } catch { /* ignore */ }
     }
 
-    // ---------- Stop local tracks ----------
     localTracksRef.current.forEach((t) => {
       try { t.stop(); t.detach(); } catch { /* ignore */ }
     });
     localTracksRef.current = [];
 
-    // ---------- Remove remote media elements ----------
     remoteVideoElementsRef.current.forEach((el) => el.remove());
     remoteVideoElementsRef.current.clear();
     remoteAudioElementsRef.current.forEach((el) => el.remove());
     remoteAudioElementsRef.current.clear();
 
-    // ---------- Disconnect room ----------
     if (r) {
       try { await r.disconnect(); } catch { /* ignore */ }
     }
 
-    // ---------- Reset all state ----------
     setRoom(null);
     setParticipants([]);
     setConnectionState(ConnectionState.Disconnected);
@@ -835,7 +812,6 @@ export default function TeacherLiveKitClassroomLoader({
     annotStrokesRef.current = [];
   }, []);
 
-  /* ---------- Component unmount cleanup ---------- */
   useEffect(() => {
     return () => {
       const r = roomRef.current;
@@ -934,11 +910,11 @@ export default function TeacherLiveKitClassroomLoader({
   const reconnecting = connectionState === ConnectionState.Reconnecting;
 
   /* ============================================================
-     RENDER — Connecting
+     RENDER — Connecting (fills parent, no card)
      ============================================================ */
   if (isConnecting) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] p-6">
+      <div className="flex-1 flex items-center justify-center min-h-0 p-6">
         <div className="text-center">
           <Loader2 className="h-10 w-10 text-emerald-500 animate-spin mx-auto" />
           <h3 className="mt-4 text-base font-semibold text-white">Joining class...</h3>
@@ -953,7 +929,7 @@ export default function TeacherLiveKitClassroomLoader({
      ============================================================ */
   if (error && !room) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] p-6">
+      <div className="flex-1 flex items-center justify-center min-h-0 p-6">
         <div className="max-w-sm text-center">
           <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto" />
           <h3 className="mt-4 text-base font-semibold text-white">Could not connect</h3>
@@ -975,7 +951,7 @@ export default function TeacherLiveKitClassroomLoader({
      ============================================================ */
   if (!room) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] p-6">
+      <div className="flex-1 flex items-center justify-center min-h-0 p-6">
         <div className="max-w-sm text-center">
           <VideoIcon className="h-12 w-12 text-emerald-500 mx-auto" />
           <h3 className="mt-4 text-lg font-semibold text-white">Ready to start?</h3>
@@ -996,13 +972,13 @@ export default function TeacherLiveKitClassroomLoader({
   }
 
   /* ============================================================
-     RENDER — Connected
+     RENDER — Connected (fills parent fully)
      ============================================================ */
   return (
     <>
-      <div className="rounded-none sm:rounded-2xl bg-slate-900 overflow-hidden sm:border sm:border-slate-800 sm:shadow-2xl">
+      <div className="h-full flex flex-col bg-slate-900">
         {/* TOP BAR */}
-        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-950/80 border-b border-white/10">
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-950/80 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {connected ? (
               <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -1055,10 +1031,10 @@ export default function TeacherLiveKitClassroomLoader({
           </div>
         </div>
 
-        {/* VIDEO AREA */}
+        {/* VIDEO AREA — flex-1 = jo bachi hui jagah */}
         <div
           ref={videoContainerRef}
-          className="relative bg-slate-950 aspect-video max-h-[60vh] sm:max-h-[70vh] overflow-hidden"
+          className="relative flex-1 min-h-0 bg-slate-950 overflow-hidden"
         >
           <div
             className={`absolute inset-0 p-1.5 sm:p-2 grid gap-1.5 sm:gap-2 ${
@@ -1201,9 +1177,9 @@ export default function TeacherLiveKitClassroomLoader({
           )}
         </div>
 
-        {/* CONTROL BAR */}
-        <div className="bg-slate-950/80 border-t border-white/10">
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 py-2 sm:py-4">
+        {/* CONTROL BAR — shrink-0, screen ke end mein */}
+        <div className="bg-slate-950/80 border-t border-white/10 shrink-0">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 py-2 sm:py-3">
             <CtrlBtn onClick={toggleMic} on={micEnabled} danger={!micEnabled} title={micEnabled ? 'Mute' : 'Unmute'}>
               {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
             </CtrlBtn>
