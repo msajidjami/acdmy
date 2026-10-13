@@ -15,11 +15,15 @@ import {
   ShieldCheckIcon,
   ArrowPathIcon,
   CheckCircleIcon,
+  ClipboardDocumentIcon,
+  QrCodeIcon,
+  SignalIcon,
 } from '@heroicons/react/24/outline';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 type LoginMethod = 'email' | 'phone';
+type WhatsAppStatus = 'checking' | 'disconnected' | 'qr' | 'connected' | 'error';
 
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -47,6 +51,30 @@ function formatPhone(value: string): string {
 }
 
 /* ============================================================
+   Inline QR — uses public API (no package needed)
+   ============================================================ */
+
+function InlineQRCode({ value, size = 220 }: { value: string; size?: number }) {
+  if (!value) return null;
+
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=0&data=${encodeURIComponent(
+    value
+  )}`;
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={src}
+      alt="WhatsApp QR Code"
+      width={size}
+      height={size}
+      className="rounded-xl bg-white"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  );
+}
+
+/* ============================================================
    Login Form
    ============================================================ */
 
@@ -70,6 +98,14 @@ function LoginForm() {
   const [phoneStep, setPhoneStep] = useState<'phone' | 'otp'>('phone');
   const [seconds, setSeconds] = useState(0);
 
+  /* WhatsApp connection status */
+  const [waStatus, setWaStatus] = useState<WhatsAppStatus>('checking');
+  const [waQR, setWaQR] = useState<string>('');
+
+  /* Development OTP display */
+  const [devCode, setDevCode] = useState<string>('');
+  const [copied, setCopied] = useState(false);
+
   /* URL error */
   useEffect(() => {
     const urlError = searchParams.get('error');
@@ -82,6 +118,72 @@ function LoginForm() {
     const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [seconds]);
+
+  /* ============================================================
+     Poll WhatsApp status when on phone tab
+     ============================================================ */
+  useEffect(() => {
+    if (method !== 'phone') return;
+
+    let cancelled = false;
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const checkStatus = async () => {
+      try {
+        const res = await fetch('/api/auth/whatsapp/qr-data', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        /* Connected */
+        if (data?.ready || data?.status === 'connected') {
+          setWaStatus('connected');
+          setWaQR('');
+          if (intervalId) clearInterval(intervalId);
+          return;
+        }
+
+        /* QR available */
+        if (data?.qr) {
+          setWaStatus('qr');
+          setWaQR(String(data.qr));
+          return;
+        }
+
+        /* Disconnected — try starting */
+        if (data?.status === 'disconnected') {
+          setWaStatus('disconnected');
+          try {
+            /* ✅ FIX: /api/auth/whatsapp/qr */
+            await fetch('/api/auth/whatsapp/qr', {
+              method: 'POST',
+              credentials: 'include',
+            });
+          } catch {}
+          return;
+        }
+
+        if (data?.status === 'error') {
+          setWaStatus('error');
+          setError(data?.error || 'WhatsApp connection error');
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    checkStatus();
+    intervalId = setInterval(checkStatus, 2500);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [method]);
 
   const goToRedirect = (target?: string) => {
     router.refresh();
@@ -122,9 +224,7 @@ function LoginForm() {
       try {
         const text = await response.text();
         if (text) data = JSON.parse(text);
-      } catch {
-        data = {};
-      }
+      } catch {}
 
       if (response.ok) {
         setSuccess(true);
@@ -149,6 +249,7 @@ function LoginForm() {
   /* WhatsApp Login — Send OTP */
   const handleSendOtp = async () => {
     setError('');
+    setDevCode('');
     const cleaned = phone.replace(/\D/g, '');
 
     if (cleaned.length < 10) {
@@ -180,7 +281,14 @@ function LoginForm() {
           setError(`Please wait ${data.waitSec}s before requesting a new OTP`);
           return;
         }
+        if (data?.needsQr) {
+          setWaStatus('qr');
+        }
         throw new Error(data?.error || 'Failed to send OTP');
+      }
+
+      if (data?.devCode) {
+        setDevCode(String(data.devCode));
       }
 
       setPhoneStep('otp');
@@ -240,13 +348,27 @@ function LoginForm() {
   const resendOtp = () => {
     if (seconds > 0) return;
     setOtp('');
+    setDevCode('');
     setPhoneStep('phone');
   };
 
   const changePhone = () => {
     setOtp('');
+    setDevCode('');
     setPhoneStep('phone');
     setError('');
+  };
+
+  const copyOtp = () => {
+    if (!devCode) return;
+    navigator.clipboard.writeText(devCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const fillOtp = () => {
+    if (!devCode) return;
+    setOtp(devCode);
   };
 
   return (
@@ -314,6 +436,7 @@ function LoginForm() {
               onClick={() => {
                 setMethod('email');
                 setError('');
+                setDevCode('');
               }}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
                 method === 'email'
@@ -422,138 +545,300 @@ function LoginForm() {
             </form>
           )}
 
-          {/* WhatsApp Login Form */}
+          {/* ============================================
+              WhatsApp Login — QR shows HERE
+              ============================================ */}
           {method === 'phone' && (
             <div className="space-y-5">
-              {phoneStep === 'phone' ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-black/80 mb-1">
-                      WhatsApp Number
-                    </label>
-                    <div className="relative">
-                      <PhoneIcon className="absolute left-3 top-3 h-5 w-5 text-black/40" />
-                      <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        autoComplete="tel"
-                        className="w-full pl-10 pr-4 py-3 border border-black/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white/50"
-                        placeholder="03001234567"
-                      />
-                    </div>
-                    <p className="text-xs text-black/40 mt-1">
-                      The same number you used to sign up
-                    </p>
-                  </div>
-
-                  <motion.button
-                    whileHover={{ scale: loading ? 1 : 1.02 }}
-                    whileTap={{ scale: loading ? 1 : 0.98 }}
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={loading || phone.trim().length < 10}
-                    className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <>
-                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <PhoneIcon className="h-5 w-5" />
-                        Send OTP on WhatsApp
-                      </>
-                    )}
-                  </motion.button>
-
-                  <p className="text-xs text-black/40 text-center">
-                    A 6-digit code will be sent to your WhatsApp
+              {/* Checking / Loading */}
+              {waStatus === 'checking' && (
+                <div className="text-center py-6">
+                  <ArrowPathIcon className="h-10 w-10 text-emerald-600 animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-black/60">
+                    Connecting to WhatsApp...
                   </p>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={changePhone}
-                    className="inline-flex items-center gap-1.5 text-sm text-black/50 hover:text-black/80 transition"
-                  >
-                    <ArrowLeftIcon className="h-4 w-4" />
-                    Change number
-                  </button>
+                </div>
+              )}
 
-                  <div>
-                    <p className="text-sm text-black/60 mb-2">
-                      OTP has been sent on WhatsApp to{' '}
-                      <span className="font-semibold">{formatPhone(phone)}</span>
-                    </p>
-                    <label className="block text-sm font-medium text-black/80 mb-1">
-                      6-digit code
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                      autoFocus
-                      className="w-full px-4 py-3 text-center text-2xl tracking-[0.4em] font-mono border-2 border-black/10 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition"
-                      placeholder="••••••"
-                    />
+              {/* QR available */}
+              {waStatus === 'qr' && waQR && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 sm:p-5"
+                >
+                  {/* Header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-8 w-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+                      <QrCodeIcon className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-emerald-900">
+                        Link WhatsApp (one time setup)
+                      </p>
+                      <p className="text-[11px] text-emerald-700">
+                        Admin: scan this QR with your WhatsApp
+                      </p>
+                    </div>
                   </div>
 
-                  <motion.button
-                    whileHover={{ scale: loading ? 1 : 1.02 }}
-                    whileTap={{ scale: loading ? 1 : 0.98 }}
-                    type="button"
-                    onClick={handleVerifyOtp}
-                    disabled={loading || otp.length !== 6}
-                    className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <>
-                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                        Verifying...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircleIcon className="h-5 w-5" />
-                        Verify and Sign In
-                      </>
-                    )}
-                  </motion.button>
+                  {/* QR Code */}
+                  <div className="flex justify-center">
+                    <div className="p-3 bg-white rounded-2xl shadow-md border-4 border-emerald-500">
+                      <InlineQRCode value={waQR} size={220} />
+                    </div>
+                  </div>
 
-                  <div className="text-center">
-                    {seconds > 0 ? (
-                      <p className="text-sm text-black/50">
-                        Wait{' '}
-                        <span className="font-mono font-bold text-black/70">
-                          {seconds}s
-                        </span>{' '}
-                        to resend
+                  {/* Steps */}
+                  <div className="mt-4 space-y-1.5 text-[12px] text-emerald-900">
+                    <div className="flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        1
+                      </span>
+                      <span>Open WhatsApp on your phone</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        2
+                      </span>
+                      <span>Go to Settings → Linked Devices</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        3
+                      </span>
+                      <span>Tap &quot;Link a Device&quot;</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                        4
+                      </span>
+                      <span>Scan the QR above</span>
+                    </div>
+                  </div>
+
+                  {/* Waiting indicator */}
+                  <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-emerald-700">
+                    <SignalIcon className="h-3.5 w-3.5 animate-pulse" />
+                    Waiting for scan...
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Disconnected */}
+              {waStatus === 'disconnected' && !waQR && (
+                <div className="text-center py-6">
+                  <ArrowPathIcon className="h-10 w-10 text-emerald-600 animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-black/60">
+                    Starting WhatsApp connection...
+                  </p>
+                </div>
+              )}
+
+              {/* Connected — OTP flow */}
+              {waStatus === 'connected' && (
+                <>
+                  {phoneStep === 'phone' ? (
+                    <>
+                      <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 mb-3">
+                        <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <p className="text-[11px] text-emerald-800">
+                          WhatsApp connected — ready to send OTP
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-black/80 mb-1">
+                          WhatsApp Number
+                        </label>
+                        <div className="relative">
+                          <PhoneIcon className="absolute left-3 top-3 h-5 w-5 text-black/40" />
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            autoComplete="tel"
+                            className="w-full pl-10 pr-4 py-3 border border-black/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white/50"
+                            placeholder="03001234567"
+                          />
+                        </div>
+                        <p className="text-xs text-black/40 mt-1">
+                          The same number you used to sign up
+                        </p>
+                      </div>
+
+                      <motion.button
+                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={loading || phone.trim().length < 10}
+                        className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <PhoneIcon className="h-5 w-5" />
+                            Send OTP on WhatsApp
+                          </>
+                        )}
+                      </motion.button>
+
+                      <p className="text-xs text-black/40 text-center">
+                        A 6-digit code will be sent to your WhatsApp
                       </p>
-                    ) : (
+                    </>
+                  ) : (
+                    <>
                       <button
                         type="button"
-                        onClick={resendOtp}
-                        className="text-sm font-semibold text-green-600 hover:text-green-700 transition"
+                        onClick={changePhone}
+                        className="inline-flex items-center gap-1.5 text-sm text-black/50 hover:text-black/80 transition"
                       >
-                        Resend OTP
+                        <ArrowLeftIcon className="h-4 w-4" />
+                        Change number
                       </button>
-                    )}
+
+                      <div>
+                        <p className="text-sm text-black/60 mb-2">
+                          OTP has been sent on WhatsApp to{' '}
+                          <span className="font-semibold">
+                            {formatPhone(phone)}
+                          </span>
+                        </p>
+                        <label className="block text-sm font-medium text-black/80 mb-1">
+                          6-digit code
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          maxLength={6}
+                          value={otp}
+                          onChange={(e) =>
+                            setOtp(e.target.value.replace(/\D/g, ''))
+                          }
+                          autoFocus
+                          className="w-full px-4 py-3 text-center text-2xl tracking-[0.4em] font-mono border-2 border-black/10 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition"
+                          placeholder="------"
+                        />
+                      </div>
+
+                      {devCode && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 p-4"
+                        >
+                          <p className="text-xs font-bold text-amber-900 uppercase tracking-wider mb-2">
+                            🔧 Dev Mode — Your OTP
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-white rounded-lg border-2 border-amber-300 px-3 py-2 text-center">
+                              <span className="text-2xl font-mono font-bold text-amber-900 tracking-widest">
+                                {devCode}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={copyOtp}
+                              className="p-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition"
+                              title="Copy OTP"
+                            >
+                              <ClipboardDocumentIcon className="h-5 w-5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="text-[11px] text-amber-700">
+                              {copied ? '✓ Copied!' : 'Development only'}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={fillOtp}
+                              className="text-[11px] font-bold text-amber-800 hover:text-amber-900 underline"
+                            >
+                              Auto-fill
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      <motion.button
+                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        disabled={loading || otp.length !== 6}
+                        className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-semibold rounded-xl shadow-lg shadow-green-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircleIcon className="h-5 w-5" />
+                            Verify and Sign In
+                          </>
+                        )}
+                      </motion.button>
+
+                      <div className="text-center">
+                        {seconds > 0 ? (
+                          <p className="text-sm text-black/50">
+                            Wait{' '}
+                            <span className="font-mono font-bold text-black/70">
+                              {seconds}s
+                            </span>{' '}
+                            to resend
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={resendOtp}
+                            className="text-sm font-semibold text-green-600 hover:text-green-700 transition"
+                          >
+                            Resend OTP
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl mt-2">
+                    <ShieldCheckIcon className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-green-700">
+                      Your number will be verified via WhatsApp
+                    </p>
                   </div>
                 </>
               )}
 
-              <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-xl mt-2">
-                <ShieldCheckIcon className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-green-700">
-                  Your number will be verified via WhatsApp
-                </p>
-              </div>
+              {/* Error state */}
+              {waStatus === 'error' && (
+                <div className="text-center py-6">
+                  <p className="text-sm text-rose-600 mb-3">
+                    WhatsApp connection error
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWaStatus('checking');
+                      setError('');
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition"
+                  >
+                    <ArrowPathIcon className="h-4 w-4" />
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

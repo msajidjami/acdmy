@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-
 import connectDB from '@/app/lib/dbConnect';
 import OTP from '@/models/OTP';
 import { sendWhatsAppOtp } from '@/app/lib/whatsapp';
@@ -82,10 +81,14 @@ export async function POST(req: NextRequest) {
       { upsert: true, new: true }
     );
 
+    /* ✅ Development mode میں OTP سکرین پر دکھائیں */
+    const isDev = process.env.NODE_ENV !== 'production';
+
     return NextResponse.json({
       success: true,
       message: 'OTP sent to WhatsApp',
       expiresInSec: 300,
+      ...(isDev ? { devCode: code } : {}),
     });
   } catch (err: any) {
     console.error('[whatsapp/send-otp]', err);
