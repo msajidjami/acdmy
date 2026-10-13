@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/app/components/AuthProvider';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
+import AppDownloadBanner from '@/app/components/AppDownloadBanner';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://academyhub.com';
 
@@ -142,6 +143,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-50">
         <AuthProvider>
+          {/* ✅ App Download Banner — sirf web par dikhega، app mein nahi */}
+          <AppDownloadBanner />
+
           <div className="min-h-screen flex flex-col">
             {/* ✅ Navbar har page par rahega — ab chhota hoga */}
             <Navbar />
