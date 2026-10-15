@@ -33,8 +33,7 @@ export default function DownloadPage() {
 
           <div className="p-6 sm:p-8">
             <a
-              href="/download/ilmora786.apk"
-              download
+              href="https://github.com/msajidjami/acdmy/releases/download/v1.0.0/app-release.apk"
               className="flex items-center justify-center gap-3 w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/30 transition-all text-lg"
             >
               <ArrowDownTrayIcon className="h-6 w-6" />
