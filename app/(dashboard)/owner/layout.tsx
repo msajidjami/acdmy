@@ -96,6 +96,9 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
   const [ownerName, setOwnerName] = useState('Academy Owner');
   const [unreadCount, setUnreadCount] = useState(0);
 
+  /* ✅ چیٹ route — مکمل کھلی layout */
+  const isChats = pathname === '/owner' || pathname === '/owner/';
+
   useEffect(() => {
     setIsMoreOpen(false);
   }, [pathname]);
@@ -163,21 +166,6 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     };
   }, [pathname]);
 
-  /* Refetch unread when route changes */
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/contacts/unread-count', {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        setUnreadCount(Number(data?.count) || 0);
-      } catch {}
-    })();
-  }, [pathname]);
-
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', {
@@ -215,8 +203,8 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     const active = isActive(item.href);
     const Icon = item.icon;
     const isTranscript = item.href === '/owner/transcripts';
-    const isChats = item.href === '/owner';
-    const showBadge = isChats && unreadCount > 0;
+    const isChatsItem = item.href === '/owner';
+    const showBadge = isChatsItem && unreadCount > 0;
 
     return (
       <Link
@@ -301,15 +289,15 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
     const active = isActive(item.href);
     const Icon = item.icon;
     const isTranscript = item.href === '/owner/transcripts';
-    const isChats = item.href === '/owner';
-    const showBadge = isChats && unreadCount > 0;
+    const isChatsItem = item.href === '/owner';
+    const showBadge = isChatsItem && unreadCount > 0;
 
     return (
       <Link
         key={item.name}
         href={item.href}
         className={`
-          flex items-center gap-3 px-3 py-3 rounded-2xl
+          flex items-center gap-3 px-3  rounded-2xl
           text-sm font-medium transition-all
           ${
             active
@@ -352,76 +340,21 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
 
   return (
     <div
-      className="min-h-screen bg-slate-50"
-      style={{ paddingTop: NAVBAR_H, ...FONT_BODY }}
+      className={`bg-slate-50 ${
+        isChats ? 'h-[100dvh] overflow-hidden flex flex-col' : 'min-h-screen'
+      }`}
+      
     >
-      {/* =========================================
-          MOBILE HEADER
-      ========================================= */}
-      <header
-        className="
-          fixed left-0 right-0 h-14
-          bg-white/95 backdrop-blur-md border-b border-slate-200
-          z-40 lg:hidden
-          flex items-center justify-between px-4
-        "
-        style={{ top: NAVBAR_H }}
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/25">
-            <GraduationCap className="h-4 w-4 text-white" />
-          </div>
-          <div className="min-w-0">
-            <p
-              className="text-lg tracking-wider text-slate-900 leading-none"
-              style={FONT_HEADING}
-            >
-              Owner Panel
-            </p>
-            <p className="text-[10px] text-slate-500 leading-tight mt-0.5 truncate">
-              {ownerName}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {unreadCount > 0 && (
-            <Link
-              href="/owner"
-              className="relative flex items-center justify-center h-10 w-10 rounded-full hover:bg-slate-100 transition"
-              aria-label="Chats"
-            >
-              <MessageCircle className="h-5 w-5 text-emerald-600" />
-              <span className="absolute top-1 right-1 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            </Link>
-          )}
-
-          <Link
-            href="/owner/settings"
-            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-slate-100 active:bg-slate-200 transition"
-            aria-label="Settings"
-          >
-            <Settings className="h-5 w-5 text-slate-700" />
-          </Link>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={FONT_INHERIT}
-            className="flex items-center justify-center h-10 w-10 rounded-full hover:bg-rose-50 active:bg-rose-100 transition"
-            aria-label="Logout"
-          >
-            <LogOut className="h-5 w-5 text-rose-600" />
-          </button>
-        </div>
-      </header>
-
       {/* =========================================
           LAYOUT WRAPPER
       ========================================= */}
-      <div className="lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]">
+      <div
+        className={
+          isChats
+            ? 'flex-1 flex flex-col min-h-0 lg:flex-row'
+            : 'lg:flex lg:items-start lg:min-h-[calc(100vh-4rem)]'
+        }
+      >
         <aside className="hidden lg:block w-72 shrink-0">
           <div
             className="sticky bg-white border-r border-slate-200 flex flex-col"
@@ -486,10 +419,23 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 lg:pt-8 pb-28 lg:pb-10">
-            {children}
-          </div>
+        {/* ✅ main — چیٹ route پر flex-column, مارجن صفر */}
+        <main
+          className={
+            isChats
+              ? 'flex-1 min-w-0 flex flex-col min-h-0 pb-16 lg:pb-0'
+              : 'flex-1 min-w-0'
+          }
+        >
+          {isChats ? (
+            <div className="flex-1 flex flex-col min-h-0">
+              {children}
+            </div>
+          ) : (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 lg:pt-8 pb-28 lg:pb-10">
+              {children}
+            </div>
+          )}
         </main>
       </div>
 
@@ -509,8 +455,8 @@ export default function OwnerLayout({ children }: OwnerLayoutProps) {
           {bottomTabs.map((tab) => {
             const active = isActive(tab.href);
             const Icon = tab.icon;
-            const isChats = tab.href === '/owner';
-            const showBadge = isChats && unreadCount > 0;
+            const isChatsTab = tab.href === '/owner';
+            const showBadge = isChatsTab && unreadCount > 0;
 
             return (
               <Link

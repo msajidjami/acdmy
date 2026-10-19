@@ -8,19 +8,12 @@ import {
   XMarkIcon,
   ArrowPathIcon,
   ChatBubbleLeftRightIcon,
-  EllipsisVerticalIcon,
   EnvelopeIcon,
   PhoneIcon,
   BookmarkIcon,
   PlusIcon,
-  UserCircleIcon,
-  ShieldCheckIcon,
-  NoSymbolIcon,
-  TrashIcon,
-  ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
-import { useAuth } from '@/app/hooks/useAuth';
 
 /* ============================================================
    Types
@@ -51,11 +44,11 @@ type SavedContact = {
 };
 
 type Props = {
-  title: string;
+  title?: string;
   accentColor?: 'emerald' | 'sky' | 'violet';
-  profileHref: string;
-  settingsHref: string;
-  homeHref: string;
+  profileHref?: string;
+  settingsHref?: string;
+  homeHref?: string;
 };
 
 /* ============================================================
@@ -96,35 +89,16 @@ const COLORS = {
    Main component
    ============================================================ */
 
-export default function ChatListPage({
-  title,
-  accentColor = 'emerald',
-  profileHref,
-  settingsHref,
-  homeHref,
-}: Props) {
+export default function ChatListPage({ accentColor = 'emerald' }: Props) {
   const router = useRouter();
-  const { user, logout } = useAuth();
   const colors = COLORS[accentColor];
 
   const [contacts, setContacts] = useState<SavedContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  /* ---------- Own user info ---------- */
-
-  const myName = user?.name || user?.email?.split('@')[0] || 'You';
-  const myAvatar = (user as any)?.avatar as string | undefined;
-  const myInitials = myName
-    .split(' ')
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
   /* ---------- Load contacts ---------- */
 
@@ -172,7 +146,12 @@ export default function ChatListPage({
   const filtered = search.trim()
     ? contacts.filter((c) => {
         const q = search.toLowerCase();
-        const name = (c.nickname || c.name || c.user?.name || '').toLowerCase();
+        const name = (
+          c.nickname ||
+          c.name ||
+          c.user?.name ||
+          ''
+        ).toLowerCase();
         const email = (c.email || c.user?.email || '').toLowerCase();
         const phone = (c.phone || c.user?.phone || '').toLowerCase();
         const last = (c.lastMessage || '').toLowerCase();
@@ -257,205 +236,44 @@ export default function ChatListPage({
     }
   };
 
-  /* ---------- Logout ---------- */
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {
-      /* ignore */
-    }
-    document.cookie =
-      'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-    if (logout) await logout();
-    router.push('/login');
-    router.refresh();
-  };
-
   /* ============================================================
-     Render
+     Render — کوئی ہیڈر نہیں، صرف search + list
      ============================================================ */
 
   return (
     <>
-      {/* ✅ Container — Navbar کے نیچے سے براہِ راست، full height */}
-      <div
-        className="
-          flex flex-col bg-white overflow-hidden
-          h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)]
-          w-full
-        "
-      >
-        {/* ============================================
-            WHATSAPP-STYLE HEADER
-            ============================================ */}
-        <header className={`shrink-0 ${colors.bg} text-white shadow-sm z-10`}>
-          {/* Row 1: own avatar + name + online + actions */}
-          <div className="px-3 py-2 flex items-center gap-3">
-            {/* My avatar */}
-            <div className="relative shrink-0">
-              {myAvatar ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={myAvatar}
-                  alt={myName}
-                  className="h-10 w-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
-                  {myInitials}
-                </div>
-              )}
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
-            </div>
-
-            {/* Name + status */}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate leading-tight">
-                {myName}
-              </p>
-              <p className="text-[11px] opacity-90 leading-tight">
-                Online
-              </p>
-            </div>
-
-            {/* New chat */}
-            <button
-              type="button"
-              onClick={() => setNewChatOpen(true)}
-              className={`p-2 rounded-full ${colors.bgHover} transition`}
-              aria-label="New chat"
-              title="New chat"
-            >
-              <PlusIcon className="h-5 w-5" />
-            </button>
-
-            {/* Search focus */}
-            <button
-              type="button"
-              className={`p-2 rounded-full ${colors.bgHover} transition`}
-              aria-label="Search"
-              onClick={() => {
-                const el = document.getElementById('chat-search');
-                el?.focus();
-              }}
-            >
-              <MagnifyingGlassIcon className="h-5 w-5" />
-            </button>
-
-            {/* 3-dot menu */}
-            <div className="relative">
+      <div className="flex flex-col bg-white overflow-hidden w-full flex-1 min-h-0">
+        {/* Search bar only */}
+        <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search chats"
+              className="w-full pl-9 pr-9 py-2 bg-slate-100 rounded-lg text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            {search && (
               <button
                 type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className={`p-2 rounded-full ${colors.bgHover} transition`}
-                aria-label="Menu"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200"
+                aria-label="Clear search"
               >
-                <EllipsisVerticalIcon className="h-5 w-5" />
+                <XMarkIcon className="h-4 w-4 text-slate-500" />
               </button>
-
-              {menuOpen && (
-                <>
-                  {/* Backdrop */}
-                  <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setMenuOpen(false)}
-                  />
-                  {/* Dropdown */}
-                  <div className="absolute right-0 top-full mt-1 z-40 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden text-slate-700">
-                    <Link
-                      href={profileHref}
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-sm"
-                    >
-                      <UserCircleIcon className="h-4 w-4 text-slate-500" />
-                      My Profile
-                    </Link>
-
-                    <Link
-                      href="/settings/privacy"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-sm"
-                    >
-                      <ShieldCheckIcon className="h-4 w-4 text-slate-500" />
-                      Privacy Settings
-                    </Link>
-
-                    <Link
-                      href="/settings/privacy"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-sm"
-                    >
-                      <NoSymbolIcon className="h-4 w-4 text-slate-500" />
-                      Blocked Users
-                    </Link>
-
-                    <div className="border-t border-slate-100" />
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setDeleteAllOpen(true);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 transition text-sm text-red-600"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                      Delete all chats
-                    </button>
-
-                    <div className="border-t border-slate-100" />
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        void handleLogout();
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition text-sm"
-                    >
-                      <ArrowRightOnRectangleIcon className="h-4 w-4 text-slate-500" />
-                      Logout
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* Row 2: search bar */}
-          <div className="px-3 pb-2">
-            <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70" />
-              <input
-                id="chat-search"
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search ${title.toLowerCase()}`}
-                className="w-full pl-9 pr-9 py-1.5 bg-white/20 placeholder:text-white/60 text-white text-sm rounded-lg focus:outline-none focus:bg-white/30 transition"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/20 transition"
-                  aria-label="Clear"
-                >
-                  <XMarkIcon className="h-3.5 w-3.5 text-white" />
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {/* ============================================
-            LIST
-            ============================================ */}
+        {/* List */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {loading ? (
             <div className="flex justify-center py-16">
-              <ArrowPathIcon className={`h-8 w-8 ${colors.text} animate-spin`} />
+              <ArrowPathIcon
+                className={`h-8 w-8 ${colors.text} animate-spin`}
+              />
             </div>
           ) : filtered.length === 0 ? (
             <EmptyState
@@ -615,21 +433,18 @@ export default function ChatListPage({
         </div>
       </div>
 
-      {/* ============================================
-          FAB — New chat
-          ============================================ */}
+      {/* FAB — New chat */}
       <button
         type="button"
         onClick={() => setNewChatOpen(true)}
-        className={`fixed bottom-24 right-5 sm:bottom-24 lg:bottom-8 lg:right-8 z-20 h-14 w-14 rounded-2xl ${colors.bg} ${colors.bgHover} text-white shadow-2xl ${colors.shadow} flex items-center justify-center transition active:scale-95`}
+        className={`fixed z-20 h-14 w-14 rounded-2xl ${colors.bg} ${colors.bgHover} text-white shadow-2xl ${colors.shadow} flex items-center justify-center transition active:scale-95
+          bottom-20 right-5 lg:bottom-8 lg:right-8`}
         aria-label="New chat"
       >
         <ChatBubbleLeftRightIcon className="h-6 w-6" />
       </button>
 
-      {/* ============================================
-          NEW CHAT MODAL
-          ============================================ */}
+      {/* NEW CHAT MODAL */}
       {newChatOpen && (
         <NewChatModal
           colors={colors}
@@ -638,9 +453,7 @@ export default function ChatListPage({
         />
       )}
 
-      {/* ============================================
-          DELETE ALL CHATS — Confirmation
-          ============================================ */}
+      {/* DELETE ALL — Confirmation */}
       {deleteAllOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -653,7 +466,7 @@ export default function ChatListPage({
             <div className="p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
-                  <TrashIcon className="h-6 w-6 text-red-600" />
+                  <XMarkIcon className="h-6 w-6 text-red-600" />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
@@ -666,9 +479,7 @@ export default function ChatListPage({
               </div>
 
               <p className="text-sm text-slate-600 mb-4">
-                All your contacts and chat history will be permanently removed
-                from your list. The other person will still be able to message
-                you if your privacy settings allow it.
+                All your contacts and chat history will be permanently removed.
               </p>
 
               <div className="flex gap-2">

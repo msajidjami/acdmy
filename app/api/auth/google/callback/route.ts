@@ -1,32 +1,52 @@
+// app/api/auth/google/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
+
 import dbConnect from '@/app/lib/dbConnect';
 import User from '@/models/User';
 import { setAuthCookie } from '@/app/lib/cookies';
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const JWT_SECRET = process.env.JWT_SECRET!;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 const REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI || `${APP_URL}/api/auth/google/callback`;
 
-// ✅ open redirect سے بچاؤ
+/* ---------- Open-redirect سے بچاؤ ---------- */
 function safeRedirect(path: string | null | undefined): string {
   if (!path) return '/';
   if (!path.startsWith('/')) return '/';
   if (path.startsWith('//')) return '/';
   if (path.startsWith('/\\')) return '/';
+  // path traversal attempt block
+  if (path.includes('/../') || path.endsWith('/..')) return '/';
   return path;
 }
 
 export async function GET(req: NextRequest) {
-  // ✅ default error redirect helper
-  const errorRedirect = (code: string) =>
-    NextResponse.redirect(new URL(`/login?error=${code}`, req.url));
+  const errorRedirect = (code: string) => {
+    const res = NextResponse.redirect(
+      new URL(`/login?error=${code}`, req.url)
+    );
+    // ✅ error پر بھی صفائی
+    res.cookies.delete('oauth_state');
+    res.cookies.delete('google_temp');
+    return res;
+  };
 
-  // ---------- 1) state decode + verify ----------
-  let redirectTo = '/';
+  /* ---------- 0) Env validation (fail fast) ---------- */
+  if (!JWT_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error('[google-callback] Missing env vars', {
+      hasJwt: !!JWT_SECRET,
+      hasClientId: !!GOOGLE_CLIENT_ID,
+      hasSecret: !!GOOGLE_CLIENT_SECRET,
+    });
+    return errorRedirect('ServerConfig');
+  }
+
+  /* ---------- 1) State verify ---------- */
+  let redirectTo: string = '/';
   try {
     const stateParam = req.nextUrl.searchParams.get('state') || '';
     if (!stateParam) return errorRedirect('InvalidState');
@@ -52,54 +72,61 @@ export async function GET(req: NextRequest) {
     if (errorParam) return errorRedirect(errorParam);
     if (!code) return errorRedirect('NoCode');
 
-    if (!JWT_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      console.error('❌ Missing Google/JWT env vars');
-      return errorRedirect('ServerConfig');
-    }
+    /* ---------- 2) code → access token ---------- */
+    let tokenData: any;
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: REDIRECT_URI,
+          grant_type: 'authorization_code',
+        }),
+      });
 
-    // ---------- 2) code → access token ----------
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
-        grant_type: 'authorization_code',
-      }),
-    });
+      tokenData = await tokenRes.json();
 
-    const tokenData = await tokenRes.json();
-
-    if (!tokenRes.ok || !tokenData.access_token) {
-      console.error('Google Token Error:', tokenData);
-      return errorRedirect('TokenError');
-    }
-
-    // ---------- 3) access token → profile ----------
-    const profileRes = await fetch(
-      'https://www.googleapis.com/oauth2/v2/userinfo',
-      {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      if (!tokenRes.ok || !tokenData.access_token) {
+        console.error('[google-callback] Token exchange failed:', tokenData);
+        return errorRedirect('TokenError');
       }
-    );
+    } catch (err) {
+      console.error('[google-callback] Token fetch network error:', err);
+      return errorRedirect('NetworkError');
+    }
 
-    const profile = await profileRes.json();
+    /* ---------- 3) access token → profile ---------- */
+    let profile: any;
+    try {
+      const profileRes = await fetch(
+        'https://www.googleapis.com/oauth2/v2/userinfo',
+        {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` },
+        }
+      );
 
-    if (!profileRes.ok || !profile.email) {
-      console.error('Google Profile Error:', profile);
-      return errorRedirect('ProfileError');
+      profile = await profileRes.json();
+
+      if (!profileRes.ok || !profile.email) {
+        console.error('[google-callback] Profile fetch failed:', profile);
+        return errorRedirect('ProfileError');
+      }
+    } catch (err) {
+      console.error('[google-callback] Profile fetch network error:', err);
+      return errorRedirect('NetworkError');
     }
 
     const { id: googleId, email, name, picture } = profile;
-    const lowerEmail = email.toLowerCase();
+    const lowerEmail = String(email).toLowerCase();
 
-    // ---------- 4) DB ----------
+    /* ---------- 4) DB ---------- */
     await dbConnect();
     const user = await User.findOne({ email: lowerEmail });
 
-    // ✅ نیا user → role منتخب کرنے کے لیے
+    /* ============ NEW USER → choose-role ============ */
     if (!user) {
       const tempToken = jwt.sign(
         {
@@ -128,29 +155,41 @@ export async function GET(req: NextRequest) {
         maxAge: 60 * 15,
       });
 
-      // ✅ oauth_state اب کام ختم، delete کر دیں
       response.cookies.delete('oauth_state');
-
       return response;
     }
 
-    // ✅ پرانا user → provider کو صرف اسی صورت سیٹ کریں جب خالی ہو
-    if (!user.provider) user.provider = 'google';
-    if (!user.googleId) user.googleId = googleId;
-    user.avatar = picture || user.avatar;
-    user.isVerified = true;
-    user.lastLogin = new Date();
-    user.loginCount = (user.loginCount || 0) + 1;
-    await user.save();
+    /* ============ EXISTING USER → update + login ============ */
+    const update: Record<string, any> = {
+      $inc: { loginCount: 1 }, // ✅ atomic
+      $set: {
+        lastLogin: new Date(),
+        isVerified: true,
+      },
+    };
 
-    // ---------- 5) JWT ----------
+    // provider صرف اسی وقت سیٹ کریں جب خالی ہو
+    if (!user.provider) update.$set.provider = 'google';
+    if (!user.googleId) update.$set.googleId = googleId;
+    if (picture) update.$set.avatar = picture;
+
+    const updatedUser = await User.findByIdAndUpdate(user._id, update, {
+      new: true,
+    });
+
+    if (!updatedUser) {
+      console.error('[google-callback] User update failed:', user._id);
+      return errorRedirect('ServerError');
+    }
+
+    /* ---------- 5) JWT ---------- */
     const token = jwt.sign(
       {
-        userId: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        provider: user.provider,
+        userId: updatedUser._id.toString(),
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        provider: updatedUser.provider,
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -162,13 +201,12 @@ export async function GET(req: NextRequest) {
 
     setAuthCookie(response, token);
 
-    // ✅ cleanup
     response.cookies.delete('oauth_state');
     response.cookies.delete('google_temp');
 
     return response;
   } catch (error) {
-    console.error('Google Callback Error:', error);
+    console.error('[google-callback] Unexpected error:', error);
     return errorRedirect('ServerError');
   }
 }
