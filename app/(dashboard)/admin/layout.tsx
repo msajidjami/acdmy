@@ -22,6 +22,7 @@ import {
   Crown,
   Palette,
   BrainCircuit,
+  Share2,
   MoreHorizontal,
   MessageCircle,
 } from 'lucide-react';
@@ -75,6 +76,13 @@ const aiDesignNavItems: NavItem[] = [
     icon: BrainCircuit,
     badge: 'New',
     badgeColor: 'emerald',
+  },
+  {
+    name: 'AI Social Team',
+    href: '/admin/ai-social-team',
+    icon: Share2,
+    badge: 'New',
+    badgeColor: 'indigo',
   },
 ];
 

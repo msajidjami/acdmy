@@ -1,120 +1,305 @@
-import { getMessaging } from 'firebase-admin/messaging';
-import '@/app/lib/firebaseAdmin'; // ensures admin initialized
-import User from '@/models/User';
-import connectDB from '@/app/lib/dbConnect';
+
+import { getMessaging } from "firebase-admin/messaging";
+import type { MulticastMessage } from "firebase-admin/messaging";
+
+import "@/app/lib/firebaseAdmin";
+
+import User from "@/models/User";
+import connectDB from "@/app/lib/dbConnect";
+
+type PushType = "message" | "call" | "system";
 
 type SendOpts = {
   toUserId: string | string[];
   title: string;
   body: string;
   data?: Record<string, string>;
-  /* Notification type for icon/badge */
-  type?: 'message' | 'call' | 'system';
-  /* Optional: incoming call ring */
+  type?: PushType;
   ring?: boolean;
-  /* Badge count — auto-increment */
   setBadge?: number;
 };
 
+const FCM_BATCH_SIZE = 500;
+
+function uniqueStrings(values: unknown[]): string[] {
+  return [
+    ...new Set(
+      values.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0
+      ).map((value) => value.trim())
+    ),
+  ];
+}
+
+function isInvalidTokenError(code?: string): boolean {
+  if (!code) return false;
+
+  return (
+    code === "messaging/invalid-registration-token" ||
+    code === "messaging/registration-token-not-registered"
+  );
+}
+
+function getBatches<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+
+  return batches;
+}
+
+function normalizeData(
+  data?: Record<string, string>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  if (!data) return result;
+
+  for (const [key, value] of Object.entries(data)) {
+    if (
+      typeof key === "string" &&
+      typeof value === "string"
+    ) {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
 export async function sendPush(opts: SendOpts): Promise<void> {
   try {
-    await connectDB();
+    // --------------------------------------------------
+    // 1. Validate input
+    // --------------------------------------------------
+
+    if (!opts?.toUserId || !opts.title || !opts.body) {
+      console.warn("[sendPush] Missing required notification data");
+      return;
+    }
 
     const userIds = Array.isArray(opts.toUserId)
       ? opts.toUserId
       : [opts.toUserId];
 
-    /* FCM tokens جمع کریں */
-    const users = await User.find({ _id: { $in: userIds } })
-      .select('fcmTokens')
+    const validUserIds = uniqueStrings(userIds);
+
+    if (validUserIds.length === 0) return;
+
+    // --------------------------------------------------
+    // 2. Database connection
+    // --------------------------------------------------
+
+    await connectDB();
+
+    // --------------------------------------------------
+    // 3. Get FCM tokens from User model
+    // --------------------------------------------------
+
+    const users = await User.find({
+      _id: { $in: validUserIds },
+    })
+      .select("fcmTokens")
       .lean();
 
-    const tokens: string[] = [];
-    for (const u of users) {
-      for (const t of (u as any).fcmTokens || []) {
-        if (t && typeof t === 'string') tokens.push(t);
-      }
+    const allTokens: string[] = [];
+
+    for (const user of users) {
+      const tokens = Array.isArray(user.fcmTokens)
+        ? user.fcmTokens
+        : [];
+
+      allTokens.push(...tokens);
     }
 
-    if (tokens.length === 0) return;
+    const tokens = uniqueStrings(allTokens);
 
-    const isCall = opts.type === 'call' || opts.ring === true;
+    if (tokens.length === 0) {
+      console.info("[sendPush] No registered FCM devices");
+      return;
+    }
 
-    /* FCM message */
-    const message = {
-      tokens,
+    // --------------------------------------------------
+    // 4. Notification type
+    // --------------------------------------------------
+
+    const isCall =
+      opts.type === "call" || opts.ring === true;
+
+    const notificationType: PushType =
+      isCall ? "call" : opts.type || "system";
+
+    // --------------------------------------------------
+    // 5. Prepare data payload
+    // --------------------------------------------------
+
+    const data = {
+      type: notificationType,
+      click_action: "FLUTTER_NOTIFICATION_CLICK",
+      ...normalizeData(opts.data),
+    };
+
+    // --------------------------------------------------
+    // 6. Prepare FCM message
+    // --------------------------------------------------
+
+    const message: Omit<MulticastMessage, "tokens"> = {
       notification: {
         title: opts.title,
         body: opts.body,
       },
-      data: {
-        type: opts.type || 'system',
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
-        ...(opts.data || {}),
-      },
+
+      data,
+
       android: {
-        priority: (isCall ? 'high' : 'normal') as 'high' | 'normal',
+        priority: isCall ? "high" : "normal",
+
         notification: {
-          channelId: isCall ? 'calls_channel' : 'messages_channel',
-          sound: isCall ? 'ringtone' : 'default',
-          /* Badge count */
-          notificationCount: opts.setBadge ?? 1,
-          /* Long ring for calls */
+          channelId: isCall
+            ? "calls_channel"
+            : "messages_channel",
+
+          sound: isCall ? "ringtone" : "default",
+
+          ...(typeof opts.setBadge === "number" && {
+            notificationCount: Math.max(
+              0,
+              Math.floor(opts.setBadge)
+            ),
+          }),
+
           ...(isCall && {
-            /* Continuous vibration + ring */
-            defaultSound: false,
             defaultVibrateTimings: false,
-            vibrateTimingsMillis: [0, 1000, 500, 1000, 500, 1000],
+            vibrateTimingsMillis: [
+              0,
+              1000,
+              500,
+              1000,
+              500,
+              1000,
+            ],
           }),
         },
       },
+
       apns: {
         headers: {
-          'apns-priority': isCall ? '10' : '5',
+          "apns-priority": isCall ? "10" : "5",
+          "apns-push-type": "alert",
         },
+
         payload: {
           aps: {
             alert: {
               title: opts.title,
               body: opts.body,
             },
-            sound: isCall ? 'ringtone.caf' : 'default',
-            badge: opts.setBadge ?? 1,
-            /* Call needs background */
+
+            sound: isCall
+              ? "ringtone.caf"
+              : "default",
+
+            ...(typeof opts.setBadge === "number" && {
+              badge: Math.max(
+                0,
+                Math.floor(opts.setBadge)
+              ),
+            }),
+
             ...(isCall && {
-              'content-available': 1,
-              'interruption-level': 'time-sensitive',
+              contentAvailable: true,
+              interruptionLevel: "time-sensitive" as const,
             }),
           },
         },
       },
     };
 
-    /* Send */
-    const res = await getMessaging().sendEachForMulticast(message as any);
+    // --------------------------------------------------
+    // 7. Send in batches (FCM maximum = 500)
+    // --------------------------------------------------
 
-    /* ✅ Prune invalid tokens */
+    const batches = getBatches(tokens, FCM_BATCH_SIZE);
+
     const invalidTokens: string[] = [];
-    res.responses.forEach((r, i) => {
-      if (!r.success) {
-        const code = r.error?.code || '';
-        if (
-          code.includes('registration-token-not-registered') ||
-          code.includes('invalid-registration-token') ||
-          code.includes('invalid-argument')
-        ) {
-          invalidTokens.push(tokens[i]);
-        }
-      }
-    });
 
-    if (invalidTokens.length > 0) {
+    let totalSuccess = 0;
+    let totalFailure = 0;
+
+    const messaging = getMessaging();
+
+    for (const batch of batches) {
+      const response = await messaging.sendEachForMulticast({
+        ...message,
+        tokens: batch,
+      });
+
+      totalSuccess += response.successCount;
+      totalFailure += response.failureCount;
+
+      // ----------------------------------------------
+      // 8. Find invalid tokens
+      // ----------------------------------------------
+
+      response.responses.forEach((result, index) => {
+        if (!result.success) {
+          const code = result.error?.code;
+
+          if (isInvalidTokenError(code)) {
+            invalidTokens.push(batch[index]);
+          } else {
+            console.error(
+              "[sendPush] FCM delivery error:",
+              code,
+              result.error?.message
+            );
+          }
+        }
+      });
+    }
+
+    // --------------------------------------------------
+    // 9. Remove only invalid tokens
+    // --------------------------------------------------
+
+    const tokensToRemove = uniqueStrings(invalidTokens);
+
+    if (tokensToRemove.length > 0) {
       await User.updateMany(
-        { fcmTokens: { $in: invalidTokens } },
-        { $pull: { fcmTokens: { $in: invalidTokens } } }
+        {
+          fcmTokens: { $in: tokensToRemove },
+        },
+        {
+          $pull: {
+            fcmTokens: {
+              $in: tokensToRemove,
+            },
+          },
+        }
       );
     }
-  } catch (err) {
-    console.error('[sendPush]', err);
+
+    // --------------------------------------------------
+    // 10. Result logging
+    // --------------------------------------------------
+
+    console.info("[sendPush] Completed", {
+      type: notificationType,
+      totalTokens: tokens.length,
+      sent: totalSuccess,
+      failed: totalFailure,
+      removedInvalidTokens: tokensToRemove.length,
+    });
+  } catch (error) {
+    // Push failure must never break chat/call APIs.
+    console.error("[sendPush] Notification error:", error);
   }
 }
+
+// Compatibility alias for existing imports.
+export const sendNotification = sendPush;
+
+export default sendPush;

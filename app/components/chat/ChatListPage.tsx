@@ -10,6 +10,7 @@ import {
   ChatBubbleLeftRightIcon,
   EnvelopeIcon,
   PhoneIcon,
+  VideoCameraIcon,
   BookmarkIcon,
   PlusIcon,
 } from '@heroicons/react/24/outline';
@@ -237,7 +238,7 @@ export default function ChatListPage({ accentColor = 'emerald' }: Props) {
   };
 
   /* ============================================================
-     Render — کوئی ہیڈر نہیں، صرف search + list
+     Render
      ============================================================ */
 
   return (
@@ -323,11 +324,17 @@ export default function ChatListPage({ accentColor = 'emerald' }: Props) {
                 const isOnline =
                   isPlatform && contact.user?.isOnline === true;
 
+                const canCall = isPlatform && !!contact.user?.id;
+
                 return (
-                  <li key={contact._id}>
+                  <li
+                    key={contact._id}
+                    className="flex items-stretch hover:bg-slate-50 active:bg-slate-100 transition"
+                  >
+                    {/* Main clickable area → chat */}
                     <Link
                       href={targetHref}
-                      className="flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition"
+                      className="flex items-center gap-3 flex-1 min-w-0 px-3 sm:px-4 py-3"
                     >
                       {/* Avatar */}
                       <div className="relative shrink-0">
@@ -400,9 +407,11 @@ export default function ChatListPage({ accentColor = 'emerald' }: Props) {
                           {subtitle}
                         </p>
                       </div>
+                    </Link>
 
-                      {/* Time + unread */}
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                    {/* Right side: time + unread + call buttons */}
+                    <div className="flex items-center gap-1 pr-2 sm:pr-3 shrink-0">
+                      <div className="flex flex-col items-end gap-1">
                         {contact.lastMessageAt && (
                           <span
                             className={`text-[11px] ${
@@ -424,7 +433,33 @@ export default function ChatListPage({ accentColor = 'emerald' }: Props) {
                           </span>
                         )}
                       </div>
-                    </Link>
+
+                      {/* Audio + Video call buttons (platform only) */}
+                      {canCall && (
+                        <div className="flex flex-col gap-0.5 ml-1">
+                          <Link
+                            href={`/call/${contact.user!.id}?type=audio&name=${encodeURIComponent(
+                              displayName
+                            )}`}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 transition"
+                            aria-label="Audio call"
+                            title="Audio call"
+                          >
+                            <PhoneIcon className="h-4 w-4" />
+                          </Link>
+                          <Link
+                            href={`/call/${contact.user!.id}?type=video&name=${encodeURIComponent(
+                              displayName
+                            )}`}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-sky-600 hover:bg-sky-50 active:bg-sky-100 transition"
+                            aria-label="Video call"
+                            title="Video call"
+                          >
+                            <VideoCameraIcon className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                   </li>
                 );
               })}

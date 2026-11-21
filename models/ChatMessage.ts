@@ -1,128 +1,65 @@
-import mongoose, { Schema, Model, Types } from 'mongoose';
+// models/ChatMessage.ts
+import mongoose, { Schema, models, model, Types } from 'mongoose';
 
-/* ============================================================
-   ChatMessage Model
-   ============================================================
-   Supports TWO kinds of messages in a single collection:
+export type ChatMessageType = 'text' | 'voice' | 'image' | 'file' | 'call';
+export type CallKind = 'audio' | 'video';
+export type CallStatus = 'missed' | 'completed' | 'declined' | 'no_answer';
 
-   1) Main user-to-user chat:
-      - senderId, receiverId, text, isRead
-      - Used by /api/chat/[id]  and  /api/contacts/*
-
-   2) Legacy guest/admin chat (kept for backward compatibility):
-      - userEmail, userName, message, isAdmin, readByUser
-      - Used by /api/chat/messages, /api/chat/unread,
-                /api/chat/mark-read-user
-
-   All fields are optional except the ones required by each mode.
-   ============================================================ */
-
-export interface IChatMessage extends mongoose.Document {
+// ⚠️ IMPORTANT: 'extends mongoose.Document' نہیں کرنا
+export interface IChatMessage {
   _id: Types.ObjectId;
-
-  /* ---------- Main user-to-user chat ---------- */
-  senderId?: Types.ObjectId;
-  receiverId?: Types.ObjectId;
-  text?: string;
-  isRead?: boolean;
-
-  /* ---------- Legacy guest/admin chat ---------- */
-  userEmail?: string;
-  userName?: string;
-  message?: string;
-  isAdmin?: boolean;
-  readByUser?: boolean;
-
+  senderId: Types.ObjectId;
+  receiverId: Types.ObjectId;
+  type: ChatMessageType;
+  text: string;
+  audioUrl?: string;
+  audioDuration?: number;
+  call?: {
+    kind: CallKind;
+    status: CallStatus;
+    durationSeconds: number;
+  };
+  isRead: boolean;
+  readAt?: Date | null;
+  expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const ChatMessageSchema = new Schema<IChatMessage>(
   {
-    /* ---------- Main user-to-user chat ---------- */
-    senderId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-      default: null,
-    },
-    receiverId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-      default: null,
-    },
-    text: {
+    senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    receiverId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    type: {
       type: String,
-      trim: true,
-      maxlength: 2000,
-      default: '',
-    },
-    isRead: {
-      type: Boolean,
-      default: false,
+      enum: ['text', 'voice', 'image', 'file', 'call'],
+      default: 'text',
       index: true,
     },
-
-    /* ---------- Legacy guest/admin chat ---------- */
-    userEmail: {
-      type: String,
-      lowercase: true,
-      trim: true,
-      index: true,
-      default: '',
+    text: { type: String, default: '', trim: true, maxlength: 4000 },
+    audioUrl: { type: String, default: '' },
+    audioDuration: { type: Number, default: 0 },
+    call: {
+      kind: { type: String, enum: ['audio', 'video'] },
+      status: { type: String, enum: ['missed', 'completed', 'declined', 'no_answer'] },
+      durationSeconds: { type: Number, default: 0 },
     },
-    userName: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    message: {
-      type: String,
-      trim: true,
-      maxlength: 2000,
-      default: '',
-    },
-    isAdmin: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    readByUser: {
-      type: Boolean,
-      default: false,
+    isRead: { type: Boolean, default: false, index: true },
+    readAt: { type: Date, default: null },
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       index: true,
     },
   },
-  {
-    timestamps: true,
-    versionKey: false,
-    /* strict: false کی بجائے باقاعدہ schema — تاکہ validation کام کرے */
-  }
+  { timestamps: true }
 );
 
-/* ============================================================
-   Indexes
-   ============================================================ */
-
-/* Main chat — conversation lookup */
 ChatMessageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
-
-/* Main chat — unread count for a receiver */
 ChatMessageSchema.index({ receiverId: 1, isRead: 1 });
 
-/* Legacy guest — messages of one guest */
-ChatMessageSchema.index({ userEmail: 1, createdAt: -1 });
-
-/* Legacy guest — unread count from admin */
-ChatMessageSchema.index({ userEmail: 1, isAdmin: 1, readByUser: 1 });
-
-/* ============================================================
-   Model
-   ============================================================ */
-
-const ChatMessage: Model<IChatMessage> =
-  (mongoose.models.ChatMessage as Model<IChatMessage>) ||
-  mongoose.model<IChatMessage>('ChatMessage', ChatMessageSchema);
+const ChatMessage =
+  (models.ChatMessage as mongoose.Model<IChatMessage>) ||
+  model<IChatMessage>('ChatMessage', ChatMessageSchema);
 
 export default ChatMessage;

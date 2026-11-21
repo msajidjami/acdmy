@@ -12,6 +12,7 @@ import {
   ChatBubbleLeftRightIcon,
   EnvelopeIcon,
   PhoneIcon,
+  VideoCameraIcon,
   CheckCircleIcon,
   UserCircleIcon,
   GlobeAltIcon,
@@ -59,13 +60,11 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  /* Add form state */
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [addMsg, setAddMsg] = useState('');
-  const [foundUser, setFoundUser] = useState<any>(null);
 
   /* ---------- Load ---------- */
   useEffect(() => {
@@ -149,12 +148,10 @@ export default function ContactsPage() {
     } catch {}
   }
 
-  /* ---------- Add external contact ---------- */
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddLoading(true);
     setAddMsg('');
-    setFoundUser(null);
 
     if (!addEmail && !addPhone) {
       setAddMsg('Enter email or phone');
@@ -163,9 +160,7 @@ export default function ContactsPage() {
     }
 
     try {
-      const body: any = {
-        name: addName.trim(),
-      };
+      const body: any = { name: addName.trim() };
       if (addEmail.trim()) body.email = addEmail.trim();
       if (addPhone.trim()) body.phone = addPhone.trim();
 
@@ -177,7 +172,6 @@ export default function ContactsPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         setAddMsg(data?.error || 'Failed to save');
         return;
@@ -185,17 +179,14 @@ export default function ContactsPage() {
 
       if (data.contact?.type === 'platform') {
         setAddMsg('✅ Found on platform — saved as user');
-        setFoundUser(data.contact);
       } else {
         setAddMsg('✅ Saved. They will appear when they join.');
       }
 
-      /* reset */
       setAddName('');
       setAddEmail('');
       setAddPhone('');
 
-      /* reload */
       setTimeout(() => {
         setTab('contacts');
         loadSaved();
@@ -207,7 +198,6 @@ export default function ContactsPage() {
     }
   }
 
-  /* initials */
   const initials = (name: string) =>
     name
       ? name
@@ -218,7 +208,6 @@ export default function ContactsPage() {
           .toUpperCase()
       : '?';
 
-  /* type icon */
   const TypeBadge = ({ type }: { type: string }) => {
     if (type === 'platform') {
       return (
@@ -243,7 +232,6 @@ export default function ContactsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
-      {/* Header */}
       <header className="sticky top-0 z-30 bg-emerald-600 text-white shadow-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-3">
@@ -256,46 +244,25 @@ export default function ContactsPage() {
               <UserPlusIcon className="h-6 w-6" />
             </button>
           </div>
-
           <div className="flex gap-1">
-            <button
-              onClick={() => setTab('contacts')}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-                tab === 'contacts'
-                  ? 'bg-white text-emerald-700'
-                  : 'text-white/80 hover:bg-emerald-700'
-              }`}
-            >
-              My Contacts
-            </button>
-            <button
-              onClick={() => setTab('find')}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-                tab === 'find'
-                  ? 'bg-white text-emerald-700'
-                  : 'text-white/80 hover:bg-emerald-700'
-              }`}
-            >
-              Find Users
-            </button>
-            <button
-              onClick={() => setTab('add')}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
-                tab === 'add'
-                  ? 'bg-white text-emerald-700'
-                  : 'text-white/80 hover:bg-emerald-700'
-              }`}
-            >
-              Add New
-            </button>
+            {(['contacts', 'find', 'add'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition ${
+                  tab === t
+                    ? 'bg-white text-emerald-700'
+                    : 'text-white/80 hover:bg-emerald-700'
+                }`}
+              >
+                {t === 'contacts' ? 'My Contacts' : t === 'find' ? 'Find Users' : 'Add New'}
+              </button>
+            ))}
           </div>
         </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-4">
-        {/* ============================================
-            SEARCH (Find tab)
-            ============================================ */}
         {tab === 'find' && (
           <div className="relative mb-4">
             <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
@@ -317,16 +284,13 @@ export default function ContactsPage() {
           </div>
         )}
 
-        {/* Loading */}
         {loading && tab !== 'add' && (
           <div className="flex justify-center py-12">
             <ArrowPathIcon className="h-6 w-6 text-emerald-600 animate-spin" />
           </div>
         )}
 
-        {/* ============================================
-            MY CONTACTS
-            ============================================ */}
+        {/* MY CONTACTS */}
         {!loading && tab === 'contacts' && (
           <>
             {saved.length === 0 ? (
@@ -365,25 +329,24 @@ export default function ContactsPage() {
                     c.email ||
                     c.phone ||
                     'Unknown';
-
-                  const isExternal = c.type !== 'platform';
+                  const isPlatform = c.type === 'platform';
                   const targetHref = c.user?.id
                     ? `/contacts/${c.user.id}`
                     : `/contacts/external/${c._id}`;
+                  const canCall = isPlatform && !!c.user?.id;
 
                   return (
                     <div
                       key={c._id}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition group"
+                      className="flex items-center gap-2 px-3 sm:px-4 py-3 hover:bg-slate-50 transition group"
                     >
                       <Link
                         href={targetHref}
                         className="flex items-center gap-3 flex-1 min-w-0"
                       >
-                        {/* Avatar */}
                         <div
                           className={`relative h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${
-                            c.type === 'platform'
+                            isPlatform
                               ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
                               : c.type === 'email'
                               ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
@@ -393,7 +356,6 @@ export default function ContactsPage() {
                           {initials(displayName)}
                         </div>
 
-                        {/* Info */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="text-sm font-bold text-slate-900 truncate">
@@ -405,8 +367,11 @@ export default function ContactsPage() {
                             <TypeBadge type={c.type} />
                           </div>
                           <p className="text-xs text-slate-500 truncate mt-0.5">
-                            {c.type === 'platform'
-                              ? c.lastMessage || c.user?.phone || c.user?.email || 'Tap to chat'
+                            {isPlatform
+                              ? c.lastMessage ||
+                                c.user?.phone ||
+                                c.user?.email ||
+                                'Tap to chat'
                               : c.type === 'email'
                               ? c.email
                               : c.phone}
@@ -419,6 +384,32 @@ export default function ContactsPage() {
                           </span>
                         )}
                       </Link>
+
+                      {/* Call buttons */}
+                      {canCall && (
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <Link
+                            href={`/call/${c.user!.id}?type=audio&name=${encodeURIComponent(
+                              displayName
+                            )}`}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-emerald-600 hover:bg-emerald-50 transition"
+                            aria-label="Audio call"
+                            title="Audio call"
+                          >
+                            <PhoneIcon className="h-4 w-4" />
+                          </Link>
+                          <Link
+                            href={`/call/${c.user!.id}?type=video&name=${encodeURIComponent(
+                              displayName
+                            )}`}
+                            className="h-8 w-8 rounded-full flex items-center justify-center text-sky-600 hover:bg-sky-50 transition"
+                            aria-label="Video call"
+                            title="Video call"
+                          >
+                            <VideoCameraIcon className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      )}
 
                       <button
                         onClick={() => removeContact(c._id)}
@@ -435,9 +426,7 @@ export default function ContactsPage() {
           </>
         )}
 
-        {/* ============================================
-            FIND USERS (platform)
-            ============================================ */}
+        {/* FIND USERS */}
         {!loading && tab === 'find' && (
           <>
             {directory.length === 0 ? (
@@ -494,20 +483,16 @@ export default function ContactsPage() {
           </>
         )}
 
-        {/* ============================================
-            ADD NEW (external email/phone)
-            ============================================ */}
+        {/* ADD NEW */}
         {tab === 'add' && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
             <div className="text-center mb-5">
               <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md mb-3">
                 <UserPlusIcon className="h-7 w-7 text-white" />
               </div>
-              <h2 className="text-lg font-bold text-slate-900">
-                Add New Contact
-              </h2>
+              <h2 className="text-lg font-bold text-slate-900">Add New Contact</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Save any email or phone — even if they're not on ILMORA786 yet
+                Save any email or phone — even if they&apos;re not on ILMORA786 yet
               </p>
             </div>
 
@@ -527,7 +512,6 @@ export default function ContactsPage() {
             )}
 
             <form onSubmit={handleAdd} className="space-y-4">
-              {/* Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Name
@@ -545,7 +529,6 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Gmail / Email
@@ -562,14 +545,12 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              {/* Divider */}
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-px bg-slate-200" />
                 <span className="text-xs text-slate-400 font-medium">OR</span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Phone Number
@@ -586,7 +567,6 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              {/* Info */}
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                 <GlobeAltIcon className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-blue-700">
@@ -616,7 +596,6 @@ export default function ContactsPage() {
         )}
       </div>
 
-      {/* Floating home */}
       <div className="fixed bottom-4 right-4 z-40">
         <Link
           href="/"

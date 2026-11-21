@@ -1,3 +1,4 @@
+
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
 /* ============================================================
@@ -16,17 +17,22 @@ export interface IUserPrivacy {
 
 export interface IUser extends Document {
   _id: Types.ObjectId;
+
   name: string;
   email?: string;
   phone?: string;
   password?: string;
+
   role: UserRole;
   isVerified: boolean;
   provider: UserProvider;
+
   googleId?: string;
   avatar?: string;
+
   resetToken?: string;
   resetTokenExpiry?: Date | null;
+
   lastLogin?: Date | null;
   loginCount: number;
 
@@ -37,12 +43,15 @@ export interface IUser extends Document {
   /* Privacy */
   privacy: IUserPrivacy;
 
+  /* Firebase Push Notifications */
+  fcmTokens: string[];
+
   createdAt: Date;
   updatedAt: Date;
 }
 
 /* ============================================================
-   PRIVACY SUB-SCHEMA (nested defaults یقینی بناتا ہے)
+   PRIVACY SUB-SCHEMA
    ============================================================ */
 
 const PrivacySchema = new Schema<IUserPrivacy>(
@@ -53,10 +62,12 @@ const PrivacySchema = new Schema<IUserPrivacy>(
       default: 'contacts',
       required: true,
     },
+
     blockedUsers: {
       type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
       default: [],
     },
+
     discoverable: {
       type: Boolean,
       default: true,
@@ -156,6 +167,7 @@ const UserSchema = new Schema<IUser>(
     /* ============================================================
        ONLINE STATUS
        ============================================================ */
+
     isOnline: {
       type: Boolean,
       default: false,
@@ -169,8 +181,9 @@ const UserSchema = new Schema<IUser>(
     },
 
     /* ============================================================
-       PRIVACY — sub-schema سے defaults یقینی
+       PRIVACY
        ============================================================ */
+
     privacy: {
       type: PrivacySchema,
       default: () => ({
@@ -178,6 +191,17 @@ const UserSchema = new Schema<IUser>(
         blockedUsers: [],
         discoverable: true,
       }),
+    },
+
+    /* ============================================================
+       FIREBASE CLOUD MESSAGING TOKENS
+       ایک صارف کی متعدد ڈیوائسز کے لیے
+       ============================================================ */
+
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
     },
   },
   {
@@ -197,7 +221,7 @@ UserSchema.index({ 'privacy.allowMessagesFrom': 1 });
 UserSchema.index({ isOnline: 1, lastSeen: -1 });
 
 /* ============================================================
-   MODEL (cache-safe — serverless کے لیے)
+   MODEL
    ============================================================ */
 
 const User: Model<IUser> =

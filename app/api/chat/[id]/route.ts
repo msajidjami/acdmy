@@ -91,7 +91,7 @@ export async function GET(
 
     await ChatMessage.updateMany(
       { senderId: otherUserId, receiverId: userId, isRead: false },
-      { $set: { isRead: true } }
+      { $set: { isRead: true, readAt: new Date() } }
     );
 
     await Contact.updateOne(
@@ -118,7 +118,18 @@ export async function GET(
       _id: String(m._id),
       senderId: String(m.senderId),
       receiverId: String(m.receiverId),
+      type: (m.type as string) || 'text',
       text: String(m.text || ''),
+      audioUrl: m.audioUrl ? String(m.audioUrl) : undefined,
+      audioDuration:
+        typeof m.audioDuration === 'number' ? m.audioDuration : undefined,
+      call: m.call
+        ? {
+            kind: m.call.kind,
+            status: m.call.status,
+            durationSeconds: Number(m.call.durationSeconds) || 0,
+          }
+        : undefined,
       createdAt: m.createdAt
         ? new Date(m.createdAt).toISOString()
         : new Date().toISOString(),
@@ -156,7 +167,7 @@ export async function GET(
 }
 
 /* ============================================================
-   POST — Message بھیجیں (with privacy + block checks + push)
+   POST — Message بھیجیں
    ============================================================ */
 
 export async function POST(
@@ -208,12 +219,8 @@ export async function POST(
     await connectDB();
 
     const [receiver, me] = await Promise.all([
-      User.findById(otherUserId)
-        .select('_id name email phone privacy')
-        .lean(),
-      User.findById(userId)
-        .select('_id name email phone privacy')
-        .lean(),
+      User.findById(otherUserId).select('_id name email phone privacy').lean(),
+      User.findById(userId).select('_id name email phone privacy').lean(),
     ]);
 
     if (!receiver) {
@@ -230,8 +237,8 @@ export async function POST(
       );
     }
 
-    /* ---------- 1) Receiver ne mujhe block kiya? ---------- */
-    const receiverBlockedMe = (receiver.privacy?.blockedUsers || [])
+    /* ---------- 1) Receiver نے مجھے بلاک کیا؟ ---------- */
+    const receiverBlockedMe = ((receiver as any).privacy?.blockedUsers || [])
       .map((id: any) => String(id))
       .includes(String(userId));
 
@@ -246,8 +253,8 @@ export async function POST(
       );
     }
 
-    /* ---------- 2) Maine receiver ko block kiya? ---------- */
-    const iBlockedReceiver = (me.privacy?.blockedUsers || [])
+    /* ---------- 2) میں نے receiver کو بلاک کیا؟ ---------- */
+    const iBlockedReceiver = ((me as any).privacy?.blockedUsers || [])
       .map((id: any) => String(id))
       .includes(String(otherUserId));
 
@@ -262,8 +269,9 @@ export async function POST(
       );
     }
 
-    /* ---------- 3) Receiver ki privacy ---------- */
-    const allowFrom = receiver.privacy?.allowMessagesFrom || 'contacts';
+    /* ---------- 3) Receiver کی privacy ---------- */
+    const allowFrom =
+      (receiver as any).privacy?.allowMessagesFrom || 'contacts';
 
     if (allowFrom === 'nobody') {
       return NextResponse.json(
@@ -284,7 +292,7 @@ export async function POST(
         .select('isSaved')
         .lean();
 
-      if (!saved || saved.isSaved === false) {
+      if (!saved || (saved as any).isSaved === false) {
         return NextResponse.json(
           {
             success: false,
@@ -297,13 +305,16 @@ export async function POST(
       }
     }
 
-    /* ---------- Save message ---------- */
-    const msg = await ChatMessage.create({
+    /* ---------- Save message (using .save() to guarantee typed doc) ---------- */
+    const msg = new ChatMessage({
       senderId: userId,
       receiverId: otherUserId,
+      type: 'text',
       text,
       isRead: false,
     });
+
+    await msg.save();
 
     const now = new Date();
 
@@ -318,7 +329,7 @@ export async function POST(
       }
     );
 
-    /* Receiver side contact (auto-create if not exists) */
+    /* Receiver side contact (auto-create) */
     const receiverContact: any = await Contact.findOneAndUpdate(
       { ownerId: otherUserId, contactId: userId },
       {
@@ -330,9 +341,12 @@ export async function POST(
         $setOnInsert: {
           ownerId: otherUserId,
           contactId: userId,
-          name: String(me.name || me.email || 'Unknown').slice(0, 60),
-          email: String(me.email || ''),
-          phone: String(me.phone || ''),
+          name: String((me as any).name || (me as any).email || 'Unknown').slice(
+            0,
+            60
+          ),
+          email: String((me as any).email || ''),
+          phone: String((me as any).phone || ''),
           isSaved: false,
           savedAt: now,
         },
@@ -341,9 +355,11 @@ export async function POST(
       { upsert: true, new: true }
     );
 
-    /* ---------- ✅ Push notification to receiver ---------- */
+    /* ---------- Push notification ---------- */
     try {
-      const senderName = String(me.name || me.email || 'New message');
+      const senderName = String(
+        (me as any).name || (me as any).email || 'New message'
+      );
       const unreadCount = Number(receiverContact?.unreadCount) || 1;
 
       await sendPush({
@@ -366,8 +382,9 @@ export async function POST(
       success: true,
       message: {
         _id: String(msg._id),
-        senderId: userId,
-        receiverId: otherUserId,
+        senderId: String(msg.senderId),
+        receiverId: String(msg.receiverId),
+        type: 'text',
         text: String(msg.text || text),
         createdAt: msg.createdAt
           ? new Date(msg.createdAt).toISOString()
