@@ -7,7 +7,7 @@ import "@/app/lib/firebaseAdmin";
 import User from "@/models/User";
 import connectDB from "@/app/lib/dbConnect";
 
-type PushType = "message" | "call" | "system";
+type PushType = "message" | "call" | "incoming_call" | "system";
 
 type SendOpts = {
   toUserId: string | string[];
@@ -24,10 +24,12 @@ const FCM_BATCH_SIZE = 500;
 function uniqueStrings(values: unknown[]): string[] {
   return [
     ...new Set(
-      values.filter(
-        (value): value is string =>
-          typeof value === "string" && value.trim().length > 0
-      ).map((value) => value.trim())
+      values
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+        )
+        .map((value) => value.trim())
     ),
   ];
 }
@@ -72,9 +74,7 @@ function normalizeData(
 
 export async function sendPush(opts: SendOpts): Promise<void> {
   try {
-    // --------------------------------------------------
     // 1. Validate input
-    // --------------------------------------------------
 
     if (!opts?.toUserId || !opts.title || !opts.body) {
       console.warn("[sendPush] Missing required notification data");
@@ -89,15 +89,11 @@ export async function sendPush(opts: SendOpts): Promise<void> {
 
     if (validUserIds.length === 0) return;
 
-    // --------------------------------------------------
     // 2. Database connection
-    // --------------------------------------------------
 
     await connectDB();
 
-    // --------------------------------------------------
-    // 3. Get FCM tokens from User model
-    // --------------------------------------------------
+    // 3. Get FCM tokens
 
     const users = await User.find({
       _id: { $in: validUserIds },
@@ -122,29 +118,29 @@ export async function sendPush(opts: SendOpts): Promise<void> {
       return;
     }
 
-    // --------------------------------------------------
     // 4. Notification type
-    // --------------------------------------------------
 
     const isCall =
-      opts.type === "call" || opts.ring === true;
+      opts.type === "call" ||
+      opts.type === "incoming_call" ||
+      opts.ring === true;
 
     const notificationType: PushType =
-      isCall ? "call" : opts.type || "system";
+      opts.type === "incoming_call"
+        ? "incoming_call"
+        : isCall
+          ? "call"
+          : opts.type || "system";
 
-    // --------------------------------------------------
     // 5. Prepare data payload
-    // --------------------------------------------------
 
     const data = {
+      ...normalizeData(opts.data),
       type: notificationType,
       click_action: "FLUTTER_NOTIFICATION_CLICK",
-      ...normalizeData(opts.data),
     };
 
-    // --------------------------------------------------
     // 6. Prepare FCM message
-    // --------------------------------------------------
 
     const message: Omit<MulticastMessage, "tokens"> = {
       notification: {
@@ -218,9 +214,7 @@ export async function sendPush(opts: SendOpts): Promise<void> {
       },
     };
 
-    // --------------------------------------------------
     // 7. Send in batches (FCM maximum = 500)
-    // --------------------------------------------------
 
     const batches = getBatches(tokens, FCM_BATCH_SIZE);
 
@@ -240,9 +234,7 @@ export async function sendPush(opts: SendOpts): Promise<void> {
       totalSuccess += response.successCount;
       totalFailure += response.failureCount;
 
-      // ----------------------------------------------
       // 8. Find invalid tokens
-      // ----------------------------------------------
 
       response.responses.forEach((result, index) => {
         if (!result.success) {
@@ -261,9 +253,7 @@ export async function sendPush(opts: SendOpts): Promise<void> {
       });
     }
 
-    // --------------------------------------------------
     // 9. Remove only invalid tokens
-    // --------------------------------------------------
 
     const tokensToRemove = uniqueStrings(invalidTokens);
 
@@ -282,9 +272,7 @@ export async function sendPush(opts: SendOpts): Promise<void> {
       );
     }
 
-    // --------------------------------------------------
     // 10. Result logging
-    // --------------------------------------------------
 
     console.info("[sendPush] Completed", {
       type: notificationType,

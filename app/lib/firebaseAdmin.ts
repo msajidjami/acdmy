@@ -1,43 +1,188 @@
+
+import "server-only";
+
 import {
-  getApps,
-  initializeApp,
   cert,
   getApp,
+  getApps,
+  initializeApp,
   type App,
-} from 'firebase-admin/app';
+} from "firebase-admin/app";
 
 /* ============================================================
-   ✅ adminApp ہمیشہ App رہے گا — نہ null، نہ undefined
-   اگر config غائب ہو تو یہیں error پھینکے گا (fail-fast)
-   ============================================================ */
+   FIREBASE ADMIN — SERVER ONLY
 
-function initAdminApp(): App {
-  /* پہلے سے initialized؟ وہی واپس کریں */
-  if (getApps().length > 0) {
-    return getApp();
+   Supported credentials:
+   1. FIREBASE_SERVICE_ACCOUNT_JSON
+   2. FIREBASE_SERVICE_ACCOUNT_BASE64
+   3. Individual environment variables:
+      FIREBASE_PROJECT_ID
+      FIREBASE_CLIENT_EMAIL
+      FIREBASE_PRIVATE_KEY
+
+   Safe for Next.js development and Vercel serverless.
+============================================================ */
+
+interface FirebaseServiceAccount {
+  project_id?: string;
+  projectId?: string;
+
+  client_email?: string;
+  clientEmail?: string;
+
+  private_key?: string;
+  privateKey?: string;
+}
+
+let firebaseAdminApp: App | null = null;
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function normalizePrivateKey(value: string): string {
+  return value
+    .replace(/\\n/g, "\n")
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
+function parseServiceAccount(
+  raw: string
+): FirebaseServiceAccount {
+  try {
+    return JSON.parse(raw) as FirebaseServiceAccount;
+  } catch {
+    throw new Error(
+      "Invalid FIREBASE_SERVICE_ACCOUNT_JSON. Expected valid JSON."
+    );
+  }
+}
+
+function getServiceAccount(): {
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
+} | null {
+  const jsonValue = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const base64Value = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+
+  let account: FirebaseServiceAccount = {};
+
+  // Option 1: JSON environment variable
+  if (jsonValue?.trim()) {
+    account = parseServiceAccount(jsonValue.trim());
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  // Option 2: Base64 encoded JSON
+  else if (base64Value?.trim()) {
+    let decoded: string;
 
+    try {
+      decoded = Buffer.from(
+        base64Value.trim(),
+        "base64"
+      ).toString("utf8");
+    } catch {
+      throw new Error(
+        "Invalid FIREBASE_SERVICE_ACCOUNT_BASE64 value."
+      );
+    }
+
+    account = parseServiceAccount(decoded);
+  }
+
+  // Option 3: Individual environment variables
+  const projectId =
+    account.project_id ||
+    account.projectId ||
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.GCLOUD_PROJECT;
+
+  const clientEmail =
+    account.client_email ||
+    account.clientEmail ||
+    process.env.FIREBASE_CLIENT_EMAIL;
+
+  const privateKey = normalizePrivateKey(
+    account.private_key ||
+      account.privateKey ||
+      process.env.FIREBASE_PRIVATE_KEY ||
+      ""
+  );
+
+  // Firebase credentials are not configured.
+  if (!projectId && !clientEmail && !privateKey) {
+    return null;
+  }
+
+  // Partial configuration is an error.
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      '[firebaseAdmin] Missing FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, or FIREBASE_PRIVATE_KEY env variables'
+      "Incomplete Firebase credentials. Configure project ID, client email and private key."
     );
   }
 
-  initializeApp({
-    credential: cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
-
-  return getApp();
+  return {
+    projectId,
+    clientEmail,
+    privateKey,
+  };
 }
 
-export const adminApp: App = initAdminApp();
+/* ============================================================
+   INITIALIZATION
+============================================================ */
 
-export default adminApp;
+function initializeFirebaseAdmin(): App | null {
+  try {
+    // Reuse existing default app during Next.js hot reload.
+    const existingApps = getApps();
+
+    if (existingApps.length > 0) {
+      return getApp();
+    }
+
+    const serviceAccount = getServiceAccount();
+
+    if (!serviceAccount) {
+      console.warn(
+        "[Firebase Admin] Credentials are not configured. Push notifications are disabled."
+      );
+
+      return null;
+    }
+
+    const app = initializeApp({
+      credential: cert({
+        projectId: serviceAccount.projectId,
+        clientEmail: serviceAccount.clientEmail,
+        privateKey: serviceAccount.privateKey,
+      }),
+      projectId: serviceAccount.projectId,
+    });
+
+    console.info(
+      "[Firebase Admin] Initialized successfully."
+    );
+
+    return app;
+  } catch (error) {
+    console.error(
+      "[Firebase Admin] Initialization failed:",
+      error instanceof Error ? error.message : error
+    );
+
+    throw error;
+  }
+}
+
+/* ============================================================
+   EXPORTS
+============================================================ */
+
+firebaseAdminApp = initializeFirebaseAdmin();
+
+export { firebaseAdminApp };
+
+export default firebaseAdminApp;

@@ -91,8 +91,7 @@ export async function POST(req: NextRequest) {
     const price = getPlanPrice(plan, billingCycle);
     const currency = getMethodCurrency(paymentMethod);
 
-    const reference = generateReference(String(academy._id));
-
+const reference = generateReference();
     const subscription = await Subscription.create({
       academyId: academy._id,
       ownerId: user._id,
