@@ -1,7 +1,7 @@
-// app/api/chat/voice/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
-import { mkdir, writeFile } from 'fs/promises';
-import path from 'path';
+import { createHash, randomUUID } from 'node:crypto';
+
 import connectDB from '@/app/lib/dbConnect';
 import ChatMessage from '@/models/ChatMessage';
 import Contact from '@/models/Contact';
@@ -12,38 +12,177 @@ import { sendPush } from '@/app/lib/push/sendNotification';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_DURATION = 5 * 60;       // 5 منٹ (آپ چاہیں تو بدلیں)
+const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_DURATION = 5 * 60;
+const CLOUDINARY_FOLDER = 'ilmora/voice-messages';
 
 function isValidObjectId(id: string): boolean {
   return /^[a-fA-F0-9]{24}$/.test(id);
 }
 
+/* =========================================================
+   CLOUDINARY CONFIGURATION
+========================================================= */
+
+function getCloudinaryConfig() {
+  const cloudinaryUrl = process.env.CLOUDINARY_URL;
+
+  if (cloudinaryUrl) {
+    const parsed = new URL(cloudinaryUrl);
+
+    if (parsed.protocol !== 'cloudinary:') {
+      throw new Error('Invalid CLOUDINARY_URL');
+    }
+
+    const cloudName = parsed.hostname;
+    const apiKey = decodeURIComponent(parsed.username);
+    const apiSecret = decodeURIComponent(parsed.password);
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error('Cloudinary credentials are incomplete');
+    }
+
+    return { cloudName, apiKey, apiSecret };
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Cloudinary environment variables are missing');
+  }
+
+  return { cloudName, apiKey, apiSecret };
+}
+
+/* =========================================================
+   AUDIO HELPERS
+========================================================= */
+
+function getAudioExtension(mimeType: string): string {
+  const type = mimeType.toLowerCase();
+
+  if (type.includes('webm')) return 'webm';
+  if (type.includes('mp4')) return 'm4a';
+  if (type.includes('mpeg')) return 'mp3';
+  if (type.includes('ogg')) return 'ogg';
+  if (type.includes('wav')) return 'wav';
+  if (type.includes('aac')) return 'aac';
+
+  return 'webm';
+}
+
+/* =========================================================
+   UPLOAD AUDIO TO CLOUDINARY
+========================================================= */
+
+async function uploadVoiceToCloudinary(audio: File): Promise<string> {
+  const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const publicId = `voice-${randomUUID()}`;
+
+  const signatureParams = [
+    `folder=${CLOUDINARY_FOLDER}`,
+    `public_id=${publicId}`,
+    `timestamp=${timestamp}`,
+  ].join('&');
+
+  const signature = createHash('sha1')
+    .update(`${signatureParams}${apiSecret}`)
+    .digest('hex');
+
+  const extension = getAudioExtension(audio.type);
+  const filename = `${publicId}.${extension}`;
+
+  const buffer = Buffer.from(await audio.arrayBuffer());
+
+  const formData = new FormData();
+
+  formData.append(
+    'file',
+    new Blob([new Uint8Array(buffer)], {
+      type: audio.type,
+    }),
+    filename
+  );
+
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', String(timestamp));
+  formData.append('folder', CLOUDINARY_FOLDER);
+  formData.append('public_id', publicId);
+  formData.append('signature', signature);
+
+  // Audio uploads use Cloudinary's video resource type.
+  const uploadUrl =
+    `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
+
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(60000),
+  });
+
+  const result: any = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.secure_url) {
+    console.error('[Cloudinary voice upload]', {
+      status: response.status,
+      error: result?.error?.message || 'Unknown upload error',
+    });
+
+    throw new Error(
+      result?.error?.message || 'Cloudinary voice upload failed'
+    );
+  }
+
+  return String(result.secure_url);
+}
+
+/* =========================================================
+   POST: SEND VOICE MESSAGE
+========================================================= */
+
 export async function POST(req: NextRequest) {
   try {
+    /* ---------- Authentication ---------- */
+
     const me: any = await getUserFromToken();
-    if (!me) {
+
+    if (!me?.id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    /* ---------- Parse form ---------- */
-    const form = await req.formData();
-    const audio = form.get('audio') as File | null;
-    const receiverId = String(form.get('receiverId') || '').trim();
-    const duration = Math.max(
-      0,
-      Math.min(MAX_DURATION, Math.floor(Number(form.get('duration') || 0)))
-    );
+    /* ---------- Parse Form Data ---------- */
 
-    if (!audio || !receiverId) {
+    const form = await req.formData();
+
+    const audioValue = form.get('audio');
+    const receiverId = String(form.get('receiverId') || '').trim();
+
+    const rawDuration = Number(form.get('duration') || 0);
+
+    const duration = Number.isFinite(rawDuration)
+      ? Math.max(0, Math.min(MAX_DURATION, Math.floor(rawDuration)))
+      : 0;
+
+    if (!(audioValue instanceof File) || !receiverId) {
       return NextResponse.json(
-        { success: false, error: 'audio and receiverId required' },
+        {
+          success: false,
+          error: 'audio and receiverId required',
+        },
         { status: 400 }
       );
     }
+
+    const audio = audioValue;
+
+    /* ---------- Validate Receiver ---------- */
 
     if (!isValidObjectId(receiverId)) {
       return NextResponse.json(
@@ -59,6 +198,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    /* ---------- Validate Audio ---------- */
+
+    if (audio.size === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Audio file is empty' },
+        { status: 400 }
+      );
+    }
+
     if (audio.size > MAX_SIZE) {
       return NextResponse.json(
         { success: false, error: 'Audio too large (max 10MB)' },
@@ -66,16 +214,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!audio.type.startsWith('audio/')) {
+    if (!audio.type.toLowerCase().startsWith('audio/')) {
       return NextResponse.json(
-        { success: false, error: 'Invalid file type — must be audio' },
+        {
+          success: false,
+          error: 'Invalid file type — must be audio',
+        },
         { status: 415 }
       );
     }
 
+    /* ---------- Connect Database ---------- */
+
     await connectDB();
 
-    /* ---------- Receiver check ---------- */
+    /* ---------- Receiver Check ---------- */
+
     const receiver: any = await User.findById(receiverId)
       .select('_id name email phone privacy')
       .lean();
@@ -86,6 +240,8 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
+
+    /* ---------- Sender Check ---------- */
 
     const sender: any = await User.findById(me.id)
       .select('_id name email phone privacy')
@@ -98,19 +254,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ---------- Block checks ---------- */
-    const receiverBlockedMe = (receiver.privacy?.blockedUsers || [])
+    /* ---------- Block Checks ---------- */
+
+    const receiverBlockedMe = (
+      receiver.privacy?.blockedUsers || []
+    )
       .map((id: any) => String(id))
       .includes(String(me.id));
 
     if (receiverBlockedMe) {
       return NextResponse.json(
-        { success: false, error: 'You cannot message this user', code: 'BLOCKED' },
+        {
+          success: false,
+          error: 'You cannot message this user',
+          code: 'BLOCKED',
+        },
         { status: 403 }
       );
     }
 
-    const iBlockedReceiver = (sender.privacy?.blockedUsers || [])
+    const iBlockedReceiver = (
+      sender.privacy?.blockedUsers || []
+    )
       .map((id: any) => String(id))
       .includes(String(receiverId));
 
@@ -125,7 +290,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ---------- Receiver platform contact ہونا چاہیے ---------- */
+    /* ---------- Platform Contact Check ---------- */
+
     const contact = await Contact.findOne({
       ownerId: me.id,
       contactId: receiverId,
@@ -142,26 +308,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ---------- Save file ---------- */
-    const buf = Buffer.from(await audio.arrayBuffer());
-    const ext =
-      (audio.type.includes('webm') && 'webm') ||
-      (audio.type.includes('mp4') && 'm4a') ||
-      (audio.type.includes('mpeg') && 'mp3') ||
-      (audio.type.includes('ogg') && 'ogg') ||
-      (audio.type.includes('wav') && 'wav') ||
-      'webm';
+    /* ---------- Upload to Cloudinary ---------- */
 
-    const filename = `${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 10)}.${ext}`;
-    const dir = path.join(process.cwd(), 'public', 'uploads', 'voice');
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, filename), buf);
+    const audioUrl = await uploadVoiceToCloudinary(audio);
 
-    const audioUrl = `/uploads/voice/${filename}`;
+    /* ---------- Save Chat Message ---------- */
 
-    /* ---------- Save ChatMessage ---------- */
     const msg = new ChatMessage({
       senderId: me.id,
       receiverId,
@@ -171,14 +323,19 @@ export async function POST(req: NextRequest) {
       audioDuration: duration,
       isRead: false,
     });
+
     await msg.save();
 
-    /* ---------- Contacts update ---------- */
+    /* ---------- Update Contacts ---------- */
+
     const now = new Date();
 
-    // Sender side
+    // Sender contact
     await Contact.findOneAndUpdate(
-      { ownerId: me.id, contactId: receiverId },
+      {
+        ownerId: me.id,
+        contactId: receiverId,
+      },
       {
         $set: {
           lastMessage: '🎤 Voice message',
@@ -187,9 +344,12 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Receiver side (upsert — اگر contact نہ ہو تو خودبخود بن جائے)
+    // Receiver contact
     const receiverContact: any = await Contact.findOneAndUpdate(
-      { ownerId: receiverId, contactId: me.id },
+      {
+        ownerId: receiverId,
+        contactId: me.id,
+      },
       {
         $set: {
           type: 'platform',
@@ -199,21 +359,33 @@ export async function POST(req: NextRequest) {
         $setOnInsert: {
           ownerId: receiverId,
           contactId: me.id,
-          name: String(sender.name || sender.email || 'Unknown').slice(0, 60),
+          name: String(
+            sender.name || sender.email || 'Unknown'
+          ).slice(0, 60),
           email: String(sender.email || ''),
           phone: String(sender.phone || ''),
           isSaved: false,
           savedAt: now,
         },
-        $inc: { unreadCount: 1 },
+        $inc: {
+          unreadCount: 1,
+        },
       },
-      { upsert: true, new: true }
+      {
+        upsert: true,
+        new: true,
+      }
     );
 
-    /* ---------- Push notification ---------- */
+    /* ---------- Push Notification ---------- */
+
     try {
-      const senderName = String(sender.name || sender.email || 'Voice message');
-      const unreadCount = Number(receiverContact?.unreadCount) || 1;
+      const senderName = String(
+        sender.name || sender.email || 'Voice message'
+      );
+
+      const unreadCount =
+        Number(receiverContact?.unreadCount) || 1;
 
       await sendPush({
         toUserId: String(receiverId),
@@ -231,7 +403,8 @@ export async function POST(req: NextRequest) {
       console.warn('[chat/voice] push failed:', pushErr);
     }
 
-    /* ---------- Response (frontend Message type کے مطابق) ---------- */
+    /* ---------- Response ---------- */
+
     return NextResponse.json({
       success: true,
       message: {
@@ -248,10 +421,15 @@ export async function POST(req: NextRequest) {
         isMine: true,
       },
     });
+
   } catch (err: any) {
     console.error('[chat/voice]', err);
+
     return NextResponse.json(
-      { success: false, error: err?.message || 'Server error' },
+      {
+        success: false,
+        error: err?.message || 'Server error',
+      },
       { status: 500 }
     );
   }
